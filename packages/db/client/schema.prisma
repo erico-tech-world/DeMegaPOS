@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id         String     @id @default(cuid())
+  name       String
+  slug       String     @unique
+  domain     String?    @unique
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  stores     Store[]
+  users      User[]
+  products   Product[]
+  categories Category[]
+  settings   Json?
+}
+
+model Store {
+  id        String   @id @default(cuid())
+  name      String
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      String   @default("STAFF") // ADMIN, OWNER, MANAGER, STAFF
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id         String    @id @default(cuid())
+  name       String
+  sku        String?
+  barcode    String?
+  price      Decimal   @db.Decimal(10, 2)
+  stock      Int       @default(0)
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String
+  tenantId String
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  products Product[]
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  storeId       String
+  store         Store       @relation(fields: [storeId], references: [id])
+  totalAmount   Decimal     @db.Decimal(10, 2)
+  status        String      @default("NEW") // NEW, PREPARING, READY, COMPLETED, CANCELLED
+  paymentStatus String      @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED
+  items         OrderItem[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  quantity  Int
+  price     Decimal @db.Decimal(10, 2)
+}
+
+model IntegrationApp {
+  id           String   @id @default(cuid())
+  name         String
+  clientId     String   @unique
+  clientSecret String
+  scopes       String[]
+  webhookUrl   String?
+  createdAt    DateTime @default(now())
+}

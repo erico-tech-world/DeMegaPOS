@@ -1,0 +1,33 @@
+{
+    "name": "demegapos-backend",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "main": "dist/index.js",
+    "scripts": {
+        "dev": "tsx watch src/index.ts",
+        "build": "tsc",
+        "start": "node dist/index.js"
+    },
+    "dependencies": {
+        "fastify": "latest",
+        "@fastify/cors": "latest",
+        "@fastify/jwt": "latest",
+        "@fastify/swagger": "latest",
+        "@fastify/swagger-ui": "latest",
+        "@fastify/websocket": "latest",
+        "@demegapos/db": "workspace:*",
+        "zod": "latest",
+        "fastify-type-provider-zod": "latest",
+        "bullmq": "latest",
+        "ioredis": "latest",
+        "dotenv": "latest",
+        "bcrypt": "latest"
+    },
+    "devDependencies": {
+        "typescript": "latest",
+        "@types/node": "latest",
+        "@types/bcrypt": "latest",
+        "tsx": "latest"
+    }
+}

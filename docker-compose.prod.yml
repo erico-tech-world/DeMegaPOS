@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: demegapos
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://admin:password@postgres:5432/demegapos?schema=public
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your_super_secret_jwt_key
+      - PORT=3000
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "3000:3000"
+
+  web-back-office:
+    build:
+      context: .
+      dockerfile: apps/web-back-office/Dockerfile
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  web-kitchen:
+    build:
+      context: .
+      dockerfile: apps/web-kitchen/Dockerfile
+    restart: always
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
+
+  web-customer:
+    build:
+      context: .
+      dockerfile: apps/web-customer/Dockerfile
+    restart: always
+    ports:
+      - "8082:80"
+    depends_on:
+      - backend
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:

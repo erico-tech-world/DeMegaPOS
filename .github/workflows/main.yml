@@ -1,0 +1,45 @@
+name: DeMegaPOS CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build Database Package
+        run: pnpm run build --filter=db
+
+      - name: Build Backend Application
+        run: pnpm run build --filter=backend
+
+      - name: Build Web Dashboards
+        run: |
+          pnpm run build --filter=web-back-office
+          pnpm run build --filter=web-kitchen
+          pnpm run build --filter=web-customer
+
+      - name: Docker Build (Backend)
+        run: docker build -t demegapos-backend -f apps/backend/Dockerfile .
+
+      - name: Docker Build (Web Back-Office)
+        run: docker build -t demegapos-back-office -f apps/web-back-office/Dockerfile .

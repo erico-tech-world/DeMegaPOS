@@ -1,0 +1,26 @@
+{
+    "name": "@demegapos/db",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./index.ts",
+    "types": "./index.ts",
+    "scripts": {
+        "db:generate": "prisma generate",
+        "db:push": "prisma db push",
+        "db:seed": "tsx seed.ts"
+    },
+    "prisma": {
+        "seed": "tsx seed.ts"
+    },
+    "dependencies": {
+        "@prisma/client": "6.2.1",
+        "bcryptjs": "^2.4.3",
+        "dotenv": "^17.2.4"
+    },
+    "devDependencies": {
+        "@types/bcryptjs": "^2.4.6",
+        "prisma": "6.2.1",
+        "tsx": "latest"
+    }
+}

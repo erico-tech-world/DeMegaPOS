@@ -1,0 +1,5 @@
+2026-02-19T15:34:06.107112Z  WARN daemon_server: turborepo_lib::commands::daemon: daemon already running
+2026-02-19T15:34:06.865209Z  WARN daemon_server: turborepo_lib::commands::daemon: daemon already running
+2026-02-19T15:37:57.424708Z  INFO turborepo_daemon::server: triggering shutdown
+2026-02-19T16:24:03.335533Z  WARN daemon_server: turborepo_lib::commands::daemon: daemon already running
+2026-02-19T16:24:03.920691Z  WARN daemon_server: turborepo_lib::commands::daemon: daemon already running
