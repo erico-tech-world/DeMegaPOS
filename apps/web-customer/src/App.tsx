@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  Bell,
   Clock,
   CheckCircle2,
-  ChefHat,
-  Package
+  ChefHat
 } from 'lucide-react';
 
 // Responsive Status Column Component

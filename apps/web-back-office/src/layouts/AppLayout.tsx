@@ -57,26 +57,37 @@ const AppLayout: React.FC = () => {
 
     return (
         <div className="flex h-screen bg-[#F8FAFC] overflow-hidden">
+            {/* Mobile Overlay */}
+            {isMobile && isSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-40 transition-opacity animate-in fade-in duration-300"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
             <aside
-                className={`${isSidebarOpen ? 'w-72' : 'w-20'
-                    } bg-white border-r border-gray-100 flex flex-col transition-all duration-300 ease-in-out relative z-30 shadow-2xl shadow-gray-900/5 ${isMobile && !isSidebarOpen ? '-translate-x-full' : 'translate-x-0'}`}
+                className={`
+                    bg-white border-r border-gray-100 flex flex-col transition-all duration-300 ease-in-out shadow-2xl shadow-gray-900/5
+                    ${isMobile ? 'fixed inset-y-0 left-0 z-50 w-72' : (isSidebarOpen ? 'w-72' : 'w-20')}
+                    ${isMobile && !isSidebarOpen ? '-translate-x-full' : 'translate-x-0'}
+                `}
             >
                 <div className="p-6 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-[#2D7A3E] rounded-xl flex items-center justify-center shadow-lg shadow-green-900/20">
+                    <div className="flex items-center space-x-3 overflow-hidden">
+                        <div className="w-10 h-10 bg-[#2D7A3E] rounded-xl flex-shrink-0 flex items-center justify-center shadow-lg shadow-green-900/20">
                             <LayoutDashboard className="text-white" size={22} />
                         </div>
                         {(isSidebarOpen || isMobile) && (
-                            <div className="flex flex-col">
+                            <div className="flex flex-col animate-in fade-in slide-in-from-left-2 duration-300">
                                 <span className="font-black text-gray-900 leading-none tracking-tight">DeMega<span className="text-[#2D7A3E]">POS</span></span>
                                 <span className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Branch Engine</span>
                             </div>
                         )}
                     </div>
                     {isMobile && (
-                        <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-gray-50 rounded-lg">
-                            <X size={20} />
+                        <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                            <X size={20} className="text-gray-500" />
                         </button>
                     )}
                 </div>
@@ -94,9 +105,9 @@ const AppLayout: React.FC = () => {
                                 : 'text-gray-500 hover:bg-gray-50'
                                 }`}
                         >
-                            <item.icon size={22} className={`${activeTab === item.id ? 'text-white' : 'text-gray-400 group-hover:text-gray-600'}`} />
+                            <item.icon size={22} className={`flex-shrink-0 ${activeTab === item.id ? 'text-white' : 'text-gray-400 group-hover:text-gray-600'}`} />
                             {(isSidebarOpen || isMobile) && (
-                                <span className={`font-black text-sm tracking-tight ${activeTab === item.id ? 'text-white' : ''}`}>{item.label}</span>
+                                <span className={`font-black text-sm tracking-tight truncate ${activeTab === item.id ? 'text-white' : ''}`}>{item.label}</span>
                             )}
                             {activeTab === item.id && (isSidebarOpen || isMobile) && (
                                 <ChevronRight size={16} className="absolute right-4 opacity-50" />
@@ -108,7 +119,7 @@ const AppLayout: React.FC = () => {
                 <div className="p-4 border-t border-gray-50 space-y-2">
                     {user && (isSidebarOpen || isMobile) && (
                         <div className="flex items-center space-x-3 px-4 py-3 mb-2 bg-gray-50 rounded-2xl">
-                            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center border border-gray-200 shadow-sm">
+                            <div className="w-8 h-8 bg-white rounded-lg flex-shrink-0 flex items-center justify-center border border-gray-200 shadow-sm">
                                 <UserIcon size={16} className="text-gray-400" />
                             </div>
                             <div className="flex flex-col min-w-0">
@@ -121,14 +132,14 @@ const AppLayout: React.FC = () => {
                         onClick={handleLogout}
                         className="flex items-center space-x-3 w-full px-4 py-3.5 rounded-2xl text-red-500 hover:bg-red-50 transition-all group"
                     >
-                        <LogOut size={22} className="group-hover:translate-x-1 transition-transform" />
+                        <LogOut size={22} className="flex-shrink-0 group-hover:translate-x-1 transition-transform" />
                         {(isSidebarOpen || isMobile) && <span className="font-black text-sm tracking-tight">Sign Out Engine</span>}
                     </button>
                 </div>
             </aside>
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col min-w-0 relative">
+            <div className={`flex-1 flex flex-col min-w-0 relative transition-all duration-300 ${!isMobile && isSidebarOpen ? 'ml-0' : 'ml-0'}`}>
                 {/* Header */}
                 <header className="h-20 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center justify-between px-6 sm:px-10 sticky top-0 z-20">
                     <div className="flex items-center space-x-4">
@@ -138,8 +149,9 @@ const AppLayout: React.FC = () => {
                         >
                             <Menu size={20} className="text-gray-600" />
                         </button>
-                        <div className="hidden sm:block">
-                            <h2 className="text-xl font-black text-gray-900 tracking-tight capitalize">{activeTab}</h2>
+                        <div>
+                            <h2 className="text-lg sm:text-xl font-black text-gray-900 tracking-tight capitalize leading-tight">{activeTab}</h2>
+                            <span className="block sm:hidden text-[9px] font-black text-gray-400 uppercase tracking-widest">Enterprise Command</span>
                         </div>
                     </div>
 
@@ -148,11 +160,17 @@ const AppLayout: React.FC = () => {
                             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                             <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">System Online</span>
                         </div>
+                        {isMobile && !isSidebarOpen && (
+                            <div className="flex flex-col items-end sm:hidden">
+                                <span className="text-[10px] font-black text-gray-900 leading-none">DeMega<span className="text-[#2D7A3E]">POS</span></span>
+                                <span className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">Mobile View</span>
+                            </div>
+                        )}
                     </div>
                 </header>
 
                 {/* Content */}
-                <main className="flex-1 overflow-y-auto custom-scrollbar p-6 sm:p-10">
+                <main className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-10">
                     <Outlet />
                 </main>
             </div>
@@ -161,3 +179,4 @@ const AppLayout: React.FC = () => {
 };
 
 export default AppLayout;
+

@@ -13,7 +13,11 @@ const server = Fastify({
 server.setValidatorCompiler(validatorCompiler);
 server.setSerializerCompiler(serializerCompiler);
 async function main() {
-    await server.register(cors);
+    await server.register(cors, {
+        origin: '*',
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+    });
     await server.register(jwt, {
         secret: process.env.JWT_SECRET || 'supersecret',
     });
@@ -32,7 +36,7 @@ async function main() {
     await server.register(websocket);
     server.get('/ws', { websocket: true }, (connection, req) => {
         console.log('New WS Client connected');
-        connection.socket.on('message', message => {
+        connection.socket.on('message', (message) => {
             console.log('WS Message received:', message.toString());
         });
     });
@@ -46,41 +50,31 @@ async function main() {
     const paymentRoutes = await import('./modules/payments/routes.js');
     const syncRoutes = await import('./modules/sync/routes.js');
     const customerRoutes = await import('./modules/customers/routes.js');
-    server.register(authRoutes, { prefix: '/auth' });
-    server.register(tenantRoutes, { prefix: '/tenants' });
-    server.register(inventoryRoutes, { prefix: '/inventory' });
-    server.register(orderRoutes, { prefix: '/orders' });
-    server.register(staffRoutes, { prefix: '/staff' });
-    server.register(webhookRoutes, { prefix: '/webhooks' });
-    server.register(paymentRoutes, { prefix: '/payments' });
-    server.register(syncRoutes, { prefix: '/sync' });
-    server.register(customerRoutes, { prefix: '/customers' });
+    server.register(authRoutes.default, { prefix: '/auth' });
+    server.register(tenantRoutes.default, { prefix: '/tenants' });
+    server.register(inventoryRoutes.default, { prefix: '/inventory' });
+    server.register(orderRoutes.default, { prefix: '/orders' });
+    server.register(staffRoutes.default, { prefix: '/staff' });
+    server.register(webhookRoutes.default, { prefix: '/webhooks' });
+    server.register(paymentRoutes.default, { prefix: '/payments' });
+    server.register(syncRoutes.default, { prefix: '/sync' });
+    server.register(customerRoutes.default, { prefix: '/customers' });
     // Helper for broadcasting WebSocket events
     server.decorate('broadcast', (event, payload) => {
         for (const client of server.websocketServer.clients) {
             client.send(JSON.stringify({ event, payload }));
         }
     });
-    // Protected Routes & Scoping Hook
+    // JWT guard — verifies token for all non-auth routes
     server.addHook('onRequest', async (request, reply) => {
-        if (request.url.startsWith('/auth') || request.url.startsWith('/docs') || request.url === '/health') {
+        if (request.method === 'OPTIONS') {
+            return;
+        }
+        if (request.url.startsWith('/auth') || request.url.startsWith('/docs') || request.url === '/health' || request.url.startsWith('/ws')) {
             return;
         }
         try {
             await request.jwtVerify();
-            // Set Request Context for automatic scoping in Prisma
-            const { tenantId, branchId, role } = request.user;
-            await new Promise((resolve) => {
-                import('@demegapos/db').then(({ requestContext }) => {
-                    requestContext.run({
-                        tenantId,
-                        branchId,
-                        role: role
-                    }, () => {
-                        resolve();
-                    });
-                });
-            });
         }
         catch (err) {
             reply.send(err);

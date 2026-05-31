@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ShoppingCart, Search, LayoutGrid, List, User, Settings, LogOut, X, CreditCard, Banknote, History, Menu } from 'lucide-react';
+import { ShoppingCart, Search, LayoutGrid, User, Settings, LogOut, X, CreditCard, Banknote, History, Menu, Plus, Minus, Trash2 } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:3000';
@@ -13,24 +13,58 @@ const App = () => {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckoutProcessing, setIsCheckoutProcessing] = useState(false);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
+  const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
 
   useEffect(() => {
     fetchProducts();
+    fetchCustomers();
+
+    const ws = new WebSocket('ws://localhost:3000/ws');
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'PRODUCT_CREATED' || data.event === 'STOCK_UPDATED' || data.event === 'ORDER_CREATED') {
+          fetchProducts();
+        }
+      } catch (e) {
+        console.error('WS Error:', e);
+      }
+    };
+    return () => ws.close();
   }, []);
 
+  const fetchCustomers = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API_URL}/customers`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setCustomers(res.data);
+    } catch (err) {
+      console.error('Failed to fetch customers:', err);
+    }
+  };
+
   const fetchProducts = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.warn('No authentication token found. Fetch aborted.');
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const res = await axios.get(`${API_URL}/inventory/products`);
+      const res = await axios.get(`${API_URL}/inventory/products`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setProducts(res.data);
     } catch (err) {
-      console.error('Failed to fetch products:', err);
-      // Fallback to initial seed-like data if API fails locally
-      setProducts([
-        { id: 1, name: 'Premium Espresso Beans', price: 12500, category: 'Standard', stock: 45 },
-        { id: 2, name: 'Whole Milk 1L', price: 1200, category: 'Variant', stock: 12 },
-        { id: 3, name: 'Breakfast Combo Pack', price: 5500, category: 'Bundled', stock: 20 },
-      ]);
+      console.error('Failed to fetch products from live API:', err);
+      // Removed hardcoded fallback to ensure data integrity is enforced
     } finally {
       setIsLoading(false);
     }
@@ -50,15 +84,26 @@ const App = () => {
     setCart(prev => prev.filter(item => item.product.id !== productId));
   };
 
+  const updateCartQty = (productId: string | number, delta: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.product.id === productId) {
+        const newQty = item.qty + delta;
+        return newQty > 0 ? { ...item, qty: newQty } : item;
+      }
+      return item;
+    }).filter(item => item.qty > 0)); // Ensure we remove if qty drops to 0 just in case, though the above logic prevents it
+  };
+
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     setIsCheckoutProcessing(true);
     try {
       // Mocking order creation to backend
       const orderData = {
-        items: cart.map(i => ({ productId: i.product.id, quantity: i.qty })),
+        items: cart.map(i => ({ productId: i.product.id, quantity: i.qty, price: selectedCustomer ? (i.product.vipPrice || i.product.price) : i.product.price })),
         totalAmount: total,
-        paymentMethod: 'CASH'
+        paymentMethod: 'CASH',
+        customerId: selectedCustomer?.id
       };
       await axios.post(`${API_URL}/orders`, orderData);
       alert('Order completed successfully!');
@@ -73,7 +118,7 @@ const App = () => {
     }
   };
 
-  const total = cart.reduce((acc, item) => acc + item.product.price * item.qty, 0);
+  const total = cart.reduce((acc, item) => acc + (selectedCustomer ? (item.product.vipPrice || item.product.price) : item.product.price) * item.qty, 0);
 
   const filteredProducts = products.filter(p =>
     p.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -133,6 +178,14 @@ const App = () => {
             <h1 className="text-lg md:text-2xl font-black text-[#2D7A3E] truncate">DeMega POS</h1>
             <span className="hidden sm:inline-block px-2 md:px-3 py-0.5 md:py-1 bg-green-100 text-[#2D7A3E] text-[10px] md:text-xs font-bold rounded-full">LIVE</span>
           </div>
+
+          {/* Add Customer Modal */}
+          {isAddCustomerModalOpen && (
+            <AddCustomerModal
+              onClose={() => setIsAddCustomerModalOpen(false)}
+              onSuccess={() => { fetchCustomers(); setIsAddCustomerModalOpen(false); }}
+            />
+          )}
 
           <div className="flex-1 max-w-sm md:max-w-md mx-2 md:mx-4 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
@@ -210,7 +263,7 @@ const App = () => {
                 >
                   <div className="absolute top-0 right-0 w-24 h-24 bg-green-50 rounded-full -mr-12 -mt-12 group-hover:bg-green-100 transition-colors opacity-50"></div>
                   <div className="flex justify-between items-start mb-2 md:mb-4">
-                    <span className="px-1.5 py-0.5 bg-gray-100 text-[10px] font-bold rounded uppercase tracking-wider text-gray-500">{product.category}</span>
+                    <span className="px-1.5 py-0.5 bg-gray-100 text-[10px] font-bold rounded uppercase tracking-wider text-gray-500">{product.category?.name || product.categoryId || product.unit || 'Item'}</span>
                     <span className={`text-[10px] font-bold ${product.stock < 10 ? 'text-red-500' : 'text-slate-400'}`}>Qty: {product.stock}</span>
                   </div>
                   <h3 className="text-sm md:text-xl font-bold mb-0.5 md:mb-1 group-hover:text-[#2D7A3E] transition-colors line-clamp-1">{product.name}</h3>
@@ -245,10 +298,10 @@ const App = () => {
 
       {/* Cart Sidebar */}
       <section className={`
-        fixed inset-y-0 right-0 w-full sm:w-80 md:w-96 bg-white border-l border-gray-200 flex flex-col shadow-2xl z transition-transform duration-300 ease-in-out md:relative md:translate-x-0
+        fixed inset-y-0 right-0 w-full sm:w-80 md:w-96 bg-white border-l border-gray-200 flex flex-col shadow-2xl z-40 transition-transform duration-300 ease-in-out md:relative md:translate-x-0 overflow-y-auto custom-scrollbar
         ${isCartOpen ? 'translate-x-0' : 'translate-x-full'}
       `}>
-        <div className="p-4 md:p-8 border-b border-gray-200 flex items-center justify-between bg-slate-50/50 h-16 md:h-auto">
+        <div className="p-4 md:p-8 border-b border-gray-200 flex items-center justify-between bg-slate-50/50">
           <h2 className="text-lg md:text-2xl font-black flex items-center gap-2">
             <ShoppingCart className="text-[#2D7A3E]" size={20} /> Cart
           </h2>
@@ -258,35 +311,84 @@ const App = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3">
+        <div className="p-4 md:p-6 bg-blue-50/30 border-b border-blue-50/50">
+          <div className="flex flex-col space-y-3">
+            <div className="flex justify-between items-center">
+              <label className="text-[10px] font-black text-blue-900/40 uppercase tracking-widest ml-1">Assign Customer</label>
+              <button
+                onClick={() => setIsAddCustomerModalOpen(true)}
+                className="p-1 px-2 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black hover:bg-blue-200 transition-colors flex items-center gap-1"
+              >
+                <Plus size={10} strokeWidth={4} />
+                NEW
+              </button>
+            </div>
+            <select
+              className="w-full p-3 bg-white border border-blue-100 rounded-2xl font-bold text-sm text-blue-900 outline-none focus:ring-4 focus:ring-blue-900/5 transition-all"
+              value={selectedCustomer?.id || ''}
+              onChange={(e) => setSelectedCustomer(customers.find((c: any) => c.id === e.target.value))}
+            >
+              <option value="">Walk-in Customer</option>
+              {customers.map((c: any) => (
+                <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>
+              ))}
+            </select>
+          </div>
+          {selectedCustomer && (
+            <div className="mt-4 p-3 bg-white rounded-xl border border-blue-100 flex justify-between animate-in slide-in-from-top-2">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black text-blue-500 uppercase">VIP Tier</span>
+                <span className="text-xs font-black text-gray-900">Active Pricing</span>
+              </div>
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] font-black text-blue-500 uppercase">Wallet</span>
+                <span className="text-xs font-black text-gray-900">₦{selectedCustomer.walletBalance?.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 md:p-6 space-y-3">
           {cart.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-400 opacity-50 px-4">
+            <div className="py-12 flex flex-col items-center justify-center text-gray-400 opacity-50 px-4">
               <ShoppingCart size={48} className="mb-4" />
               <p className="font-bold text-center">Your cart is empty</p>
             </div>
           ) : (
             cart.map((item, idx) => (
-              <div key={idx} className="flex justify-between items-center group bg-gray-50 p-3 md:p-4 rounded-xl border border-gray-200 hover:border-[#2D7A3E]/30 transition-all">
-                <div className="min-w-0">
-                  <h4 className="font-bold text-sm truncate">{item.product.name}</h4>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-gray-500">₦{item.product.price.toLocaleString()}</span>
-                    <span className="text-[10px] font-black text-[#2D7A3E] bg-green-100 px-1.5 rounded">x{item.qty}</span>
+              <div key={idx} className="flex flex-col group bg-gray-50 p-3 md:p-4 rounded-xl border border-gray-200 hover:border-[#2D7A3E]/30 transition-all">
+                <div className="flex justify-between items-start w-full">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-sm truncate">{item.product.name}</h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-gray-500">₦{item.product.price.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 ml-2">
+                    <p className="font-black text-sm">₦{(item.product.price * item.qty).toLocaleString()}</p>
+                    <button onClick={() => removeFromCart(item.product.id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors" title="Remove">
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                  <p className="font-black text-sm">₦{(item.product.price * item.qty).toLocaleString()}</p>
-                  <button onClick={() => removeFromCart(item.product.id)} className="text-[10px] text-red-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity">Remove</button>
+                <div className="flex items-center gap-3 mt-3 bg-white w-fit rounded-lg border border-gray-200 p-1">
+                  <button onClick={() => updateCartQty(item.product.id, -1)} className="p-1 hover:bg-gray-100 rounded text-gray-600 transition-colors" disabled={item.qty <= 1}>
+                    <Minus size={14} />
+                  </button>
+                  <span className="text-[10px] font-black w-6 text-center">{item.qty}</span>
+                  <button onClick={() => updateCartQty(item.product.id, 1)} className="p-1 hover:bg-gray-100 rounded text-gray-600 transition-colors">
+                    <Plus size={14} />
+                  </button>
                 </div>
               </div>
             ))
           )}
         </div>
 
-        <div className="p-4 md:p-8 border-t border-gray-200 bg-slate-50">
+        <div className="p-4 md:p-8 border-t border-gray-200 bg-slate-50 mt-auto">
           <div className="flex justify-between items-center mb-4 md:mb-6">
             <span className="text-gray-500 font-bold text-base md:text-lg tracking-tight">Total Payable</span>
-            <span className="text-2xl md:text-4xl font-black text-[#8B1538]">₦{total.toLocaleString()}</span>
+            <span className="text-2xl md:text-4xl font-black text-[#8B1538] break-all">₦{total.toLocaleString()}</span>
           </div>
 
           <div className="grid grid-cols-2 gap-3 mb-4">
@@ -309,6 +411,64 @@ const App = () => {
           </button>
         </div>
       </section>
+    </div>
+  );
+};
+
+// --- AddCustomerModal Component ---
+const AddCustomerModal = ({ onClose, onSuccess }: any) => {
+  const [formData, setFormData] = useState({ name: '', phone: '', email: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: any) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.post(`${API_URL}/customers`, formData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      onSuccess(res.data);
+      onClose();
+    } catch (err) {
+      console.error('Error creating customer:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
+      <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95">
+        <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-2xl font-black text-gray-900 tracking-tighter uppercase">Add Customer</h2>
+          <button onClick={onClose} className="p-3 hover:bg-gray-50 rounded-2xl text-gray-400">
+            <X size={20} />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
+            <input required type="text" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Phone Number</label>
+            <input required type="text" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address (Optional)</label>
+            <input type="email" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+          </div>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50"
+          >
+            {isSubmitting ? 'Registering...' : 'Complete Registration'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 };

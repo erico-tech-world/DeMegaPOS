@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify'
+import { z } from 'zod'
 import {
     createCategorySchema,
     categoryResponseSchema,
     createProductSchema,
+    updateProductSchema,
     productResponseSchema,
     stockAdjustmentSchema
 } from './schemas.js'
@@ -11,6 +13,8 @@ import {
     getCategories,
     createProduct,
     getProducts,
+    updateProduct,
+    deleteProduct,
     createStockAdjustment
 } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
@@ -41,15 +45,13 @@ export default async function inventoryRoutes(app: FastifyInstance) {
         {
             schema: {
                 response: {
-                    200: {
-                        type: 'array',
-                        items: categoryResponseSchema,
-                    },
+                    200: z.array(categoryResponseSchema),
                 },
             },
         },
-        async () => {
-            return getCategories()
+        async (request, reply) => {
+            const tenantId = (request.user as any).tenantId
+            return getCategories(tenantId)
         }
     )
 
@@ -67,6 +69,10 @@ export default async function inventoryRoutes(app: FastifyInstance) {
         async (request, reply) => {
             const tenantId = (request.user as any).tenantId
             const product = await createProduct({ ...request.body, tenantId })
+
+            // @ts-ignore
+            server.broadcast('PRODUCT_CREATED', product)
+
             return reply.code(201).send(product)
         }
     )
@@ -76,15 +82,52 @@ export default async function inventoryRoutes(app: FastifyInstance) {
         {
             schema: {
                 response: {
-                    200: {
-                        type: 'array',
-                        items: productResponseSchema,
-                    },
+                    200: z.array(productResponseSchema),
                 },
             },
         },
-        async () => {
-            return getProducts()
+        async (request) => {
+            const tenantId = (request.user as any).tenantId
+            return getProducts(tenantId)
+        }
+    )
+
+    server.put(
+        '/products/:id',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+                body: updateProductSchema,
+                response: {
+                    200: productResponseSchema,
+                },
+            },
+        },
+        async (request, reply) => {
+            const tenantId = (request.user as any).tenantId
+            const product = await updateProduct(request.params.id, tenantId, request.body)
+            // @ts-ignore
+            server.broadcast('PRODUCT_UPDATED', product)
+            return reply.code(200).send(product)
+        }
+    )
+
+    server.delete(
+        '/products/:id',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+                response: {
+                    204: z.any(),
+                },
+            },
+        },
+        async (request, reply) => {
+            const tenantId = (request.user as any).tenantId
+            await deleteProduct(request.params.id, tenantId)
+            // @ts-ignore
+            server.broadcast('PRODUCT_DELETED', { id: request.params.id })
+            return reply.code(204).send()
         }
     )
 
@@ -106,4 +149,3 @@ export default async function inventoryRoutes(app: FastifyInstance) {
         }
     )
 }
-import { z } from 'zod'

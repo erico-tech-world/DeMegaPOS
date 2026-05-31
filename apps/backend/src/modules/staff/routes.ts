@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
-import { inviteStaffSchema, updatePermissionsSchema, staffResponseSchema } from './schemas.js'
-import { createStaffInvitation, getStaffList, updatePermissions } from './service.js'
+import { inviteStaffSchema, updatePermissionsSchema, staffResponseSchema, updateStaffSchema } from './schemas.js'
+import { createStaffInvitation, getStaffList, updatePermissions, updateStaff, deleteStaff } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { z } from 'zod'
 
@@ -48,6 +48,37 @@ export default async function staffRoutes(app: FastifyInstance) {
             const { userId, permissions } = request.body
             const updatedUser = await updatePermissions(userId, permissions)
             return reply.send(updatedUser)
+        }
+    )
+
+    server.put(
+        '/:id',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+                body: updateStaffSchema,
+            },
+        },
+        async (request, reply) => {
+            const { tenantId } = request.user
+            const { id } = request.params
+            const updatedStaff = await updateStaff(id, tenantId, request.body)
+            return reply.send(updatedStaff)
+        }
+    )
+
+    server.delete(
+        '/:id',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+            },
+        },
+        async (request, reply) => {
+            const { tenantId } = request.user
+            const { id } = request.params
+            await deleteStaff(id, tenantId)
+            return reply.code(204).send()
         }
     )
 }

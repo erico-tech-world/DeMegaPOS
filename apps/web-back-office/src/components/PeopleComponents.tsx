@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { UserPlus, MoreVertical, Shield, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { UserPlus, Shield, X, Edit, Trash2 } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-export const CustomersView = ({ customers, isLoading, onAdd }: any) => {
+export const CustomersView = ({ customers, isLoading, onAdd, onEdit, onDelete }: any) => {
     return (
         <div className="bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm">
             <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-gray-50/20">
@@ -59,7 +59,10 @@ export const CustomersView = ({ customers, isLoading, onAdd }: any) => {
                                 </td>
                                 <td className="px-8 py-6 text-xs font-black text-gray-500 uppercase tracking-widest">{c._count?.orders || 0} Total</td>
                                 <td className="px-8 py-6 text-right">
-                                    <button className="p-2.5 hover:bg-white rounded-xl border border-transparent hover:border-gray-200 transition-all text-gray-400 hover:text-gray-900 shadow-sm hover:shadow-md"><MoreVertical size={20} /></button>
+                                    <div className="flex items-center justify-end gap-3">
+                                        <button onClick={() => onEdit && onEdit(c)} className="text-blue-500 hover:text-blue-700 transition-colors p-1.5 cursor-pointer" title="Edit"><Edit size={18} /></button>
+                                        <button onClick={() => onDelete && onDelete(c.id)} className="text-red-500 hover:text-red-700 transition-colors p-1.5 cursor-pointer" title="Delete"><Trash2 size={18} /></button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -70,7 +73,7 @@ export const CustomersView = ({ customers, isLoading, onAdd }: any) => {
     );
 };
 
-export const StaffView = ({ staff, isLoading, onInvite }: any) => {
+export const StaffView = ({ staff, isLoading, onInvite, onEdit, onDelete }: any) => {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center sm:items-end">
@@ -133,7 +136,10 @@ export const StaffView = ({ staff, isLoading, onInvite }: any) => {
                                         </div>
                                     </td>
                                     <td className="px-8 py-6 text-right">
-                                        <button className="text-gray-300 hover:text-gray-900 transition-colors p-2"><MoreVertical size={20} /></button>
+                                        <div className="flex items-center justify-end gap-3">
+                                            <button onClick={() => onEdit && onEdit(member)} className="text-blue-500 hover:text-blue-700 transition-colors p-1.5 cursor-pointer" title="Edit"><Edit size={18} /></button>
+                                            <button onClick={() => onDelete && onDelete(member.id)} className="text-red-500 hover:text-red-700 transition-colors p-1.5 cursor-pointer" title="Delete"><Trash2 size={18} /></button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -152,19 +158,42 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
         branchId: ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     if (!isOpen) return null;
 
     const handleSubmit = async (e: any) => {
         e.preventDefault();
         setIsSubmitting(true);
+        setError(null);
         try {
-            await axios.post(`${API_URL}/staff/invite`, formData);
+            const payload: any = {
+                role: formData.role,
+            };
+            const identifier = formData.identifier.trim();
+            if (identifier.includes('@')) {
+                payload.email = identifier;
+                payload.phone = null;
+            } else {
+                payload.phone = identifier;
+                payload.email = null;
+            }
+            if (formData.branchId.trim()) {
+                payload.branchId = formData.branchId.trim();
+            } else {
+                payload.branchId = null;
+            }
+
+            const token = localStorage.getItem('token');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+            await axios.post(`${API_URL}/staff/invite`, payload, { headers });
             onSuccess();
             onClose();
             setFormData({ identifier: '', role: 'CASHIER', branchId: '' });
-        } catch (err) {
+        } catch (err: any) {
             console.error('Error inviting staff:', err);
+            const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to send invite.';
+            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
         } finally {
             setIsSubmitting(false);
         }
@@ -215,6 +244,11 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
                             onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
                         />
                     </div>
+                    {error && (
+                        <div className="w-full px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold">
+                            ⚠️ {error}
+                        </div>
+                    )}
                     <div className="pt-4">
                         <button
                             disabled={isSubmitting}
@@ -229,3 +263,204 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
         </div>
     );
 };
+
+export const EditCustomerModal = ({ isOpen, onClose, onSuccess, customerData }: any) => {
+    const [formData, setFormData] = useState({ name: '', phone: '', email: '', walletBalance: 0 });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (customerData) {
+            setFormData({
+                name: customerData.name || '',
+                phone: customerData.phone || '',
+                email: customerData.email || '',
+                walletBalance: Number(customerData.walletBalance) || 0
+            });
+        }
+    }, [customerData, isOpen]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e: any) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        setError(null);
+        try {
+            const token = localStorage.getItem('token');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+            const payload = {
+                name: formData.name.trim(),
+                email: formData.email.trim() ? formData.email.trim() : null,
+                phone: formData.phone.trim() ? formData.phone.trim() : null,
+                walletBalance: Number(formData.walletBalance)
+            };
+            await axios.put(`${API_URL}/customers/${customerData.id}`, payload, { headers });
+            onSuccess();
+            onClose();
+        } catch (err: any) {
+            console.error('Error updating customer:', err);
+            const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update customer.';
+            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
+            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95">
+                <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+                    <h2 className="text-2xl font-black text-gray-900 tracking-tighter uppercase">Edit Customer</h2>
+                    <button onClick={onClose} className="p-3 hover:bg-gray-50 rounded-2xl text-gray-400">
+                        <X size={20} />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
+                        <input required type="text" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Phone Number (Optional)</label>
+                        <input type="text" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
+                        <input type="email" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Wallet Balance (₦)</label>
+                        <input type="number" step="0.01" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.walletBalance} onChange={(e) => setFormData({ ...formData, walletBalance: Number(e.target.value) })} />
+                    </div>
+                    {error && (
+                        <div className="w-full px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold animate-in fade-in duration-200">
+                            ⚠️ {error}
+                        </div>
+                    )}
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50"
+                    >
+                        {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+export const EditStaffModal = ({ isOpen, onClose, onSuccess, staffData }: any) => {
+    const [formData, setFormData] = useState({ name: '', email: '', phone: '', role: 'CASHIER', branchId: '' });
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (staffData) {
+            setFormData({
+                name: staffData.name || '',
+                email: staffData.email || '',
+                phone: staffData.phone || '',
+                role: staffData.role || 'CASHIER',
+                branchId: staffData.branchId || ''
+            });
+        }
+    }, [staffData, isOpen]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e: any) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        setError(null);
+        try {
+            const payload: any = {
+                name: formData.name.trim() || undefined,
+                role: formData.role,
+                branchId: formData.branchId.trim() ? formData.branchId.trim() : null
+            };
+
+            payload.email = formData.email.trim() ? formData.email.trim() : null;
+            payload.phone = formData.phone.trim() ? formData.phone.trim() : null;
+
+            const token = localStorage.getItem('token');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+            await axios.put(`${API_URL}/staff/${staffData.id}`, payload, { headers });
+            onSuccess();
+            onClose();
+        } catch (err: any) {
+            console.error('Error updating staff:', err);
+            const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update staff.';
+            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
+            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95">
+                <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+                    <h2 className="text-2xl font-black text-gray-900 tracking-tighter uppercase">Edit Personnel</h2>
+                    <button onClick={onClose} className="p-3 hover:bg-gray-50 rounded-2xl text-gray-400">
+                        <X size={20} />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-8 space-y-6">
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Name</label>
+                        <input required type="text" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
+                        <input type="email" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Phone Number</label>
+                        <input type="text" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Security Clearance</label>
+                        <select
+                            className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold transition-all appearance-none"
+                            value={formData.role}
+                            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                        >
+                            <option value="CASHIER">Cashier</option>
+                            <option value="INVENTORY_MANAGER">Inventory Manager</option>
+                            <option value="BRANCH_MANAGER">Branch Manager</option>
+                            <option value="SUPER_ADMIN">Super Admin</option>
+                        </select>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Assigned Sector (Optional)</label>
+                        <input
+                            type="text"
+                            className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold"
+                            placeholder="Leave empty for Omni-Access"
+                            value={formData.branchId}
+                            onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+                        />
+                    </div>
+                    {error && (
+                        <div className="w-full px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold animate-in fade-in duration-200">
+                            ⚠️ {error}
+                        </div>
+                    )}
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50"
+                    >
+                        {isSubmitting ? 'Saving...' : 'Save Changes'}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+

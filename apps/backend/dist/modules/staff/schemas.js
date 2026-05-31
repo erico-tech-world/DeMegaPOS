@@ -1,16 +1,17 @@
 import { z } from 'zod';
 export const inviteStaffSchema = z.object({
-    email: z.string().email().optional(),
-    phone: z.string().min(10).optional(),
+    email: z.string().email().optional().nullable(),
+    phone: z.string().min(10).optional().nullable(),
     role: z.enum(['SUPER_ADMIN', 'BRANCH_MANAGER', 'INVENTORY_MANAGER', 'CASHIER']),
-    branchId: z.string().optional(),
+    branchId: z.string().optional().nullable(),
+    settings: z.record(z.string(), z.any()).optional(),
 }).refine(data => data.email || data.phone, {
     message: "Either email or phone must be provided",
     path: ["email", "phone"]
 });
 export const updatePermissionsSchema = z.object({
     userId: z.string(),
-    permissions: z.record(z.boolean())
+    permissions: z.record(z.string(), z.boolean())
 });
 export const staffResponseSchema = z.object({
     id: z.string(),
@@ -20,4 +21,11 @@ export const staffResponseSchema = z.object({
     role: z.string(),
     branchId: z.string().nullable(),
     permissions: z.any().nullable(),
+});
+export const updateStaffSchema = z.object({
+    name: z.string().optional(),
+    email: z.string().email().optional().nullable(),
+    phone: z.string().min(10).optional().nullable(),
+    role: z.enum(['SUPER_ADMIN', 'BRANCH_MANAGER', 'INVENTORY_MANAGER', 'CASHIER']).optional(),
+    branchId: z.string().optional().nullable()
 });

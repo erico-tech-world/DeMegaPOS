@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify'
+import { z } from 'zod'
 import { createOrderSchema, orderResponseSchema } from './schemas.js'
 import { createOrder, getOrders, updateOrderStatus } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
@@ -28,14 +29,11 @@ export default async function orderRoutes(app: FastifyInstance) {
         '/',
         {
             schema: {
-                querystring: {
-                    storeId: { type: 'string' },
-                },
+                querystring: z.object({
+                    storeId: z.string().optional(),
+                }),
                 response: {
-                    200: {
-                        type: 'array',
-                        items: orderResponseSchema,
-                    },
+                    200: z.array(orderResponseSchema),
                 },
             },
         },
@@ -49,16 +47,12 @@ export default async function orderRoutes(app: FastifyInstance) {
         '/:id/status',
         {
             schema: {
-                params: {
-                    id: { type: 'string' },
-                },
-                body: {
-                    type: 'object',
-                    properties: {
-                        status: { type: 'string' },
-                    },
-                    required: ['status'],
-                },
+                params: z.object({
+                    id: z.string(),
+                }),
+                body: z.object({
+                    status: z.string(),
+                }),
             },
         },
         async (request) => {

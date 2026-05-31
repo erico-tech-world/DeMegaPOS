@@ -13,8 +13,9 @@ export const variantSchema = z.object({
     name: z.string(),
     sku: z.string().optional(),
     price: z.number().positive(),
-    costPrice: z.number().nonnegative().optional(),
-    vipPrice: z.number().nonnegative().optional(),
+    costPrice: z.number().nonnegative().optional().nullable(),
+    vipPrice: z.number().nonnegative().optional().nullable(),
+    unit: z.string().optional(),
     stock: z.number().int().min(0).default(0),
 })
 
@@ -28,17 +29,21 @@ export const createProductSchema = z.object({
     sku: z.string().optional(),
     barcode: z.string().optional(),
     price: z.number().nonnegative(),
-    costPrice: z.number().nonnegative().optional(),
-    vipPrice: z.number().nonnegative().optional(),
+    costPrice: z.number().nonnegative().optional().nullable(),
+    vipPrice: z.number().nonnegative().optional().nullable(),
+    unit: z.string().optional(),
     stock: z.number().int().min(0).default(0),
     minStock: z.number().int().min(0).default(5),
     type: z.enum(['STANDARD', 'VARIANT', 'BUNDLED']).default('STANDARD'),
     expiryDate: z.string().datetime().optional().nullable(),
     batchNumber: z.string().optional().nullable(),
-    categoryId: z.string().optional(),
+    imageUrl: z.string().optional().nullable(),
+    categoryId: z.string().optional().nullable(),
     variants: z.array(variantSchema).optional(),
     bundleItems: z.array(bundleItemSchema).optional(),
 })
+
+export const updateProductSchema = createProductSchema.partial()
 
 export const productResponseSchema = z.object({
     id: z.string(),
@@ -48,12 +53,15 @@ export const productResponseSchema = z.object({
     price: z.any(),
     costPrice: z.any().nullable(),
     vipPrice: z.any().nullable(),
+    unit: z.string().nullable(),
     stock: z.number(),
     minStock: z.number(),
     type: z.string(),
     expiryDate: z.date().nullable(),
     batchNumber: z.string().nullable(),
+    imageUrl: z.string().nullable().optional(),
     categoryId: z.string().nullable(),
+    category: categoryResponseSchema.nullable().optional(),
     variants: z.array(z.any()).optional(),
     bundleItems: z.array(z.any()).optional(),
     createdAt: z.date(),
@@ -70,4 +78,5 @@ export const stockAdjustmentSchema = z.object({
 
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>
 export type CreateProductInput = z.infer<typeof createProductSchema>
+export type UpdateProductInput = z.infer<typeof updateProductSchema>
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>

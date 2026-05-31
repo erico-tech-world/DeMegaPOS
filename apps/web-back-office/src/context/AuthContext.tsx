@@ -13,25 +13,38 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+    const [token, setToken] = useState<string | null>(() => {
+        const storedToken = localStorage.getItem('token');
+        if (storedToken) {
+            axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        }
+        return storedToken;
+    });
     const [user, setUser] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser && storedUser !== 'undefined') {
-            try {
-                setUser(JSON.parse(storedUser));
-            } catch (e) {
-                console.error('Failed to parse user from storage', e);
-            }
-        }
+        const initializeAuth = async () => {
+            const storedUser = localStorage.getItem('user');
+            if (storedUser && storedUser !== 'undefined') {
+                try {
+                    const parsedUser = JSON.parse(storedUser);
+                    setUser(parsedUser);
 
-        if (token) {
-            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        }
-        setIsLoading(false);
-    }, [token]);
+                    // In a real app, we might want to verify the token here with a /me endpoint
+                    // For now, we trust the stored session to prevent refresh redirects
+                } catch (e) {
+                    console.error('Failed to parse user from storage', e);
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    setToken(null);
+                }
+            }
+            setIsLoading(false);
+        };
+
+        initializeAuth();
+    }, []);
 
     const login = (userData: any, userToken: string) => {
         localStorage.setItem('token', userToken);

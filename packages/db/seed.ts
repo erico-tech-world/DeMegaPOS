@@ -43,7 +43,7 @@ async function main() {
                 email,
                 password: hashedPassword,
                 name: 'Admin User',
-                role: 'OWNER',
+                role: 'SUPER_ADMIN',
                 tenantId: tenant.id,
             }
         })
@@ -134,6 +134,7 @@ async function main() {
                 create: {
                     customerId: customer.id,
                     dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
+                    balance: 5500,
                 }
             }
         }

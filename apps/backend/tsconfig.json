@@ -9,12 +9,7 @@
         "isolatedModules": true,
         "resolveJsonModule": true,
         "outDir": "dist",
-        "baseUrl": ".",
-        "paths": {
-            "@/*": [
-                "src/*"
-            ]
-        }
+        "rootDir": "src"
     },
     "include": [
         "src/**/*"

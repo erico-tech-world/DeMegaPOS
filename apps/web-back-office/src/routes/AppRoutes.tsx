@@ -6,6 +6,7 @@ import LandingPage from '../pages/LandingPage';
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
 import ForgotPasswordPage from '../pages/auth/ForgotPasswordPage';
+import AcceptInvitePage from '../pages/auth/AcceptInvitePage';
 import OverviewPage from '../pages/dashboard/OverviewPage';
 import POSPage from '../pages/dashboard/POSPage';
 import InventoryPage from '../pages/dashboard/InventoryPage';
@@ -28,6 +29,7 @@ const AppRoutes = () => {
                     <Route path="login" element={<LoginPage />} />
                     <Route path="register" element={<RegisterPage />} />
                     <Route path="forgot-password" element={<ForgotPasswordPage />} />
+                    <Route path="accept-invite" element={<AcceptInvitePage />} />
                     <Route index element={<Navigate to="/auth/login" replace />} />
                 </Route>
             </Route>
@@ -49,6 +51,7 @@ const AppRoutes = () => {
                             products={dashboardData.products}
                             customers={dashboardData.customers}
                             onSubmitOrder={dashboardData.handleCreateOrder}
+                            refresh={dashboardData.refresh}
                         />
                     } />
 

@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify'
+import { z } from 'zod'
 import { createAppSchema, appResponseSchema } from './schemas.js'
 import { registerApp, getApps } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
@@ -27,10 +28,7 @@ export default async function webhookRoutes(app: FastifyInstance) {
         {
             schema: {
                 response: {
-                    200: {
-                        type: 'array',
-                        items: appResponseSchema,
-                    },
+                    200: z.array(appResponseSchema),
                 },
             },
         },

@@ -10,24 +10,26 @@
         "start": "node dist/index.js"
     },
     "dependencies": {
-        "fastify": "latest",
+        "@demegapos/db": "workspace:*",
         "@fastify/cors": "latest",
         "@fastify/jwt": "latest",
         "@fastify/swagger": "latest",
         "@fastify/swagger-ui": "latest",
         "@fastify/websocket": "latest",
-        "@demegapos/db": "workspace:*",
-        "zod": "latest",
-        "fastify-type-provider-zod": "latest",
+        "bcrypt": "latest",
         "bullmq": "latest",
-        "ioredis": "latest",
         "dotenv": "latest",
-        "bcrypt": "latest"
+        "fastify": "latest",
+        "fastify-type-provider-zod": "latest",
+        "ioredis": "latest",
+        "nodemailer": "^8.0.8",
+        "zod": "latest"
     },
     "devDependencies": {
-        "typescript": "latest",
-        "@types/node": "latest",
         "@types/bcrypt": "latest",
-        "tsx": "latest"
+        "@types/node": "latest",
+        "@types/nodemailer": "^8.0.0",
+        "tsx": "latest",
+        "typescript": "latest"
     }
 }

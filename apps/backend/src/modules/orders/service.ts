@@ -3,10 +3,35 @@ import { CreateOrderInput } from './schemas.js'
 
 export async function createOrder(data: CreateOrderInput) {
     return prisma.$transaction(async (tx) => {
+        // Fallback for storeId if the provided store doesn't exist
+        let finalStoreId = data.storeId
+        const storeExists = finalStoreId ? await tx.store.findUnique({ where: { id: finalStoreId } }) : null
+        if (!storeExists) {
+            if (data.cashierId) {
+                const user = await tx.user.findUnique({
+                    where: { id: data.cashierId },
+                    select: { branchId: true }
+                })
+                if (user?.branchId) {
+                    finalStoreId = user.branchId
+                }
+            }
+            const checkStore = finalStoreId ? await tx.store.findUnique({ where: { id: finalStoreId } }) : null
+            if (!checkStore) {
+                const firstStore = await tx.store.findFirst()
+                if (firstStore) {
+                    finalStoreId = firstStore.id
+                } else {
+                    throw new Error("No store found in database to associate with this order.")
+                }
+            }
+        }
+
         // 1. Create the order
         const order = await tx.order.create({
             data: {
-                storeId: data.storeId,
+                storeId: finalStoreId,
+                cashierId: data.cashierId,
                 customerId: data.customerId,
                 totalAmount: data.totalAmount.toString(),
                 paymentMethod: data.paymentMethod,
@@ -97,16 +122,22 @@ export async function createOrder(data: CreateOrderInput) {
     })
 }
 
-export async function getOrders(storeId: string) {
+export async function getOrders(storeId?: string) {
     return prisma.order.findMany({
-        where: { storeId },
+        where: storeId ? { storeId } : undefined,
         include: {
             items: {
                 include: {
-                    order: true,
-                },
+                    product: true
+                }
             },
+            customer: true,
+            cashier: true,
+            splitPayments: true
         },
+        orderBy: {
+            createdAt: 'desc'
+        }
     })
 }
 

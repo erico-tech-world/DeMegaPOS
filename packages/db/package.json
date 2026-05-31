@@ -14,13 +14,13 @@
         "seed": "tsx seed.ts"
     },
     "dependencies": {
-        "@prisma/client": "6.2.1",
+        "@prisma/client": "^6.2.1",
         "bcryptjs": "^2.4.3",
         "dotenv": "^17.2.4"
     },
     "devDependencies": {
         "@types/bcryptjs": "^2.4.6",
-        "prisma": "6.2.1",
+        "prisma": "^6.2.1",
         "tsx": "latest"
     }
 }

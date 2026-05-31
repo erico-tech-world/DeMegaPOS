@@ -1,0 +1,22 @@
+2026-03-03T01:48:37.958340Z  WARN daemon_server: turborepo_lib::commands::daemon: daemon already running
+2026-03-03T01:48:38.663521Z  WARN get_package_file_hashes{include_default_files=true telemetry=None}: turborepo_scm::package_deps: git hashing failed for AnchoredSystemPath("apps\\mobile-pos") with resource error: Git error on C:\Users\Henry\Documents\DeMegaPOS\App.tsx: could not find 'C:\Users\Henry\Documents\DeMegaPOS\App.tsx' to open: The system cannot find the file specified.
+; class=Os (2); code=NotFound (-3)
+2026-03-03T01:48:39.746753Z  WARN daemon_server: turborepo_lib::commands::daemon: daemon already running
+2026-03-03T01:48:40.135508Z  WARN get_package_file_hashes{include_default_files=true telemetry=None}: turborepo_scm::package_deps: git hashing failed for AnchoredSystemPath("apps\\mobile-pos") with resource error: Git error on C:\Users\Henry\Documents\DeMegaPOS\App.tsx: could not find 'C:\Users\Henry\Documents\DeMegaPOS\App.tsx' to open: The system cannot find the file specified.
+; class=Os (2); code=NotFound (-3)
+2026-03-03T01:48:41.301641Z  WARN get_package_file_hashes{include_default_files=true telemetry=None}: turborepo_scm::package_deps: git hashing failed for AnchoredSystemPath("apps\\mobile-pos") with resource error: Git error on C:\Users\Henry\Documents\DeMegaPOS\App.tsx: could not find 'C:\Users\Henry\Documents\DeMegaPOS\App.tsx' to open: The system cannot find the file specified.
+; class=Os (2); code=NotFound (-3)
+2026-03-03T20:43:21.508733Z  WARN daemon_server: turborepo_lib::commands::daemon: daemon already running
+2026-03-03T20:43:23.524146Z  WARN get_package_file_hashes{include_default_files=true telemetry=None}: turborepo_scm::package_deps: git hashing failed for AnchoredSystemPath("apps\\mobile-pos") with resource error: Git error on C:\Users\Henry\Documents\DeMegaPOS\App.tsx: could not find 'C:\Users\Henry\Documents\DeMegaPOS\App.tsx' to open: The system cannot find the file specified.
+; class=Os (2); code=NotFound (-3)
+2026-03-03T20:43:24.531736Z  WARN daemon_server: turborepo_lib::commands::daemon: daemon already running
+2026-03-03T20:43:26.384669Z  WARN get_package_file_hashes{include_default_files=true telemetry=None}: turborepo_scm::package_deps: git hashing failed for AnchoredSystemPath("apps\\mobile-pos") with resource error: Git error on C:\Users\Henry\Documents\DeMegaPOS\App.tsx: could not find 'C:\Users\Henry\Documents\DeMegaPOS\App.tsx' to open: The system cannot find the file specified.
+; class=Os (2); code=NotFound (-3)
+2026-03-03T20:56:57.989848Z  WARN get_package_file_hashes{include_default_files=true telemetry=None}: turborepo_scm::package_deps: git hashing failed for AnchoredSystemPath("apps\\mobile-pos") with resource error: Git error on C:\Users\Henry\Documents\DeMegaPOS\App.tsx: could not find 'C:\Users\Henry\Documents\DeMegaPOS\App.tsx' to open: The system cannot find the file specified.
+; class=Os (2); code=NotFound (-3)
+2026-03-03T20:57:05.168573Z  WARN get_package_file_hashes{include_default_files=true telemetry=None}: turborepo_scm::package_deps: git hashing failed for AnchoredSystemPath("apps\\mobile-pos") with resource error: Git error on C:\Users\Henry\Documents\DeMegaPOS\App.tsx: could not find 'C:\Users\Henry\Documents\DeMegaPOS\App.tsx' to open: The system cannot find the file specified.
+; class=Os (2); code=NotFound (-3)
+2026-03-03T21:00:39.457657Z  WARN get_package_file_hashes{include_default_files=true telemetry=None}: turborepo_scm::package_deps: git hashing failed for AnchoredSystemPath("apps\\mobile-pos") with resource error: Git error on C:\Users\Henry\Documents\DeMegaPOS\App.tsx: could not find 'C:\Users\Henry\Documents\DeMegaPOS\App.tsx' to open: The system cannot find the file specified.
+; class=Os (2); code=NotFound (-3)
+2026-03-03T21:00:43.524375Z  WARN get_package_file_hashes{include_default_files=true telemetry=None}: turborepo_scm::package_deps: git hashing failed for AnchoredSystemPath("apps\\mobile-pos") with resource error: Git error on C:\Users\Henry\Documents\DeMegaPOS\App.tsx: could not find 'C:\Users\Henry\Documents\DeMegaPOS\App.tsx' to open: The system cannot find the file specified.
+; class=Os (2); code=NotFound (-3)

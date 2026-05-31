@@ -23,7 +23,11 @@ server.setValidatorCompiler(validatorCompiler);
 server.setSerializerCompiler(serializerCompiler);
 
 async function main() {
-    await server.register(cors)
+    await server.register(cors, {
+        origin: '*',
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+    })
 
     await server.register(jwt, {
         secret: process.env.JWT_SECRET || 'supersecret',
@@ -81,28 +85,16 @@ async function main() {
         }
     })
 
-    // Protected Routes & Scoping Hook
+    // JWT guard — verifies token for all non-auth routes
     server.addHook('onRequest', async (request, reply) => {
-        if (request.url.startsWith('/auth') || request.url.startsWith('/docs') || request.url === '/health') {
+        if (request.method === 'OPTIONS') {
             return
         }
-
+        if (request.url.startsWith('/auth') || request.url.startsWith('/docs') || request.url === '/health' || request.url.startsWith('/ws')) {
+            return
+        }
         try {
             await request.jwtVerify()
-
-            // Set Request Context for automatic scoping in Prisma
-            const { tenantId, branchId, role } = request.user
-            await new Promise<void>((resolve) => {
-                import('@demegapos/db').then(({ requestContext }) => {
-                    requestContext.run({
-                        tenantId,
-                        branchId,
-                        role: role as any
-                    }, () => {
-                        resolve()
-                    })
-                })
-            })
         } catch (err) {
             reply.send(err)
         }
