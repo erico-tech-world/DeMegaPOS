@@ -54,7 +54,9 @@ const OrderCard = ({ order, onStatusChange }: any) => {
             >
               <div className="flex-1">
                 <span className="text-xl sm:text-2xl font-bold text-slate-100">{item.quantity}x</span>
-                <span className="ml-2 sm:ml-3 text-base sm:text-xl text-slate-300">Product #{item.productId}</span>
+                <span className="ml-2 sm:ml-3 text-base sm:text-xl text-slate-300">
+                  {item.product?.name || `Product #${item.productId}`}
+                </span>
               </div>
             </li>
           ))}
@@ -85,46 +87,122 @@ const OrderCard = ({ order, onStatusChange }: any) => {
   );
 };
 
-export default function App() {
-  const [orders, setOrders] = useState([
-    {
-      id: "ord_1",
-      status: "NEW",
-      createdAt: Date.now() - 300000,
-      items: [
-        { id: "i1", productId: "P001", quantity: 2 },
-        { id: "i2", productId: "P005", quantity: 1 }
-      ]
-    },
-    {
-      id: "ord_2",
-      status: "PREPARING",
-      createdAt: Date.now() - 600000,
-      items: [
-        { id: "i3", productId: "P003", quantity: 3 },
-        { id: "i4", productId: "P007", quantity: 2 }
-      ]
-    },
-    {
-      id: "ord_3",
-      status: "READY",
-      createdAt: Date.now() - 900000,
-      items: [{ id: "i5", productId: "P002", quantity: 1 }]
-    },
-  ]);
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const WS_URL = import.meta.env.VITE_WS_URL || (API_URL.replace(/^http/, 'ws') + '/ws');
 
+export default function App() {
+  const [orders, setOrders] = useState<any[]>([]);
   const [filter, setFilter] = useState('ALL');
   const [showFilters, setShowFilters] = useState(false);
 
-  const handleStatusChange = (order: any) => {
-    setOrders(orders.map(o => {
-      if (o.id === order.id) {
-        if (o.status === 'NEW') return { ...o, status: 'PREPARING' };
-        if (o.status === 'PREPARING') return { ...o, status: 'READY' };
-        return o;
+  // 1. Fetch live orders on mount
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const response = await fetch(`${API_URL}/orders`);
+        if (response.ok) {
+          const data = await response.json();
+          // Map backend ISO date string to millisecond timestamp for timers
+          const mappedData = data.map((o: any) => ({
+            ...o,
+            createdAt: new Date(o.createdAt).getTime()
+          }));
+          setOrders(mappedData);
+        }
+      } catch (error) {
+        console.error('Error fetching orders:', error);
       }
-      return o;
-    }));
+    };
+    fetchOrders();
+  }, []);
+
+  // 2. WebSocket listener for live updates
+  useEffect(() => {
+    let socket: WebSocket;
+
+    const connectWebSocket = () => {
+      console.log('Connecting to WebSocket at:', WS_URL);
+      socket = new WebSocket(WS_URL);
+
+      socket.onopen = () => {
+        console.log('Connected to Kitchen WebSocket Server');
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          console.log('Kitchen received WS message:', message);
+
+          if (message.event === 'ORDER_CREATED') {
+            const newOrder = {
+              ...message.payload,
+              createdAt: new Date(message.payload.createdAt).getTime()
+            };
+            setOrders(prev => {
+              if (prev.some(o => o.id === newOrder.id)) return prev;
+              return [newOrder, ...prev];
+            });
+          } else if (message.event === 'ORDER_UPDATED') {
+            const updatedOrder = {
+              ...message.payload,
+              createdAt: new Date(message.payload.createdAt).getTime()
+            };
+            setOrders(prev => prev.map(o => o.id === updatedOrder.id ? updatedOrder : o));
+          }
+        } catch (err) {
+          console.error('Error parsing WS message:', err);
+        }
+      };
+
+      socket.onclose = () => {
+        console.log('WebSocket closed, attempting reconnect in 3s');
+        setTimeout(connectWebSocket, 3000);
+      };
+
+      socket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        socket.close();
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      if (socket) socket.close();
+    };
+  }, []);
+
+  // 3. Status Change patch request (fulfillment track only)
+  const handleStatusChange = async (order: any) => {
+    let nextStatus = order.status;
+    if (order.status === 'NEW') nextStatus = 'PREPARING';
+    else if (order.status === 'PREPARING') nextStatus = 'READY';
+    else if (order.status === 'READY') nextStatus = 'COMPLETED';
+
+    if (nextStatus === order.status) return;
+
+    try {
+      const response = await fetch(`${API_URL}/orders/${order.id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: nextStatus })
+      });
+
+      if (response.ok) {
+        const updatedOrder = await response.json();
+        const mappedOrder = {
+          ...updatedOrder,
+          createdAt: new Date(updatedOrder.createdAt).getTime()
+        };
+        setOrders(prev => prev.map(o => o.id === order.id ? mappedOrder : o));
+      } else {
+        console.error('Failed to update order status');
+      }
+    } catch (err) {
+      console.error('Error updating status:', err);
+    }
   };
 
   const filteredOrders = filter === 'ALL'

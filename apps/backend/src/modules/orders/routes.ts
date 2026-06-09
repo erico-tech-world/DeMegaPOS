@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { createOrderSchema, orderResponseSchema } from './schemas.js'
-import { createOrder, getOrders, updateOrderStatus } from './service.js'
+import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 export default async function orderRoutes(app: FastifyInstance) {
@@ -58,7 +58,37 @@ export default async function orderRoutes(app: FastifyInstance) {
         async (request) => {
             const { id } = request.params as { id: string }
             const { status } = request.body as { status: string }
-            return updateOrderStatus(id, status)
+            const updatedOrder = await updateOrderStatus(id, status)
+            if (updatedOrder) {
+                app.broadcast('ORDER_UPDATED', updatedOrder)
+            }
+            return updatedOrder
+        }
+    )
+
+    server.patch(
+        '/:id/payment-status',
+        {
+            schema: {
+                params: z.object({
+                    id: z.string(),
+                }),
+                body: z.object({
+                    paymentStatus: z.enum(['PENDING', 'SUCCESS', 'FAILED']),
+                }),
+            },
+        },
+        async (request) => {
+            const { id } = request.params as { id: string }
+            const { paymentStatus } = request.body as { paymentStatus: string }
+            const updatedOrder = await updateOrderPaymentStatus(id, paymentStatus)
+            if (updatedOrder) {
+                app.broadcast('ORDER_UPDATED', updatedOrder)
+                if (paymentStatus === 'SUCCESS') {
+                    app.broadcast('PAYMENT_SUCCESS', updatedOrder)
+                }
+            }
+            return updatedOrder
         }
     )
 }

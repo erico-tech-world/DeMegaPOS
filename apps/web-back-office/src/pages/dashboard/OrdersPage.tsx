@@ -128,7 +128,7 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                                 <th className="px-8 py-5">Order Reference</th>
                                 <th className="px-8 py-5">Time & Stakeholders</th>
                                 <th className="px-8 py-5">Fiscal Details</th>
-                                <th className="px-8 py-5">Fulfillment</th>
+                                <th className="px-8 py-5">Fulfillment & Payment</th>
                                 <th className="px-8 py-5 text-right">View</th>
                             </tr>
                         </thead>
@@ -181,12 +181,34 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                                         </div>
                                     </td>
                                     <td className="px-8 py-6">
-                                        <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full border inline-flex items-center gap-1.5 ${
-                                            order.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100' : 'bg-amber-50 text-amber-600 border-amber-100'
-                                        }`}>
-                                            <div className={`w-1.5 h-1.5 rounded-full ${order.status === 'COMPLETED' ? 'bg-green-500' : 'bg-amber-500'}`}></div>
-                                            {order.status}
-                                        </span>
+                                        <div className="flex flex-wrap gap-2">
+                                            {/* Fulfillment Status */}
+                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${
+                                                order.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100' : 
+                                                order.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                                'bg-amber-50 text-amber-600 border-amber-100'
+                                            }`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${
+                                                    order.status === 'COMPLETED' ? 'bg-green-500' : 
+                                                    order.status === 'READY' ? 'bg-blue-500' : 
+                                                    'bg-amber-500'
+                                                }`}></div>
+                                                FUL: {order.status}
+                                            </span>
+                                            {/* Payment Status */}
+                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${
+                                                order.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
+                                                order.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
+                                                'bg-amber-50 text-amber-600 border-amber-100'
+                                            }`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${
+                                                    order.paymentStatus === 'SUCCESS' ? 'bg-green-500' :
+                                                    order.paymentStatus === 'FAILED' ? 'bg-red-500' :
+                                                    'bg-amber-500'
+                                                }`}></div>
+                                                PAY: {order.paymentStatus || 'PENDING'}
+                                            </span>
+                                        </div>
                                     </td>
                                     <td className="px-8 py-6 text-right">
                                         <button 
@@ -280,12 +302,33 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                             </div>
                         </div>
 
-                        <div className="p-8 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Payment Method</p>
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-black rounded-full uppercase tracking-widest">
-                                    <CreditCard size={12} /> {selectedOrder.paymentMethod}
-                                </span>
+                        <div className="p-8 border-t border-gray-100 bg-gray-50 flex flex-wrap gap-4 items-center justify-between">
+                            <div className="flex gap-4">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Method & Payment</p>
+                                    <div className="flex gap-2">
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-black rounded-full uppercase tracking-widest">
+                                            <CreditCard size={12} /> {selectedOrder.paymentMethod}
+                                        </span>
+                                        <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${
+                                            selectedOrder.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
+                                            selectedOrder.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
+                                            'bg-amber-50 text-amber-600 border-amber-100'
+                                        }`}>
+                                            PAY: {selectedOrder.paymentStatus || 'PENDING'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Fulfillment</p>
+                                    <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${
+                                        selectedOrder.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100' :
+                                        selectedOrder.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                        'bg-amber-50 text-amber-600 border-amber-100'
+                                    }`}>
+                                        FUL: {selectedOrder.status}
+                                    </span>
+                                </div>
                             </div>
                             <div className="text-right">
                                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Total Amount</p>

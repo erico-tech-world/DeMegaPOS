@@ -35,6 +35,7 @@ export async function createOrder(data: CreateOrderInput) {
                 customerId: data.customerId,
                 totalAmount: data.totalAmount.toString(),
                 paymentMethod: data.paymentMethod,
+                paymentStatus: data.paymentStatus || 'PENDING',
                 items: {
                     create: data.items.map((item) => ({
                         productId: item.productId,
@@ -141,9 +142,34 @@ export async function getOrders(storeId?: string) {
     })
 }
 
+export async function getOrderById(id: string) {
+    return prisma.order.findUnique({
+        where: { id },
+        include: {
+            items: {
+                include: {
+                    product: true
+                }
+            },
+            customer: true,
+            cashier: true,
+            splitPayments: true
+        }
+    })
+}
+
 export async function updateOrderStatus(id: string, status: string) {
-    return prisma.order.update({
+    await prisma.order.update({
         where: { id },
         data: { status },
     })
+    return getOrderById(id)
+}
+
+export async function updateOrderPaymentStatus(id: string, paymentStatus: string) {
+    await prisma.order.update({
+        where: { id },
+        data: { paymentStatus },
+    })
+    return getOrderById(id)
 }

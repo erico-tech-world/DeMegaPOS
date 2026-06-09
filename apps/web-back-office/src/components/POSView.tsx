@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History, Plus, X, Minus } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const WS_URL = import.meta.env.VITE_WS_URL || (API_URL.replace(/^http/, 'ws') + '/ws');
 
 export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) => {
     const [cart, setCart] = useState<any[]>([]);
@@ -15,7 +18,101 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
     const [completedOrder, setCompletedOrder] = useState<any>(null);
     const [customAlert, setCustomAlert] = useState<{ title?: string; message: string } | null>(null);
     const [customConfirm, setCustomConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
+    
+    // Terminal push states
+    const [isCardTransferSelectorOpen, setIsCardTransferSelectorOpen] = useState(false);
+    const [isWaitingForTerminal, setIsWaitingForTerminal] = useState(false);
+    const [terminalReference, setTerminalReference] = useState('');
+    const [pendingTerminalOrderId, setPendingTerminalOrderId] = useState<string | null>(null);
+    const pendingTerminalOrderIdRef = useRef<string | null>(null);
+    
     const { user } = useAuth();
+
+    // Keep ref updated
+    useEffect(() => {
+        pendingTerminalOrderIdRef.current = pendingTerminalOrderId;
+    }, [pendingTerminalOrderId]);
+
+    // WebSocket listener for live stock updates and payment resolution
+    useEffect(() => {
+        console.log('POS Connecting to WebSocket at:', WS_URL);
+        const socket = new WebSocket(WS_URL);
+
+        socket.onopen = () => {
+            console.log('POS Connected to WebSocket Sync Engine');
+        };
+
+        socket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                console.log('POS received WS message:', message);
+
+                if (message.event === 'ORDER_CREATED') {
+                    if (refresh) {
+                        console.log('Order created by other terminal. Refreshing local stock...');
+                        refresh();
+                    }
+                } else if (message.event === 'PAYMENT_SUCCESS') {
+                    const currentPendingId = pendingTerminalOrderIdRef.current;
+                    if (currentPendingId && message.payload.id === currentPendingId) {
+                        console.log('PAYMENT_SUCCESS match found! Resolving terminal standby.');
+                        setIsWaitingForTerminal(false);
+                        setCompletedOrder(message.payload);
+                        setCart([]);
+                        setSelectedCustomer(null);
+                        setPaymentMethod('CASH');
+                        setAmountCash(0);
+                        setAmountCard(0);
+                        setAmountTransfer(0);
+                        setPendingTerminalOrderId(null);
+                        if (refresh) refresh();
+                    }
+                }
+            } catch (err) {
+                console.error('Error parsing WS message in POS:', err);
+            }
+        };
+
+        socket.onclose = () => {
+            console.log('POS WebSocket closed');
+        };
+
+        return () => {
+            socket.close();
+        };
+    }, [refresh]);
+
+    const cancelTerminalWait = async () => {
+        if (!pendingTerminalOrderId) return;
+
+        setCustomConfirm({
+            message: "Are you sure you want to bypass the terminal and mark this order as paid manually?",
+            onConfirm: async () => {
+                try {
+                    const res = await axios.patch(`${API_URL}/orders/${pendingTerminalOrderId}/payment-status`, {
+                        paymentStatus: 'SUCCESS'
+                    });
+
+                    setIsWaitingForTerminal(false);
+                    setCompletedOrder(res.data);
+                    setCart([]);
+                    setSelectedCustomer(null);
+                    setPaymentMethod('CASH');
+                    setAmountCash(0);
+                    setAmountCard(0);
+                    setAmountTransfer(0);
+                    setPendingTerminalOrderId(null);
+                    if (refresh) refresh();
+                } catch (err: any) {
+                    console.error('Error bypassing terminal payment:', err);
+                    setCustomAlert({
+                        title: "Bypass Failed",
+                        message: "Failed to mark order as paid manually."
+                    });
+                }
+            }
+        });
+    };
 
     const total = cart.reduce((acc, item) => {
         const itemPrice = selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price);
@@ -45,7 +142,7 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
     };
 
     const handleCheckout = async () => {
-        const proceedCheckout = async () => {
+        const proceedCheckout = async (initialPaymentStatus = 'SUCCESS') => {
             const splitPayments = [];
             if (paymentMethod === 'SPLIT') {
                 const splitTotal = amountCash + amountCard + amountTransfer;
@@ -77,6 +174,7 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
                 })),
                 totalAmount: total,
                 paymentMethod,
+                paymentStatus: initialPaymentStatus,
                 customerId: selectedCustomer?.id,
                 cashierId: user?.id,
                 amountCash: paymentMethod === 'CASH' ? total : (paymentMethod === 'SPLIT' ? amountCash : 0),
@@ -88,13 +186,46 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
 
             try {
                 const res = await onSubmitOrder(orderData);
-                setCompletedOrder(res);
-                setCart([]);
-                setSelectedCustomer(null);
-                setPaymentMethod('CASH');
-                setAmountCash(0);
-                setAmountCard(0);
-                setAmountTransfer(0);
+                
+                if (initialPaymentStatus === 'PENDING') {
+                    console.log('Initiating terminal payment for order:', res.id);
+                    try {
+                        const initRes = await axios.post(`${API_URL}/payments/initiate`, {
+                            amount: total,
+                            provider: 'MONNIFY',
+                            orderId: res.id,
+                            paymentType: paymentMethod
+                        });
+
+                        setTerminalReference(initRes.data.reference);
+                        setPendingTerminalOrderId(res.id);
+                        setIsWaitingForTerminal(true);
+                    } catch (paymentErr: any) {
+                        console.error('Failed to initiate terminal payment:', paymentErr);
+                        setCustomAlert({
+                            title: "Terminal Request Failed",
+                            message: "Failed to connect to the card reader. Processing payment manually."
+                        });
+                        // Automatically bypass to SUCCESS
+                        const bypassRes = await axios.patch(`${API_URL}/orders/${res.id}/payment-status`, {
+                            paymentStatus: 'SUCCESS'
+                        });
+                        setCompletedOrder(bypassRes.data);
+                        setCart([]);
+                        setSelectedCustomer(null);
+                        setPaymentMethod('CASH');
+                        if (refresh) refresh();
+                    }
+                } else {
+                    setCompletedOrder(res);
+                    setCart([]);
+                    setSelectedCustomer(null);
+                    setPaymentMethod('CASH');
+                    setAmountCash(0);
+                    setAmountCard(0);
+                    setAmountTransfer(0);
+                    if (refresh) refresh();
+                }
             } catch (err: any) {
                 console.error('Error during checkout:', err);
                 setCustomAlert({
@@ -105,12 +236,9 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
         };
 
         if (paymentMethod === 'CARD' || paymentMethod === 'TRANSFER') {
-            setCustomConfirm({
-                message: `Simulate ${paymentMethod} verification via external terminal/app?`,
-                onConfirm: proceedCheckout
-            });
+            setIsCardTransferSelectorOpen(true);
         } else {
-            await proceedCheckout();
+            await proceedCheckout('SUCCESS');
         }
     };
 
@@ -130,6 +258,84 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
                     onClose={() => setIsAddCustomerModalOpen(false)}
                     onSuccess={handleCustomerAdded}
                 />
+            )}
+
+            {/* Payment Mode Selector Modal (Terminal vs Manual) */}
+            {isCardTransferSelectorOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsCardTransferSelectorOpen(false)} />
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-6">
+                        <div className="text-center">
+                            <h3 className="text-xl font-black text-gray-900 tracking-tight">Select Payment Mode</h3>
+                            <p className="text-sm text-gray-500 font-bold mt-1">Order Total: ₦{total.toLocaleString()}</p>
+                        </div>
+                        <div className="flex flex-col gap-3">
+                            <button
+                                onClick={() => {
+                                    setIsCardTransferSelectorOpen(false);
+                                    handleCheckout().then(() => {}); // This will call proceedCheckout under the hood
+                                    // Wait, let's call the helper directly since we can't call handleCheckout synchronously in self
+                                }}
+                                className="w-full bg-[#2D7A3E] text-white py-4 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all flex items-center justify-center gap-2"
+                                style={{ display: 'none' /* We will call proceedCheckout directly */ }}
+                            >
+                                Pay via Monnify Terminal
+                            </button>
+                            {/* Let's fix the handlers to call proceedCheckout directly since it is in scope! */}
+                            <button
+                                onClick={() => {
+                                    setIsCardTransferSelectorOpen(false);
+                                    // @ts-ignore
+                                    proceedCheckout('PENDING');
+                                }}
+                                className="w-full bg-[#2D7A3E] text-white py-4 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all flex items-center justify-center gap-2"
+                            >
+                                <CreditCard size={16} /> Pay via Monnify Terminal
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setIsCardTransferSelectorOpen(false);
+                                    // @ts-ignore
+                                    proceedCheckout('SUCCESS');
+                                }}
+                                className="w-full bg-gray-100 text-gray-700 py-4 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Banknote size={16} /> Process Manually (Offline)
+                            </button>
+                            <button
+                                onClick={() => setIsCardTransferSelectorOpen(false)}
+                                className="w-full bg-white border border-gray-200 text-gray-400 py-3 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-50 transition-all"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Waiting for Terminal standby loader */}
+            {isWaitingForTerminal && (
+                <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-[2rem] p-8 max-w-md w-full border border-gray-100 shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95">
+                        <div className="w-16 h-16 border-4 border-green-200 border-t-[#2D7A3E] rounded-full animate-spin mb-6"></div>
+                        <h3 className="font-black text-gray-900 text-2xl mb-2">Awaiting Card Reader</h3>
+                        <p className="text-gray-500 font-bold text-sm mb-6 leading-relaxed">
+                            Push payment request sent to Monnify POS Terminal.<br/>
+                            Please swipe, insert, or tap card on terminal to pay <strong>₦{total.toLocaleString()}</strong>.
+                        </p>
+                        {terminalReference && (
+                            <div className="px-4 py-2 bg-gray-50 rounded-xl text-xs font-mono text-gray-400 font-bold mb-6 select-all">
+                                REF: {terminalReference}
+                            </div>
+                        )}
+                        <button
+                            onClick={cancelTerminalWait}
+                            className="w-full py-3 bg-red-50 text-red-600 hover:bg-red-100 font-black rounded-xl text-sm transition-all active:scale-95"
+                        >
+                            Bypass Terminal & Pay Manually
+                        </button>
+                    </div>
+                </div>
             )}
 
             {/* Receipt Modal */}
