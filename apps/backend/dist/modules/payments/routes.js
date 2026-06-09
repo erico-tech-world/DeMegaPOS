@@ -15,7 +15,13 @@ export default async function paymentRoutes(app) {
     });
     server.post('/webhook/:provider', async (request, reply) => {
         const { provider } = request.params;
-        await handlePaymentWebhook(provider, request.body);
+        const updatedOrder = await handlePaymentWebhook(provider, request.body);
+        if (updatedOrder) {
+            app.broadcast('ORDER_UPDATED', updatedOrder);
+            if (updatedOrder.paymentStatus === 'SUCCESS') {
+                app.broadcast('PAYMENT_SUCCESS', updatedOrder);
+            }
+        }
         return reply.code(200).send({ status: 'OK' });
     });
 }

@@ -17,6 +17,7 @@ export const createOrderSchema = z.object({
     items: z.array(createOrderItemSchema),
     totalAmount: z.number().positive(),
     paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'WALLET', 'SPLIT', 'CREDIT']),
+    paymentStatus: z.enum(['PENDING', 'SUCCESS', 'FAILED']).optional(),
     splitPayments: z.array(splitPaymentSchema).optional(),
     dueDate: z.string().datetime().optional(), // For credit sales
 });

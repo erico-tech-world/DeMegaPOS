@@ -1,0 +1,13 @@
+
+> @demegapos/db@1.0.0 build C:\Users\Henry\Documents\DeMegaPOS\packages\db
+> prisma generate
+
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+
+✔ Generated Prisma Client (v6.2.1) to .\..\..\node_modules\.pnpm\@prisma+client@6.2.1_prisma@6.2.1\node_modules\@prisma\client in 3.37s
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Want to react to database changes in your app as they happen? Discover how with Pulse: https://pris.ly/tip-1-pulse
+

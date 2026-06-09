@@ -59,10 +59,19 @@ async function main() {
     server.register(paymentRoutes.default, { prefix: '/payments' });
     server.register(syncRoutes.default, { prefix: '/sync' });
     server.register(customerRoutes.default, { prefix: '/customers' });
-    // Helper for broadcasting WebSocket events
+    // Helper for broadcasting WebSocket events safely
     server.decorate('broadcast', (event, payload) => {
+        if (!server.websocketServer)
+            return;
         for (const client of server.websocketServer.clients) {
-            client.send(JSON.stringify({ event, payload }));
+            if (client.readyState === 1) { // 1 === WebSocket.OPEN
+                try {
+                    client.send(JSON.stringify({ event, payload }));
+                }
+                catch (err) {
+                    console.error('Error broadcasting to WS client:', err);
+                }
+            }
         }
     });
     // JWT guard — verifies token for all non-auth routes
@@ -70,7 +79,7 @@ async function main() {
         if (request.method === 'OPTIONS') {
             return;
         }
-        if (request.url.startsWith('/auth') || request.url.startsWith('/docs') || request.url === '/health' || request.url.startsWith('/ws')) {
+        if (request.url.startsWith('/auth') || request.url.startsWith('/docs') || request.url === '/health' || request.url.startsWith('/ws') || request.url.startsWith('/payments/webhook')) {
             return;
         }
         try {
