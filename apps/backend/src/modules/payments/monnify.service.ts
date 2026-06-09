@@ -38,7 +38,7 @@ export async function initiateMonnifyTerminalPayment(orderId: string, amount: nu
 
 export async function processMonnifyWebhook(payload: any) {
     console.log(`[MONNIFY WEBHOOK] Received payload:`, payload)
-    
+
     // Robust parsing of webhook status
     const status = payload.status || (payload.event === 'PAYMENT_SUCCESSFUL' ? 'PAID' : 'FAILED')
     const reference = payload.reference
@@ -58,13 +58,13 @@ export async function processMonnifyWebhook(payload: any) {
         const order = await prisma.order.findUnique({
             where: { id: orderId }
         })
-        
+
         if (order && order.paymentStatus !== 'SUCCESS') {
             console.log(`[MONNIFY WEBHOOK] Updating order ${orderId} paymentStatus to SUCCESS`)
             return await updateOrderPaymentStatus(orderId, 'SUCCESS')
         }
         return order
     }
-    
+
     return null
 }

@@ -27,7 +27,7 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
 
     const filteredOrders = useMemo(() => {
         return orders.filter(order => {
-            const matchesSearch = 
+            const matchesSearch =
                 order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (order.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (order.cashier?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -61,8 +61,8 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
             o.status
         ]);
 
-        const csvContent = "data:text/csv;charset=utf-8," 
-            + headers.join(",") + "\n" 
+        const csvContent = "data:text/csv;charset=utf-8,"
+            + headers.join(",") + "\n"
             + rows.map(e => e.join(",")).join("\n");
 
         const encodedUri = encodeURI(csvContent);
@@ -82,7 +82,7 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                     <h1 className="text-2xl font-black text-gray-900 leading-tight">Transaction Archives</h1>
                     <p className="text-gray-500 text-sm">Review, filter and export sales data</p>
                 </div>
-                
+
                 <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
                     <div className="relative group flex-1 xl:flex-none xl:w-64">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-900 transition-colors" size={18} />
@@ -100,16 +100,15 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                             <button
                                 key={f}
                                 onClick={() => setDateFilter(f)}
-                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                                    dateFilter === f ? 'bg-gray-900 text-white shadow-lg' : 'text-gray-400 hover:text-gray-900'
-                                }`}
+                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dateFilter === f ? 'bg-gray-900 text-white shadow-lg' : 'text-gray-400 hover:text-gray-900'
+                                    }`}
                             >
                                 {f}
                             </button>
                         ))}
                     </div>
 
-                    <button 
+                    <button
                         onClick={downloadCSV}
                         className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-900 hover:bg-gray-50 transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase tracking-widest"
                     >
@@ -138,14 +137,13 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                             ) : filteredOrders.length === 0 ? (
                                 <tr><td colSpan={5} className="px-8 py-24 text-center text-gray-400 font-bold italic">No matching records found.</td></tr>
                             ) : filteredOrders.map(order => (
-                                <tr 
-                                    key={order.id} 
+                                <tr
+                                    key={order.id}
                                     id={`order-${order.id}`}
-                                    className={`group transition-all ${
-                                        order.id === highlightId 
-                                        ? 'bg-green-50 ring-2 ring-inset ring-[#2D7A3E]/30 animate-pulse-subtle' 
-                                        : 'hover:bg-gray-50/30'
-                                    }`}
+                                    className={`group transition-all ${order.id === highlightId
+                                            ? 'bg-green-50 ring-2 ring-inset ring-[#2D7A3E]/30 animate-pulse-subtle'
+                                            : 'hover:bg-gray-50/30'
+                                        }`}
                                 >
                                     <td className="px-8 py-6">
                                         <div className="flex items-center gap-3">
@@ -183,35 +181,31 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                                     <td className="px-8 py-6">
                                         <div className="flex flex-wrap gap-2">
                                             {/* Fulfillment Status */}
-                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${
-                                                order.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100' : 
-                                                order.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                                'bg-amber-50 text-amber-600 border-amber-100'
-                                            }`}>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${
-                                                    order.status === 'COMPLETED' ? 'bg-green-500' : 
-                                                    order.status === 'READY' ? 'bg-blue-500' : 
-                                                    'bg-amber-500'
-                                                }`}></div>
+                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100' :
+                                                    order.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                                        'bg-amber-50 text-amber-600 border-amber-100'
+                                                }`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${order.status === 'COMPLETED' ? 'bg-green-500' :
+                                                        order.status === 'READY' ? 'bg-blue-500' :
+                                                            'bg-amber-500'
+                                                    }`}></div>
                                                 FUL: {order.status}
                                             </span>
                                             {/* Payment Status */}
-                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${
-                                                order.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
-                                                order.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
-                                                'bg-amber-50 text-amber-600 border-amber-100'
-                                            }`}>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${
-                                                    order.paymentStatus === 'SUCCESS' ? 'bg-green-500' :
-                                                    order.paymentStatus === 'FAILED' ? 'bg-red-500' :
-                                                    'bg-amber-500'
-                                                }`}></div>
+                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
+                                                    order.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
+                                                        'bg-amber-50 text-amber-600 border-amber-100'
+                                                }`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${order.paymentStatus === 'SUCCESS' ? 'bg-green-500' :
+                                                        order.paymentStatus === 'FAILED' ? 'bg-red-500' :
+                                                            'bg-amber-500'
+                                                    }`}></div>
                                                 PAY: {order.paymentStatus || 'PENDING'}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-8 py-6 text-right">
-                                        <button 
+                                        <button
                                             onClick={() => setSelectedOrder(order)}
                                             className="p-2 hover:bg-gray-100 rounded-xl text-gray-300 hover:text-gray-900 transition-all"
                                         >
@@ -251,7 +245,7 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                                 <X size={20} />
                             </button>
                         </div>
-                        
+
                         <div className="p-8 max-h-[60vh] overflow-y-auto custom-scrollbar">
                             <div className="grid grid-cols-2 gap-6 mb-8">
                                 <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
@@ -290,7 +284,7 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                                         <tbody className="divide-y divide-gray-50 text-sm">
                                             {selectedOrder.items?.map((item: any) => (
                                                 <tr key={item.id} className="font-bold text-gray-900">
-                                                    <td className="px-4 py-3">{item.product?.name || `Product ID: ${item.productId.slice(0,8)}...`}</td>
+                                                    <td className="px-4 py-3">{item.product?.name || `Product ID: ${item.productId.slice(0, 8)}...`}</td>
                                                     <td className="px-4 py-3 text-center">{item.quantity}</td>
                                                     <td className="px-4 py-3 text-right">₦{Number(item.price).toLocaleString()}</td>
                                                     <td className="px-4 py-3 text-right">₦{(Number(item.price) * item.quantity).toLocaleString()}</td>
@@ -310,22 +304,20 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                                         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-black rounded-full uppercase tracking-widest">
                                             <CreditCard size={12} /> {selectedOrder.paymentMethod}
                                         </span>
-                                        <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${
-                                            selectedOrder.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
-                                            selectedOrder.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
-                                            'bg-amber-50 text-amber-600 border-amber-100'
-                                        }`}>
+                                        <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${selectedOrder.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
+                                                selectedOrder.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
+                                                    'bg-amber-50 text-amber-600 border-amber-100'
+                                            }`}>
                                             PAY: {selectedOrder.paymentStatus || 'PENDING'}
                                         </span>
                                     </div>
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Fulfillment</p>
-                                    <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${
-                                        selectedOrder.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100' :
-                                        selectedOrder.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                        'bg-amber-50 text-amber-600 border-amber-100'
-                                    }`}>
+                                    <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${selectedOrder.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100' :
+                                            selectedOrder.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                                                'bg-amber-50 text-amber-600 border-amber-100'
+                                        }`}>
                                         FUL: {selectedOrder.status}
                                     </span>
                                 </div>

@@ -26,10 +26,10 @@ export async function initiatePayment(data: InitiatePaymentInput) {
 
 export async function handlePaymentWebhook(provider: string, payload: any) {
     console.log(`Received webhook from ${provider}:`, payload)
-    
+
     if (provider === 'monnify' || provider === 'moniepoint') {
         return await processMonnifyWebhook(payload)
     }
-    
+
     return null
 }
