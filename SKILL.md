@@ -44,3 +44,34 @@ When deploying the production backend, Monnify restricts webhook traffic to regi
 3. Under the **IP Whitelisting** section, add your production backend IP.
 4. Set the Webhook URL to: `https://<your-backend-domain>/payments/webhook/monnify`.
 5. Save changes (requires 2FA confirmation from account holder).
+
+### C. Webhook Authentication Bypass Rules
+In `apps/backend/src/index.ts`, all routes are guarded by a JWT authentication hook (`request.jwtVerify()`) by default.
+* Because the Monnify webhook endpoint must receive callback requests directly from Monnify's servers, we added `/payments/webhook` to the path exclusion list.
+* Any new webhook providers or third-party webhooks registered in the system must be added to this exemption array in `index.ts`.
+
+---
+
+## 📦 Workspace Package Version Alignment
+
+To prevent code generation and compilation failures:
+1. **Prisma Version Congruency**: The `@prisma/client` package version in all packages must always match the development dependencies of `prisma` CLI version.
+2. If versions diverge (e.g. `@prisma/client@7.x` and `prisma@6.x`), the client build command (`prisma generate`) will fail with engine initialization errors or missing WASM binary errors (`ENOENT`).
+3. Maintain both dependencies pinned at identical versions (currently `^6.2.1`) across all workspace packages and at the root level.
+
+---
+
+## 🖼️ Local Image Upload & Base64 Integration Workflows
+
+### A. Base64 Storage Standard
+To support serverless environments (like Vercel) where local filesystems are read-only or ephemeral:
+1. All local image uploads are converted to **Base64 Data URLs** on the frontend before sending them to the backend API.
+2. The database stores these strings directly in the existing `imageUrl` field.
+3. No filesystem writes or third-party file upload plugins (like `@fastify/multipart`) are needed, making the feature highly portable and deployment-friendly.
+
+### B. Fastify Payload Limits
+By default, Fastify restricts incoming request bodies to 1MB. Because high-resolution Base64 image payloads can easily exceed this:
+1. Always configure the Fastify server instance with `bodyLimit: 10485760` (10MB) in `apps/backend/src/index.ts`.
+2. Do not upload raw images larger than 5MB; if needed, implement local canvas resizing or compression on the client side before base64 encoding to save bandwidth and database storage space.
+
+

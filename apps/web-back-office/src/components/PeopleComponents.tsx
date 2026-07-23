@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { UserPlus, Shield, X, Edit, Trash2 } from 'lucide-react';
 import axios from 'axios';
+import { API_URL } from '../lib/apiConfig';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+
 
 export const CustomersView = ({ customers, isLoading, onAdd, onEdit, onDelete }: any) => {
     return (
@@ -159,6 +161,8 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+    const [warning, setWarning] = useState<string | null>(null);
 
     if (!isOpen) return null;
 
@@ -166,6 +170,8 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
         e.preventDefault();
         setIsSubmitting(true);
         setError(null);
+        setSuccess(null);
+        setWarning(null);
         try {
             const payload: any = {
                 role: formData.role,
@@ -186,10 +192,24 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
 
             const token = localStorage.getItem('token');
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
-            await axios.post(`${API_URL}/staff/invite`, payload, { headers });
-            onSuccess();
-            onClose();
-            setFormData({ identifier: '', role: 'CASHIER', branchId: '' });
+            const res = await axios.post(`${API_URL}/staff/invite`, payload, { headers });
+            
+            const data = res.data;
+            if (payload.email && !data.emailSent) {
+                setWarning('Personnel invitation was created in the database, but the notification email failed to send. Please check your SMTP configuration.');
+                onSuccess(); // Still refresh the staff table in the background
+            } else if (payload.phone && !data.smsSent) {
+                setWarning('Personnel invitation was created in the database, but the SMS dispatch failed. Please check your SMS provider configuration.');
+                onSuccess(); // Still refresh the staff table in the background
+            } else {
+                setSuccess('Invitation authorized and notification sent successfully!');
+                setTimeout(() => {
+                    onSuccess();
+                    onClose();
+                    setSuccess(null);
+                    setFormData({ identifier: '', role: 'CASHIER', branchId: '' });
+                }, 2000);
+            }
         } catch (err: any) {
             console.error('Error inviting staff:', err);
             const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to send invite.';
@@ -198,6 +218,7 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
             setIsSubmitting(false);
         }
     };
+
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -245,10 +266,21 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
                         />
                     </div>
                     {error && (
-                        <div className="w-full px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold">
+                        <div className="w-full px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold animate-in fade-in duration-200">
                             ⚠️ {error}
                         </div>
                     )}
+                    {success && (
+                        <div className="w-full px-4 py-3 bg-green-50 border border-green-200 rounded-2xl text-green-700 text-xs font-bold animate-in fade-in duration-200">
+                            ✅ {success}
+                        </div>
+                    )}
+                    {warning && (
+                        <div className="w-full px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-2xl text-yellow-700 text-xs font-bold animate-in fade-in duration-200">
+                            ⚠️ {warning}
+                        </div>
+                    )}
+
                     <div className="pt-4">
                         <button
                             disabled={isSubmitting}

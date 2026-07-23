@@ -9,7 +9,7 @@ interface POSPageProps {
 
 const POSPage = ({ products, customers, onSubmitOrder, refresh }: POSPageProps) => {
     return (
-        <div className="h-[calc(100vh-160px)]">
+        <div className="h-auto sm:h-[calc(100vh-140px)] min-h-[500px] flex flex-col">
             <POSView
                 products={products}
                 customers={customers}

@@ -1,17 +1,8 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    restart: always
-    environment:
-      POSTGRES_DB: demegapos
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+  # NOTE: Local postgres removed — database is hosted on Supabase
+  # Connection string: aws-0-eu-west-1.pooler.supabase.com (session pooler, port 5432)
 
   redis:
     image: redis:7-alpine
@@ -20,25 +11,34 @@ services:
       - "6379:6379"
 
   backend:
-    build:
-      context: .
-      dockerfile: apps/backend/Dockerfile
+    image: demegakitchen/demegapos-backend:latest
     restart: always
     environment:
-      - DATABASE_URL=postgresql://admin:password@postgres:5432/demegapos?schema=public
+      - DATABASE_URL=postgresql://postgres.iebuntdyiynwcyeyhdey:Admin-admin1%23@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=your_super_secret_jwt_key
+      - JWT_SECRET=c4800476e4470153535d86f2f3dc83d4582e62c3dc8f322718456742b286ed4a
       - PORT=3000
+      - FRONTEND_URL=http://localhost:8080
+      - MAIL_PROVIDER=RESEND
+      - SMTP_HOST=smtp.resend.com
+      - SMTP_PORT=587
+      - SMTP_SECURE=false
+      - SMTP_USER=resend
+      - SMTP_PASS=re_NStgbNAb_GQFQp2W8bDvoK3TQTEVi3mkf
+      - SMTP_FROM=DeMegaPOS <onboarding@resend.dev>
+      - FALLBACK_SMTP_HOST=smtp.gmail.com
+      - FALLBACK_SMTP_PORT=587
+      - FALLBACK_SMTP_SECURE=false
+      - FALLBACK_SMTP_USER=demegakitchen5@gmail.com
+      - FALLBACK_SMTP_PASS=oktz xxic huwu ugyf
+      - FALLBACK_SMTP_FROM=DeMegaPOS <demegakitchen5@gmail.com>
     depends_on:
-      - postgres
       - redis
     ports:
       - "3000:3000"
 
   web-back-office:
-    build:
-      context: .
-      dockerfile: apps/web-back-office/Dockerfile
+    image: demegakitchen/demegapos-web-back-office:latest
     restart: always
     ports:
       - "8080:80"
@@ -46,9 +46,7 @@ services:
       - backend
 
   web-kitchen:
-    build:
-      context: .
-      dockerfile: apps/web-kitchen/Dockerfile
+    image: demegakitchen/demegapos-web-kitchen:latest
     restart: always
     ports:
       - "8081:80"
@@ -56,9 +54,7 @@ services:
       - backend
 
   web-customer:
-    build:
-      context: .
-      dockerfile: apps/web-customer/Dockerfile
+    image: demegakitchen/demegapos-web-customer:latest
     restart: always
     ports:
       - "8082:80"
@@ -81,5 +77,4 @@ services:
     depends_on:
       - prometheus
 
-volumes:
-  postgres_data:
+# No local volumes needed — using Supabase managed database

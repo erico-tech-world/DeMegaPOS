@@ -87,8 +87,21 @@ const OrderCard = ({ order, onStatusChange }: any) => {
     );
 };
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const WS_URL = import.meta.env.VITE_WS_URL || (API_URL.replace(/^http/, 'ws') + '/ws');
+const getApiUrl = () => {
+    if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+    if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        const { protocol, hostname, port } = window.location;
+        if (hostname.startsWith('kitchen.')) return `${protocol}//${hostname.replace(/^kitchen\./, 'api.')}`;
+        return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
+    }
+    return 'http://localhost:3000';
+};
+const getWsUrl = () => {
+    if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+    return getApiUrl().replace(/^http/, 'ws') + '/ws';
+};
+const API_URL = getApiUrl();
+const WS_URL = getWsUrl();
 
 export default function App() {
     const [orders, setOrders] = useState<any[]>([]);

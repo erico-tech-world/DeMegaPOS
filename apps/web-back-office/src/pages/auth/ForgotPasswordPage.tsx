@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { Mail, Loader2, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { API_URL } from '../../lib/apiConfig';
 
 const ForgotPasswordPage = () => {
     const [identifier, setIdentifier] = useState('');
@@ -10,7 +11,6 @@ const ForgotPasswordPage = () => {
     const [isSuccess, setIsSuccess] = useState(false);
     const navigate = useNavigate();
 
-    const API_URL = 'http://localhost:3000'; // Should be from env
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();

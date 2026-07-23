@@ -44,7 +44,7 @@ export async function createOrder(data) {
                 },
                 // Handle Split Payments
                 splitPayments: data.splitPayments ? {
-                    create: data.splitPayments.map(sp => ({
+                    create: data.splitPayments.map((sp) => ({
                         method: sp.method,
                         amount: sp.amount.toString(),
                         reference: sp.reference

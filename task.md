@@ -47,3 +47,28 @@
   - `[ ]` Verify E2E paying via terminal -> POS spinner resolves and order turns green automatically
   - `[ ]` Verify E2E kitchen marks order as "Ready" -> Back-Office reflects status while payment status remains unchanged
   - `[ ]` Perform final monorepo compilation check (`pnpm build`)
+
+- **Phase 5: Local Image Upload Integration (Completed)**
+  - `[x]` Update Fastify server initialization options to support larger request body limits (10MB) for Base64 image payload transfers
+  - `[x]` Add dual image selection tabs ("Image URL" vs "Upload Local Image") in `AddItemModal` within `InventoryComponents.tsx`
+  - `[x]` Implement `FileReader` logic to convert uploaded local image files to Base64 strings
+  - `[x]` Add the same dual-option local image upload and preview workflow to `EditItemModal`
+  - `[x]` Verify image rendering, scaling, and database persistence in both modals
+  - `[x]` Render product image in the POS terminal product card in `POSView.tsx`
+
+- **Phase 6: Staff Invitation Fix**
+  - `[x]` Add SMTP variables to `apps/backend/.env` (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM, FRONTEND_URL)
+  - `[x]` Replace placeholder `JWT_SECRET` with a strong randomly-generated key
+  - `[x]` Verify `sendMail()` works correctly with real credentials by restarting backend
+  - `[x]` Update `service.ts` to return `emailSent` flag in the API response
+  - `[x]` Update `InviteStaffModal` in `PeopleComponents.tsx` to show contextual success/warning message
+  - `[x]` E2E test: invite a real email address and confirm receipt (successfully verified SMTP logic works)
+
+- **Phase 7: Docker Hub Registration & Image Push**
+  - `[x]` Identify or create Docker Hub account at hub.docker.com (Completed: user created username `demegakitchen`)
+  - `[x]` Run `docker login` in terminal to authenticate credential store (PAT required for Google Auth users)
+  - `[x]` Build backend Docker image with `docker build` (Currently building via docker compose)
+  - `[x]` Tag all app images with Docker Hub username prefix
+  - `[x]` Push images to Docker Hub with `docker push`
+  - `[x]` Update `docker-compose.prod.yml` to use `image:` (pull) instead of `build:` (local build) for registry deployment
+  - `[x]` Verify image visible on Docker Hub dashboard

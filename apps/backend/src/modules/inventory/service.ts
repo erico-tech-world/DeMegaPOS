@@ -101,40 +101,39 @@ export async function deleteProduct(id: string, tenantId: string) {
 export async function createStockAdjustment(data: StockAdjustmentInput & { tenantId: string }, userId: string) {
     const { productId, variantId, type, quantity, reason } = data
 
-    return prisma.$transaction(async (tx) => {
-        // 1. Create the adjustment log
-        const adjustment = await tx.stockAdjustment.create({
+    // 1. Create the adjustment log (sequential — PgBouncer Transaction Pooler incompatible with interactive tx)
+    const adjustment = await prisma.stockAdjustment.create({
+        data: {
+            productId,
+            variantId,
+            type,
+            quantity,
+            reason,
+            userId,
+            tenantId: (data as any).tenantId
+        }
+    })
+
+    // 2. Update stock level
+    const multiplier = (type === 'IN' || type === 'RETURN') ? 1 : -1
+    const netQuantity = (type === 'ADJUST') ? (quantity) : (quantity * multiplier)
+
+    if (variantId) {
+        await prisma.productVariant.update({
+            where: { id: variantId },
             data: {
-                productId,
-                variantId,
-                type,
-                quantity,
-                reason,
-                userId,
-                tenantId: (data as any).tenantId // Pass tenantId
+                stock: (type === 'ADJUST') ? quantity : { increment: netQuantity }
             }
         })
+    } else {
+        await prisma.product.update({
+            where: { id: productId },
+            data: {
+                stock: (type === 'ADJUST') ? quantity : { increment: netQuantity }
+            }
+        })
+    }
 
-        // 2. Update stock level
-        const multiplier = (type === 'IN' || type === 'RETURN') ? 1 : -1
-        const netQuantity = (type === 'ADJUST') ? (quantity) : (quantity * multiplier)
-
-        if (variantId) {
-            await tx.productVariant.update({
-                where: { id: variantId },
-                data: {
-                    stock: (type === 'ADJUST') ? quantity : { increment: netQuantity }
-                }
-            })
-        } else {
-            await tx.product.update({
-                where: { id: productId },
-                data: {
-                    stock: (type === 'ADJUST') ? quantity : { increment: netQuantity }
-                }
-            })
-        }
-
-        return adjustment
-    })
+    return adjustment
 }
+

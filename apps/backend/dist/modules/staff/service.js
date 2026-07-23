@@ -29,33 +29,45 @@ export async function createStaffInvitation(data, tenantId) {
     const inviteUrl = `${frontendUrl}/auth/accept-invite?token=${token}`;
     // 5. Dispatch notification (email or SMS — whichever contact was provided)
     const roleName = data.role.replace(/_/g, ' ');
+    let emailSent = false;
+    let smsSent = false;
     if (data.email) {
-        sendMail({
-            to: data.email,
-            subject: `You're invited to join ${tenant.name} on DeMegaPOS`,
-            html: buildStaffInviteEmail({
-                businessName: tenant.name,
-                role: roleName,
-                inviteUrl,
-                expiresInDays: 7,
-            }),
-        }).then(() => {
-            console.log(`[INVITE] Email sent to ${data.email}`);
-        }).catch(err => {
-            console.error('[INVITE] Failed to send email:', err);
-        });
+        try {
+            await sendMail({
+                to: data.email,
+                subject: `You're invited to join ${tenant.name} on DeMegaPOS`,
+                html: buildStaffInviteEmail({
+                    businessName: tenant.name,
+                    role: roleName,
+                    inviteUrl,
+                    expiresInDays: 7,
+                }),
+            });
+            console.log(`[INVITE] Email successfully sent to ${data.email}`);
+            emailSent = true;
+        }
+        catch (err) {
+            console.error('[INVITE] Failed to send email:', err.message || err);
+        }
     }
     if (data.phone) {
-        sendSms({
-            to: data.phone,
-            body: `You've been invited to join ${tenant.name} on DeMegaPOS as ${roleName}. Accept your invitation here: ${inviteUrl}  (expires in 7 days)`,
-        }).then(() => {
-            console.log(`[INVITE] SMS sent to ${data.phone}`);
-        }).catch(err => {
-            console.error('[INVITE] Failed to send SMS:', err);
-        });
+        try {
+            await sendSms({
+                to: data.phone,
+                body: `You've been invited to join ${tenant.name} on DeMegaPOS as ${roleName}. Accept your invitation here: ${inviteUrl}  (expires in 7 days)`,
+            });
+            console.log(`[INVITE] SMS successfully sent to ${data.phone}`);
+            smsSent = true;
+        }
+        catch (err) {
+            console.error('[INVITE] Failed to send SMS:', err.message || err);
+        }
     }
-    return invitation;
+    return {
+        ...invitation,
+        emailSent,
+        smsSent
+    };
 }
 // ---------------------------------------------------------------------------
 // Accept Invitation — called by the /auth/accept-invite endpoint

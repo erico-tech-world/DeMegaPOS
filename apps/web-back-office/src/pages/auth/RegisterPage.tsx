@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { Building2, User, Mail, Lock, Loader2, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { API_URL } from '../../lib/apiConfig';
 
 const RegisterPage = () => {
     const [formData, setFormData] = useState({
@@ -21,7 +22,6 @@ const RegisterPage = () => {
     const navigate = useNavigate();
     const { login } = useAuth();
 
-    const API_URL = 'http://localhost:3000';
 
     const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });

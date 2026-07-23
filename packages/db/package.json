@@ -9,7 +9,8 @@
         "build": "prisma generate",
         "db:generate": "prisma generate",
         "db:push": "prisma db push",
-        "db:seed": "tsx seed.ts"
+        "db:seed": "tsx seed.ts",
+        "studio": "prisma studio"
     },
     "prisma": {
         "seed": "tsx seed.ts"

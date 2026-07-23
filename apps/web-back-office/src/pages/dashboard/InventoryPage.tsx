@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { InventoryView, AddItemModal, EditItemModal, StockAdjustmentModal, CustomAlertModal, CustomConfirmModal } from '../../components/InventoryComponents';
 import axios from 'axios';
+import { API_URL } from '../../lib/apiConfig';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface InventoryPageProps {
     products: any[];

@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { API_URL, WS_URL } from '../lib/apiConfig';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
 
 export const useDashboardData = () => {
     const [products, setProducts] = useState<any[]>([]);

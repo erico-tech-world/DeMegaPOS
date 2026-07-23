@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History, Plus, X, Minus } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History, Plus, X, Minus, Package } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { API_URL, WS_URL } from '../lib/apiConfig';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-const WS_URL = import.meta.env.VITE_WS_URL || (API_URL.replace(/^http/, 'ws') + '/ws');
+
+
+
 
 export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) => {
     const [cart, setCart] = useState<any[]>([]);
@@ -18,6 +20,7 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
     const [completedOrder, setCompletedOrder] = useState<any>(null);
     const [customAlert, setCustomAlert] = useState<{ title?: string; message: string } | null>(null);
     const [customConfirm, setCustomConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
+    const [activeTab, setActiveTab] = useState<'products' | 'cart'>('products');
 
     // Terminal push states
     const [isCardTransferSelectorOpen, setIsCardTransferSelectorOpen] = useState(false);
@@ -364,9 +367,34 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
                 />
             )}
 
+            {/* Mobile / Tablet Tab Switcher */}
+            <div className="lg:hidden flex bg-gray-100/80 p-1.5 rounded-2xl gap-2 border border-gray-200/60 shadow-sm shrink-0">
+                <button
+                    onClick={() => setActiveTab('products')}
+                    className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
+                        activeTab === 'products' ? 'bg-white text-gray-900 shadow-md border border-gray-100' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                >
+                    <Package size={16} className={activeTab === 'products' ? 'text-[#2D7A3E]' : ''} />
+                    Products ({products.length})
+                </button>
+                <button
+                    onClick={() => setActiveTab('cart')}
+                    className={`flex-1 py-3 px-4 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all relative ${
+                        activeTab === 'cart' ? 'bg-[#2D7A3E] text-white shadow-md' : 'text-gray-500 hover:text-gray-900'
+                    }`}
+                >
+                    <ShoppingCart size={16} />
+                    Active Cart ({cart.reduce((sum, item) => sum + item.quantity, 0)})
+                    {cart.length > 0 && activeTab !== 'cart' && (
+                        <span className="w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping absolute top-2.5 right-3" />
+                    )}
+                </button>
+            </div>
+
             {/* Products Side */}
-            <div className="flex-1 flex flex-col bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden min-h-0">
-                <div className="p-6 border-b border-gray-100 bg-gray-50/30">
+            <div className={`${activeTab === 'products' ? 'flex' : 'hidden lg:flex'} flex-1 flex-col bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden min-h-0`}>
+                <div className="p-4 sm:p-6 border-b border-gray-100 bg-gray-50/30">
                     <div className="relative group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#2D7A3E] transition-colors" size={20} />
                         <input
@@ -378,25 +406,39 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
                         />
                     </div>
                 </div>
-                <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 custom-scrollbar">
                     {products.filter((p: any) => p.name.toLowerCase().includes(search.toLowerCase())).map((p: any) => (
                         <button
                             key={p.id}
                             onClick={() => addToCart(p)}
-                            className="p-6 bg-gray-50 rounded-[2rem] border border-gray-50 hover:border-[#2D7A3E] hover:bg-white hover:shadow-xl hover:shadow-green-900/5 transition-all text-left flex flex-col justify-between group"
+                            className="p-4 sm:p-5 bg-gray-50 rounded-[2rem] border border-gray-50 hover:border-[#2D7A3E] hover:bg-white hover:shadow-xl hover:shadow-green-900/5 transition-all text-left flex flex-col justify-between group min-h-[220px] sm:h-[260px]"
                         >
-                            <div>
-                                <div className="font-black text-gray-900 group-hover:text-[#2D7A3E] text-lg leading-tight transition-colors">{p.name}</div>
+                            {/* Top Text Details */}
+                            <div className="w-full">
+                                <div className="font-black text-gray-900 group-hover:text-[#2D7A3E] text-base leading-tight transition-colors truncate">{p.name}</div>
                                 <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{p.sku || 'NO-SKU'}</div>
                             </div>
-                            <div className="mt-8 flex justify-between items-end">
+
+                            {/* Center Image Area */}
+                            <div className="my-3 w-full h-24 sm:h-28 rounded-2xl overflow-hidden bg-gray-100 border border-gray-100 flex items-center justify-center flex-shrink-0 relative">
+                                {p.imageUrl ? (
+                                    <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                ) : (
+                                    <span className="text-[#2D7A3E] font-black text-lg uppercase tracking-wider bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
+                                        {p.name.slice(0, 2)}
+                                    </span>
+                                )}
+                            </div>
+
+                            {/* Bottom Details */}
+                            <div className="flex justify-between items-end w-full">
                                 <div>
-                                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Price</div>
-                                    <div className="font-black text-[#2D7A3E] text-xl">₦{Number(p.price).toLocaleString()}</div>
+                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter block leading-none mb-1">Price</span>
+                                    <span className="font-black text-[#2D7A3E] text-lg">₦{Number(p.price).toLocaleString()}</span>
                                 </div>
-                                <div className={`px-3 py-1 rounded-full text-[10px] font-black shadow-sm ${p.stock < 10 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
+                                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black shadow-sm uppercase ${p.stock < 10 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
                                     {p.stock} IN STOCK
-                                </div>
+                                </span>
                             </div>
                         </button>
                     ))}
@@ -404,7 +446,7 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
             </div>
 
             {/* Cart Side */}
-            <div className="w-full lg:w-[400px] flex flex-col bg-white rounded-3xl border border-gray-100 shadow-2xl shadow-gray-900/5 h-full overflow-y-auto custom-scrollbar">
+            <div className={`${activeTab === 'cart' ? 'flex' : 'hidden lg:flex'} w-full lg:w-[400px] flex-col bg-white rounded-3xl border border-gray-100 shadow-2xl shadow-gray-900/5 h-full overflow-y-auto custom-scrollbar`}>
                 {/* Header Section */}
                 <div className="flex-none">
                     <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
@@ -562,7 +604,6 @@ export const AddCustomerModal = ({ onClose, onSuccess }: any) => {
         setIsSubmitting(true);
         setError(null);
         try {
-            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
             const payload = {
                 name: formData.name.trim(),
                 email: formData.email.trim() ? formData.email.trim() : null,

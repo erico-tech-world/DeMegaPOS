@@ -3,8 +3,8 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { User, Lock, Loader2, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { API_URL } from '../../lib/apiConfig';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const AcceptInvitePage = () => {
     const [searchParams] = useSearchParams();

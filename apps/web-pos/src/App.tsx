@@ -2,7 +2,21 @@ import { useState, useEffect } from 'react';
 import { ShoppingCart, Search, LayoutGrid, User, Settings, LogOut, X, CreditCard, Banknote, History, Menu, Plus, Minus, Trash2 } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3000';
+const getApiUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    const { protocol, hostname, port } = window.location;
+    if (hostname.startsWith('pos.')) return `${protocol}//${hostname.replace(/^pos\./, 'api.')}`;
+    return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
+  }
+  return 'http://localhost:3000';
+};
+const getWsUrl = () => {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  return getApiUrl().replace(/^http/, 'ws') + '/ws';
+};
+const API_URL = getApiUrl();
+const WS_URL = getWsUrl();
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('pos');
@@ -21,7 +35,7 @@ const App = () => {
     fetchProducts();
     fetchCustomers();
 
-    const ws = new WebSocket('ws://localhost:3000/ws');
+    const ws = new WebSocket(WS_URL);
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);

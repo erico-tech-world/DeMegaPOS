@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Filter, X, Edit, Trash2 } from 'lucide-react';
 import axios from 'axios';
+import { API_URL } from '../lib/apiConfig';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const InventoryView = ({ items, isLoading, searchQuery, setSearchQuery, onAddItem, onAdjustStock, onEdit, onDelete, highlightId }: any) => {
     const [showFilters, setShowFilters] = useState(false);
@@ -227,6 +227,26 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
     const [categories, setCategories] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [imageUploadMode, setImageUploadMode] = useState<'url' | 'file'>('url');
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+    const handleFileChange = (e: any) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > 5 * 1024 * 1024) {
+            setError('Image file is too large (max 5MB)');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            setImagePreview(base64String);
+            setFormData((prev: any) => ({ ...prev, imageUrl: base64String }));
+        };
+        reader.readAsDataURL(file);
+    };
 
     useEffect(() => {
         if (!isOpen) return;
@@ -288,6 +308,8 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
             await onSuccess();
             onClose();
             setFormData({ name: '', sku: '', imageUrl: '', type: 'STANDARD', stock: 0, price: 0, costPrice: '', vipPrice: '', expiryDate: '', unit: 'pcs', categoryId: '', variantsInput: '' });
+            setImageUploadMode('url');
+            setImagePreview(null);
         } catch (err: any) {
             console.error('Error adding item:', err);
             const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create product.';
@@ -335,15 +357,80 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Product Image URL (Optional)</label>
-                        <input
-                            type="text"
-                            className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
-                            placeholder="https://images.unsplash.com/photo-xxx"
-                            value={formData.imageUrl}
-                            onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                        />
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center px-1">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product Image</label>
+                            <div className="flex gap-2 bg-gray-100 p-0.5 rounded-lg text-[9px] font-black uppercase">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setImageUploadMode('url');
+                                        setFormData((prev: any) => ({ ...prev, imageUrl: '' }));
+                                        setImagePreview(null);
+                                    }}
+                                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${imageUploadMode === 'url' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                                >
+                                    Image URL
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setImageUploadMode('file');
+                                        setFormData((prev: any) => ({ ...prev, imageUrl: '' }));
+                                        setImagePreview(null);
+                                    }}
+                                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${imageUploadMode === 'file' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                                >
+                                    Upload File
+                                </button>
+                            </div>
+                        </div>
+
+                        {imageUploadMode === 'url' ? (
+                            <input
+                                type="text"
+                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                placeholder="https://images.unsplash.com/photo-xxx"
+                                value={formData.imageUrl}
+                                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                            />
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="relative border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center hover:border-[#2D7A3E] transition-colors cursor-pointer group bg-gray-50/50">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleFileChange}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                    <div className="space-y-1">
+                                        <p className="text-xs font-bold text-gray-600 group-hover:text-[#2D7A3E] transition-colors">
+                                            {imagePreview ? 'Change Image' : 'Select Image File'}
+                                        </p>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase">PNG, JPG or WEBP (Max 5MB)</p>
+                                    </div>
+                                </div>
+                                {imagePreview && (
+                                    <div className="flex items-center gap-4 bg-green-50/30 border border-green-100 p-4 rounded-2xl animate-in slide-in-from-top-2">
+                                        <img src={imagePreview} alt="Preview" className="w-16 h-16 rounded-xl object-cover border border-green-200 shadow-sm" />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-black text-gray-700">Image Loaded Successfully</p>
+                                            <p className="text-[10px] font-bold text-[#2D7A3E] truncate">Ready to deploy</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setImagePreview(null);
+                                                setFormData((prev: any) => ({ ...prev, imageUrl: '' }));
+                                            }}
+                                            className="p-2 hover:bg-red-50 text-red-500 rounded-xl transition-colors cursor-pointer"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-6">
@@ -458,6 +545,26 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
     const [categories, setCategories] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [imageUploadMode, setImageUploadMode] = useState<'url' | 'file'>('url');
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+    const handleFileChange = (e: any) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.size > 5 * 1024 * 1024) {
+            setError('Image file is too large (max 5MB)');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            setImagePreview(base64String);
+            setFormData((prev: any) => ({ ...prev, imageUrl: base64String }));
+        };
+        reader.readAsDataURL(file);
+    };
 
     useEffect(() => {
         if (!isOpen) return;
@@ -477,6 +584,9 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
 
     useEffect(() => {
         if (product && isOpen) {
+            const isBase64 = product.imageUrl && product.imageUrl.startsWith('data:image/');
+            setImageUploadMode(isBase64 ? 'file' : 'url');
+            setImagePreview(isBase64 ? product.imageUrl : null);
             setFormData({
                 name: product.name || '',
                 sku: product.sku || '',
@@ -527,6 +637,8 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
 
             await onSuccess();
             onClose();
+            setImageUploadMode('url');
+            setImagePreview(null);
         } catch (err: any) {
             console.error('Error updating item:', err);
             const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update product.';
@@ -574,15 +686,80 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
                         </div>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Product Image URL (Optional)</label>
-                        <input
-                            type="text"
-                            className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
-                            placeholder="https://images.unsplash.com/photo-xxx"
-                            value={formData.imageUrl}
-                            onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                        />
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center px-1">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Product Image</label>
+                            <div className="flex gap-2 bg-gray-100 p-0.5 rounded-lg text-[9px] font-black uppercase">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setImageUploadMode('url');
+                                        setFormData((prev: any) => ({ ...prev, imageUrl: '' }));
+                                        setImagePreview(null);
+                                    }}
+                                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${imageUploadMode === 'url' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                                >
+                                    Image URL
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setImageUploadMode('file');
+                                        setFormData((prev: any) => ({ ...prev, imageUrl: '' }));
+                                        setImagePreview(null);
+                                    }}
+                                    className={`px-3 py-1 rounded-md transition-all cursor-pointer ${imageUploadMode === 'file' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900'}`}
+                                >
+                                    Upload File
+                                </button>
+                            </div>
+                        </div>
+
+                        {imageUploadMode === 'url' ? (
+                            <input
+                                type="text"
+                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                placeholder="https://images.unsplash.com/photo-xxx"
+                                value={formData.imageUrl}
+                                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                            />
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="relative border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center hover:border-[#2D7A3E] transition-colors cursor-pointer group bg-gray-50/50">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleFileChange}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                    <div className="space-y-1">
+                                        <p className="text-xs font-bold text-gray-600 group-hover:text-[#2D7A3E] transition-colors">
+                                            {imagePreview ? 'Change Image' : 'Select Image File'}
+                                        </p>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase">PNG, JPG or WEBP (Max 5MB)</p>
+                                    </div>
+                                </div>
+                                {imagePreview && (
+                                    <div className="flex items-center gap-4 bg-green-50/30 border border-green-100 p-4 rounded-2xl animate-in slide-in-from-top-2">
+                                        <img src={imagePreview} alt="Preview" className="w-16 h-16 rounded-xl object-cover border border-green-200 shadow-sm" />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-black text-gray-700">Image Loaded Successfully</p>
+                                            <p className="text-[10px] font-bold text-[#2D7A3E] truncate">Ready to deploy</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setImagePreview(null);
+                                                setFormData((prev: any) => ({ ...prev, imageUrl: '' }));
+                                            }}
+                                            className="p-2 hover:bg-red-50 text-red-500 rounded-xl transition-colors cursor-pointer"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-6">

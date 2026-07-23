@@ -6,15 +6,30 @@ import nodemailer from 'nodemailer'
 //   SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM
 // ---------------------------------------------------------------------------
 
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for 587
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-})
+// Create transporters dynamically based on configuration to allow runtime failover
+function getResendTransporter() {
+    return nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.resend.com',
+        port: parseInt(process.env.SMTP_PORT || '587', 10),
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '') : undefined,
+        },
+    })
+}
+
+function getGmailTransporter() {
+    return nodemailer.createTransport({
+        host: process.env.FALLBACK_SMTP_HOST || 'smtp.gmail.com',
+        port: parseInt(process.env.FALLBACK_SMTP_PORT || '587', 10),
+        secure: process.env.FALLBACK_SMTP_SECURE === 'true',
+        auth: {
+            user: process.env.FALLBACK_SMTP_USER || 'demegakitchen5@gmail.com',
+            pass: process.env.FALLBACK_SMTP_PASS ? process.env.FALLBACK_SMTP_PASS.replace(/\s+/g, '') : 'oktzxxichuwuugyf',
+        },
+    })
+}
 
 export interface MailOptions {
     to: string
@@ -24,18 +39,56 @@ export interface MailOptions {
 
 /**
  * Send an email via the configured SMTP transporter.
- * Throws on failure so callers can handle errors appropriately.
+ * Supports primary/fallback logic between Resend and Gmail.
  */
 export async function sendMail(opts: MailOptions): Promise<void> {
-    const from = process.env.SMTP_FROM || `"DeMegaPOS" <noreply@demegapos.com>`
+    const provider = (process.env.MAIL_PROVIDER || 'RESEND').toUpperCase()
+    
+    let primaryTransporter: nodemailer.Transporter
+    let primaryFrom: string
+    let fallbackTransporter: nodemailer.Transporter
+    let fallbackFrom: string
 
-    await transporter.sendMail({
-        from,
-        to: opts.to,
-        subject: opts.subject,
-        html: opts.html,
-    })
+    if (provider === 'GMAIL') {
+        primaryTransporter = getGmailTransporter()
+        primaryFrom = process.env.FALLBACK_SMTP_FROM || `"DeMegaPOS" <demegakitchen5@gmail.com>`
+        fallbackTransporter = getResendTransporter()
+        fallbackFrom = process.env.SMTP_FROM || `"DeMegaPOS" <onboarding@resend.dev>`
+    } else {
+        primaryTransporter = getResendTransporter()
+        primaryFrom = process.env.SMTP_FROM || `"DeMegaPOS" <onboarding@resend.dev>`
+        fallbackTransporter = getGmailTransporter()
+        fallbackFrom = process.env.FALLBACK_SMTP_FROM || `"DeMegaPOS" <demegakitchen5@gmail.com>`
+    }
+
+    try {
+        console.log(`[MAIL] Attempting email dispatch to ${opts.to} via primary provider (${provider})...`)
+        await primaryTransporter.sendMail({
+            from: primaryFrom,
+            to: opts.to,
+            subject: opts.subject,
+            html: opts.html,
+        })
+        console.log(`[MAIL] Email successfully sent to ${opts.to} via primary provider (${provider}).`)
+    } catch (err: any) {
+        console.error(`[MAIL] Primary email dispatch failed via ${provider}:`, err.message || err)
+        console.log(`[MAIL] Executing automatic failover to fallback provider...`)
+        
+        try {
+            await fallbackTransporter.sendMail({
+                from: fallbackFrom,
+                to: opts.to,
+                subject: opts.subject,
+                html: opts.html,
+            })
+            console.log(`[MAIL] Fallback email dispatch successful to ${opts.to}.`)
+        } catch (fallbackErr: any) {
+            console.error(`[MAIL] Fallback email dispatch also failed:`, fallbackErr.message || fallbackErr)
+            throw new Error(`Email dispatch failed on both primary and fallback providers. Primary error: ${err.message}. Fallback error: ${fallbackErr.message}`)
+        }
+    }
 }
+
 
 // ---------------------------------------------------------------------------
 // Reusable HTML email templates

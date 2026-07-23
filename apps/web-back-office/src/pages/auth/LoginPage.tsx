@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { Mail, Lock, Loader2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { API_URL } from '../../lib/apiConfig';
 
 const LoginPage = () => {
     const [identifier, setIdentifier] = useState('');
@@ -13,7 +14,6 @@ const LoginPage = () => {
     const navigate = useNavigate();
     const { login } = useAuth();
 
-    const API_URL = 'http://localhost:3000'; // Should be from env
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();

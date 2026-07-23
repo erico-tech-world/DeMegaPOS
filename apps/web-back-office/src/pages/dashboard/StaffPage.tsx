@@ -4,8 +4,8 @@ import { CustomConfirmModal, CustomAlertModal } from '../../components/Inventory
 import { useAuth } from '../../context/AuthContext';
 import { ShieldAlert, Key, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import axios from 'axios';
+import { API_URL } from '../../lib/apiConfig';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const UniversalAccessEngine = () => {
     const [isConfigured, setIsConfigured] = useState(false);

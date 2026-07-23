@@ -39,36 +39,46 @@ export async function createStaffInvitation(
 
     // 5. Dispatch notification (email or SMS — whichever contact was provided)
     const roleName = (data.role as string).replace(/_/g, ' ')
+    let emailSent = false
+    let smsSent = false
 
     if (data.email) {
-        sendMail({
-            to:      data.email,
-            subject: `You're invited to join ${tenant.name} on DeMegaPOS`,
-            html:    buildStaffInviteEmail({
-                businessName:  tenant.name,
-                role:          roleName,
-                inviteUrl,
-                expiresInDays: 7,
-            }),
-        }).then(() => {
-            console.log(`[INVITE] Email sent to ${data.email}`)
-        }).catch(err => {
-            console.error('[INVITE] Failed to send email:', err)
-        })
+        try {
+            await sendMail({
+                to:      data.email,
+                subject: `You're invited to join ${tenant.name} on DeMegaPOS`,
+                html:    buildStaffInviteEmail({
+                    businessName:  tenant.name,
+                    role:          roleName,
+                    inviteUrl,
+                    expiresInDays: 7,
+                }),
+            })
+            console.log(`[INVITE] Email successfully sent to ${data.email}`)
+            emailSent = true
+        } catch (err: any) {
+            console.error('[INVITE] Failed to send email:', err.message || err)
+        }
     }
 
     if (data.phone) {
-        sendSms({
-            to:   data.phone,
-            body: `You've been invited to join ${tenant.name} on DeMegaPOS as ${roleName}. Accept your invitation here: ${inviteUrl}  (expires in 7 days)`,
-        }).then(() => {
-            console.log(`[INVITE] SMS sent to ${data.phone}`)
-        }).catch(err => {
-            console.error('[INVITE] Failed to send SMS:', err)
-        })
+        try {
+            await sendSms({
+                to:   data.phone,
+                body: `You've been invited to join ${tenant.name} on DeMegaPOS as ${roleName}. Accept your invitation here: ${inviteUrl}  (expires in 7 days)`,
+            })
+            console.log(`[INVITE] SMS successfully sent to ${data.phone}`)
+            smsSent = true
+        } catch (err: any) {
+            console.error('[INVITE] Failed to send SMS:', err.message || err)
+        }
     }
 
-    return invitation
+    return {
+        ...invitation,
+        emailSent,
+        smsSent
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -86,27 +96,25 @@ export async function acceptInvitation(token: string, name: string, password: st
     const bcrypt = await import('bcrypt')
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Create the user account and mark the invitation as accepted in one transaction
-    return prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({
-            data: {
-                name,
-                email:    invitation.email,
-                phone:    invitation.phone,
-                password: hashedPassword,
-                role:     invitation.role,
-                tenantId: invitation.tenantId,
-                branchId: invitation.branchId,
-            },
-        })
-
-        await tx.staffInvitation.update({
-            where: { id: invitation.id },
-            data:  { acceptedAt: new Date() },
-        })
-
-        return user
+    // Create the user account and mark the invitation as accepted (sequential — PgBouncer incompatible with interactive tx)
+    const user = await prisma.user.create({
+        data: {
+            name,
+            email:    invitation.email,
+            phone:    invitation.phone,
+            password: hashedPassword,
+            role:     invitation.role,
+            tenantId: invitation.tenantId,
+            branchId: invitation.branchId,
+        },
     })
+
+    await prisma.staffInvitation.update({
+        where: { id: invitation.id },
+        data:  { acceptedAt: new Date() },
+    })
+
+    return user
 }
 
 // ---------------------------------------------------------------------------

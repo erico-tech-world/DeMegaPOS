@@ -27,6 +27,12 @@ DeMega POS is built as a multi-tenant, micro-service ready monolith (Fastify + V
     - [x] Dual-Identifier support (Email/Phone) for Registration and Login.
     - [x] Full Forgot Password recovery flow.
     - [x] Global `cursor: pointer` enforcement for better UX.
+- **Phase 17**: Unified Monnify Integration & Real-Time Sync Engine (Completed).
+    - [x] real-time WebSocket Sync Engine broadcasting order and payment updates.
+    - [x] Monnify "Push-to-POS" payment flow and callback webhooks.
+    - [x] Fulfillment (`status`) and Financial (`paymentStatus`) tracks split.
+    - [x] Front-end build resolution and Vercel build configuration (`vercel.json`).
+    - [x] Prisma Client & CLI version alignment (`^6.2.1`) to resolve generator crashes.
 
 ---
-*Last Updated: 2026-02-25*
+*Last Updated: 2026-07-15*
