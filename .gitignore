@@ -1,1 +1,55 @@
-node_modules
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.local
+*.secret
+*.token
+*.bak
+*.tmp
+
+# Build outputs and caches
+.dist/
+build/
+coverage/
+.next/
+.nuxt/
+.out/
+.cache/
+.parcel-cache/
+.turbo/
+.vercel/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+turbo.log*
+
+# Local databases and generated artifacts
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+seed_output.txt
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/
