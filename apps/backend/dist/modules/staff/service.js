@@ -83,25 +83,23 @@ export async function acceptInvitation(token, name, password) {
     // Create a hashed password
     const bcrypt = await import('bcrypt');
     const hashedPassword = await bcrypt.hash(password, 10);
-    // Create the user account and mark the invitation as accepted in one transaction
-    return prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({
-            data: {
-                name,
-                email: invitation.email,
-                phone: invitation.phone,
-                password: hashedPassword,
-                role: invitation.role,
-                tenantId: invitation.tenantId,
-                branchId: invitation.branchId,
-            },
-        });
-        await tx.staffInvitation.update({
-            where: { id: invitation.id },
-            data: { acceptedAt: new Date() },
-        });
-        return user;
+    // Create the user account and mark the invitation as accepted (sequential — PgBouncer incompatible with interactive tx)
+    const user = await prisma.user.create({
+        data: {
+            name,
+            email: invitation.email,
+            phone: invitation.phone,
+            password: hashedPassword,
+            role: invitation.role,
+            tenantId: invitation.tenantId,
+            branchId: invitation.branchId,
+        },
     });
+    await prisma.staffInvitation.update({
+        where: { id: invitation.id },
+        data: { acceptedAt: new Date() },
+    });
+    return user;
 }
 // ---------------------------------------------------------------------------
 // Staff CRUD

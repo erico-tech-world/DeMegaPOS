@@ -92,38 +92,36 @@ export async function deleteProduct(id, tenantId) {
 }
 export async function createStockAdjustment(data, userId) {
     const { productId, variantId, type, quantity, reason } = data;
-    return prisma.$transaction(async (tx) => {
-        // 1. Create the adjustment log
-        const adjustment = await tx.stockAdjustment.create({
+    // 1. Create the adjustment log (sequential — PgBouncer Transaction Pooler incompatible with interactive tx)
+    const adjustment = await prisma.stockAdjustment.create({
+        data: {
+            productId,
+            variantId,
+            type,
+            quantity,
+            reason,
+            userId,
+            tenantId: data.tenantId
+        }
+    });
+    // 2. Update stock level
+    const multiplier = (type === 'IN' || type === 'RETURN') ? 1 : -1;
+    const netQuantity = (type === 'ADJUST') ? (quantity) : (quantity * multiplier);
+    if (variantId) {
+        await prisma.productVariant.update({
+            where: { id: variantId },
             data: {
-                productId,
-                variantId,
-                type,
-                quantity,
-                reason,
-                userId,
-                tenantId: data.tenantId // Pass tenantId
+                stock: (type === 'ADJUST') ? quantity : { increment: netQuantity }
             }
         });
-        // 2. Update stock level
-        const multiplier = (type === 'IN' || type === 'RETURN') ? 1 : -1;
-        const netQuantity = (type === 'ADJUST') ? (quantity) : (quantity * multiplier);
-        if (variantId) {
-            await tx.productVariant.update({
-                where: { id: variantId },
-                data: {
-                    stock: (type === 'ADJUST') ? quantity : { increment: netQuantity }
-                }
-            });
-        }
-        else {
-            await tx.product.update({
-                where: { id: productId },
-                data: {
-                    stock: (type === 'ADJUST') ? quantity : { increment: netQuantity }
-                }
-            });
-        }
-        return adjustment;
-    });
+    }
+    else {
+        await prisma.product.update({
+            where: { id: productId },
+            data: {
+                stock: (type === 'ADJUST') ? quantity : { increment: netQuantity }
+            }
+        });
+    }
+    return adjustment;
 }

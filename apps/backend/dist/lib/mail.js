@@ -12,7 +12,7 @@ function getResendTransporter() {
         secure: process.env.SMTP_SECURE === 'true',
         auth: {
             user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
+            pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '') : undefined,
         },
     });
 }
@@ -22,8 +22,8 @@ function getGmailTransporter() {
         port: parseInt(process.env.FALLBACK_SMTP_PORT || '587', 10),
         secure: process.env.FALLBACK_SMTP_SECURE === 'true',
         auth: {
-            user: process.env.FALLBACK_SMTP_USER,
-            pass: process.env.FALLBACK_SMTP_PASS,
+            user: process.env.FALLBACK_SMTP_USER || 'demegakitchen5@gmail.com',
+            pass: process.env.FALLBACK_SMTP_PASS ? process.env.FALLBACK_SMTP_PASS.replace(/\s+/g, '') : 'oktzxxichuwuugyf',
         },
     });
 }

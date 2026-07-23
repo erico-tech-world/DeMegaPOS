@@ -32,32 +32,30 @@ export async function findUserByIdentifier(identifier) {
 }
 export async function registerBusiness(data) {
     const hashedPassword = await hashPassword(data.password);
-    // Create Tenant and User in a transaction
-    return prisma.$transaction(async (tx) => {
-        // 1. Create Tenant
-        const slug = data.businessName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-        let finalSlug = slug;
-        const existing = await tx.tenant.findUnique({ where: { slug } });
-        if (existing) {
-            finalSlug = `${slug}-${Math.random().toString(36).substring(2, 7)}`;
+    // 1. Create slug (sequential, no transaction needed — PgBouncer incompatible)
+    const slug = data.businessName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    let finalSlug = slug;
+    const existing = await prisma.tenant.findUnique({ where: { slug } });
+    if (existing) {
+        finalSlug = `${slug}-${Math.random().toString(36).substring(2, 7)}`;
+    }
+    // 2. Create Tenant
+    const tenant = await prisma.tenant.create({
+        data: {
+            name: data.businessName,
+            slug: finalSlug,
         }
-        const tenant = await tx.tenant.create({
-            data: {
-                name: data.businessName,
-                slug: finalSlug,
-            }
-        });
-        // 2. Create Admin User
-        const user = await tx.user.create({
-            data: {
-                email: data.email,
-                phone: data.phone,
-                password: hashedPassword,
-                name: data.name,
-                role: 'SUPER_ADMIN',
-                tenantId: tenant.id,
-            }
-        });
-        return { tenant, user };
     });
+    // 3. Create Admin User linked to that tenant
+    const user = await prisma.user.create({
+        data: {
+            email: data.email,
+            phone: data.phone,
+            password: hashedPassword,
+            name: data.name,
+            role: 'SUPER_ADMIN',
+            tenantId: tenant.id,
+        }
+    });
+    return { tenant, user };
 }

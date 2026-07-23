@@ -27,10 +27,10 @@ jobs:
         run: pnpm install
 
       - name: Build Database Package
-        run: pnpm run build --filter=db
+        run: pnpm run build --filter=@demegapos/db
 
       - name: Build Backend Application
-        run: pnpm run build --filter=backend
+        run: pnpm run build --filter=demegapos-backend
 
       - name: Build Web Dashboards
         run: |
