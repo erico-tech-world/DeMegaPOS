@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma.js'
-import { CreateOrderInput } from './schemas.js'
+import { z } from 'zod'
+import { CreateOrderInput, createOrderItemSchema, splitPaymentSchema } from './schemas.js'
 
 export async function createOrder(data: CreateOrderInput) {
     // NOTE: We use sequential operations (not interactive $transaction) because
@@ -41,7 +42,7 @@ export async function createOrder(data: CreateOrderInput) {
             paymentMethod: data.paymentMethod,
             paymentStatus: data.paymentStatus || 'PENDING',
             items: {
-                create: data.items.map((item: any) => ({
+                create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
                     productId: item.productId,
                     variantId: item.variantId,
                     quantity: item.quantity,
@@ -49,7 +50,7 @@ export async function createOrder(data: CreateOrderInput) {
                 })),
             },
             splitPayments: data.splitPayments ? {
-                create: data.splitPayments.map((sp: any) => ({
+                create: data.splitPayments.map((sp: z.infer<typeof splitPaymentSchema>) => ({
                     method: sp.method,
                     amount: sp.amount.toString(),
                     reference: sp.reference
