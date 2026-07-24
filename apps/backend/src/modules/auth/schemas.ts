@@ -6,7 +6,7 @@ export const loginSchema = z.object({
 })
 
 export const registerSchema = z.object({
-    email: z.string().email().optional(),
+    email: z.email().optional(),
     phone: z.string().min(10).optional(),
     password: z.string().min(6),
     confirmPassword: z.string(),
@@ -25,7 +25,7 @@ export const registerSchema = z.object({
 export const businessRegisterSchema = z.object({
     businessName: z.string().min(3),
     name: z.string().min(2),
-    email: z.string().email().optional(),
+    email: z.email().optional(),
     phone: z.string().min(10).optional(),
     password: z.string().min(6),
     confirmPassword: z.string(),

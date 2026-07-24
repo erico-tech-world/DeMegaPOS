@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const inviteStaffSchema = z.object({
-    email: z.string().email().optional().nullable(),
+    email: z.email().optional().nullable(),
     phone: z.string().min(10).optional().nullable(),
     role: z.enum(['SUPER_ADMIN', 'BRANCH_MANAGER', 'INVENTORY_MANAGER', 'CASHIER']),
     branchId: z.string().optional().nullable(),
@@ -28,7 +28,7 @@ export const staffResponseSchema = z.object({
 
 export const updateStaffSchema = z.object({
     name: z.string().optional(),
-    email: z.string().email().optional().nullable(),
+    email: z.email().optional().nullable(),
     phone: z.string().min(10).optional().nullable(),
     role: z.enum(['SUPER_ADMIN', 'BRANCH_MANAGER', 'INVENTORY_MANAGER', 'CASHIER']).optional(),
     branchId: z.string().optional().nullable()

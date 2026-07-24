@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 export const createAppSchema = z.object({
     name: z.string().min(3),
-    webhookUrl: z.string().url().optional(),
+    webhookUrl: z.url().optional(),
     scopes: z.array(z.string()).default(['orders:read', 'inventory:read']),
 })
 
