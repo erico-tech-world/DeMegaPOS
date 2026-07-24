@@ -311,6 +311,16 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                                             PAY: {selectedOrder.paymentStatus || 'PENDING'}
                                         </span>
                                     </div>
+                                    {selectedOrder.posDeviceType && (
+                                        <div className="mt-2 text-[10px] font-black uppercase text-gray-600 bg-gray-200/60 px-2.5 py-1 rounded-lg">
+                                            Device: {selectedOrder.posDeviceType}
+                                        </div>
+                                    )}
+                                    {selectedOrder.terminalTransaction && (
+                                        <div className="mt-2 text-[10px] font-mono font-bold text-green-700 bg-green-100/60 px-2.5 py-1 rounded-lg">
+                                            Monnify Ref: {selectedOrder.terminalTransaction.transactionRef}
+                                        </div>
+                                    )}
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Fulfillment</p>

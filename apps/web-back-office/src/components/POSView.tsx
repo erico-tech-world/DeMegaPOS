@@ -22,14 +22,182 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
     const [customConfirm, setCustomConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [activeTab, setActiveTab] = useState<'products' | 'cart'>('products');
 
-    // Terminal push states
+    // Terminal push & mapping states
     const [isCardTransferSelectorOpen, setIsCardTransferSelectorOpen] = useState(false);
+    const [isNoTerminalModalOpen, setIsNoTerminalModalOpen] = useState(false);
+    const [isMonnifyMappingModalOpen, setIsMonnifyMappingModalOpen] = useState(false);
+    const [unmappedTransactions, setUnmappedTransactions] = useState<any[]>([]);
+    const [isFetchingUnmapped, setIsFetchingUnmapped] = useState(false);
+    const [isManualPosModalOpen, setIsManualPosModalOpen] = useState(false);
+    const [posDeviceTypeInput, setPosDeviceTypeInput] = useState('');
+    const [createdPendingOrder, setCreatedPendingOrder] = useState<any>(null);
     const [isWaitingForTerminal, setIsWaitingForTerminal] = useState(false);
     const [terminalReference, setTerminalReference] = useState('');
     const [pendingTerminalOrderId, setPendingTerminalOrderId] = useState<string | null>(null);
     const pendingTerminalOrderIdRef = useRef<string | null>(null);
 
     const { user } = useAuth();
+
+    // Helper: create pending order in DB
+    const createPendingOrder = async () => {
+        const splitPayments = [];
+        if (paymentMethod === 'SPLIT') {
+            const splitTotal = amountCash + amountCard + amountTransfer;
+            if (splitTotal !== total) {
+                setCustomAlert({
+                    title: "Split Balance Mismatch",
+                    message: `Split payment sum (₦${splitTotal.toLocaleString()}) must match the grand total (₦${total.toLocaleString()}).`
+                });
+                return null;
+            }
+            if (amountCash > 0) splitPayments.push({ method: 'CASH', amount: amountCash });
+            if (amountCard > 0) splitPayments.push({ method: 'CARD', amount: amountCard });
+            if (amountTransfer > 0) splitPayments.push({ method: 'TRANSFER', amount: amountTransfer });
+        }
+
+        if (paymentMethod === 'CREDIT' && !selectedCustomer) {
+            setCustomAlert({
+                title: "Missing Customer",
+                message: "A customer must be assigned for Credit sales."
+            });
+            return null;
+        }
+
+        const orderData = {
+            items: cart.map(item => ({
+                productId: item.id,
+                quantity: item.quantity,
+                price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price)
+            })),
+            totalAmount: total,
+            paymentMethod,
+            paymentStatus: 'PENDING',
+            customerId: selectedCustomer?.id,
+            cashierId: user?.id,
+            amountCash: paymentMethod === 'CASH' ? total : (paymentMethod === 'SPLIT' ? amountCash : 0),
+            amountTransfer: paymentMethod === 'TRANSFER' ? total : (paymentMethod === 'SPLIT' ? amountTransfer : 0),
+            amountCard: paymentMethod === 'CARD' ? total : (paymentMethod === 'SPLIT' ? amountCard : 0),
+            splitPayments: splitPayments.length > 0 ? splitPayments : undefined,
+            storeId: 'test-store-1'
+        };
+
+        const res = await onSubmitOrder(orderData);
+        return res;
+    };
+
+    // Option A: Handle Monnify Terminal click
+    const handlePayViaMonnifyTerminal = async () => {
+        setIsCardTransferSelectorOpen(false);
+        try {
+            const res = await axios.get(`${API_URL}/integrations`);
+            const integrations = res.data || [];
+            const activeMonnify = integrations.find((i: any) => i.provider === 'MONNIFY' && i.isActive);
+
+            if (!activeMonnify) {
+                // No active Monnify terminal integration connected
+                setIsNoTerminalModalOpen(true);
+                return;
+            }
+
+            // Terminal integration exists -> create pending order & fetch unmapped transactions
+            const pendingOrder = await createPendingOrder();
+            if (!pendingOrder) return;
+
+            setCreatedPendingOrder(pendingOrder);
+            setIsFetchingUnmapped(true);
+            setIsMonnifyMappingModalOpen(true);
+
+            try {
+                const txRes = await axios.get(`${API_URL}/integrations/unmapped-transactions`);
+                setUnmappedTransactions(txRes.data || []);
+            } catch (err) {
+                console.error('Failed to fetch unmapped transactions:', err);
+                setUnmappedTransactions([]);
+            } finally {
+                setIsFetchingUnmapped(false);
+            }
+        } catch (err: any) {
+            console.error('Error in Monnify Terminal flow:', err);
+            // Fallback to no terminal modal if API fails
+            setIsNoTerminalModalOpen(true);
+        }
+    };
+
+    // Option A Map Action: Map selected transaction to createdPendingOrder
+    const handleMapTransactionToOrder = async (tx: any) => {
+        if (!createdPendingOrder) return;
+        try {
+            const mapRes = await axios.post(`${API_URL}/integrations/orders/${createdPendingOrder.id}/map-terminal`, {
+                transactionRef: tx.transactionReference,
+                paymentRef: tx.paymentReference,
+                amount: Number(tx.amount),
+                customerName: tx.customerName,
+                customerPhone: tx.customerPhone,
+                settledAt: tx.paidOn,
+                rawResponse: tx.raw
+            });
+
+            setIsMonnifyMappingModalOpen(false);
+            setCompletedOrder(mapRes.data.order || mapRes.data);
+            setCreatedPendingOrder(null);
+            setCart([]);
+            setSelectedCustomer(null);
+            setPaymentMethod('CASH');
+            setAmountCash(0);
+            setAmountCard(0);
+            setAmountTransfer(0);
+            if (refresh) refresh();
+        } catch (err: any) {
+            console.error('Failed to map terminal transaction:', err);
+            setCustomAlert({
+                title: "Mapping Failed",
+                message: err?.response?.data?.message || err?.message || "Failed to map terminal transaction to order."
+            });
+        }
+    };
+
+    // Option B: Process Manual Payment click -> prompt POS device type
+    const handleProcessManualPaymentClick = async () => {
+        setIsCardTransferSelectorOpen(false);
+        setIsManualPosModalOpen(true);
+    };
+
+    // Option B Submit Action: Complete manual payment with POS device type
+    const handleSubmitManualPosPayment = async () => {
+        if (!posDeviceTypeInput.trim()) {
+            setCustomAlert({
+                title: "Device Type Required",
+                message: "Please enter the POS Terminal Device Type (e.g. Moniepoint POS, Opay POS)."
+            });
+            return;
+        }
+
+        try {
+            const pendingOrder = await createPendingOrder();
+            if (!pendingOrder) return;
+
+            const res = await axios.post(`${API_URL}/integrations/orders/${pendingOrder.id}/manual-payment`, {
+                posDeviceType: posDeviceTypeInput.trim()
+            });
+
+            setIsManualPosModalOpen(false);
+            setPosDeviceTypeInput('');
+            setCompletedOrder(res.data);
+            setCart([]);
+            setSelectedCustomer(null);
+            setPaymentMethod('CASH');
+            setAmountCash(0);
+            setAmountCard(0);
+            setAmountTransfer(0);
+            if (refresh) refresh();
+        } catch (err: any) {
+            console.error('Error completing manual payment:', err);
+            setCustomAlert({
+                title: "Payment Processing Failed",
+                message: err?.response?.data?.message || err?.message || "Failed to complete manual payment."
+            });
+        }
+    };
 
     // Keep ref updated
     useEffect(() => {
@@ -274,42 +442,181 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
                         </div>
                         <div className="flex flex-col gap-3">
                             <button
-                                onClick={() => {
-                                    setIsCardTransferSelectorOpen(false);
-                                    handleCheckout().then(() => { }); // This will call proceedCheckout under the hood
-                                    // Wait, let's call the helper directly since we can't call handleCheckout synchronously in self
-                                }}
-                                className="w-full bg-[#2D7A3E] text-white py-4 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all flex items-center justify-center gap-2"
-                                style={{ display: 'none' /* We will call proceedCheckout directly */ }}
-                            >
-                                Pay via Monnify Terminal
-                            </button>
-                            {/* Let's fix the handlers to call proceedCheckout directly since it is in scope! */}
-                            <button
-                                onClick={() => {
-                                    setIsCardTransferSelectorOpen(false);
-                                    // @ts-ignore
-                                    proceedCheckout('PENDING');
-                                }}
-                                className="w-full bg-[#2D7A3E] text-white py-4 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all flex items-center justify-center gap-2"
+                                onClick={handlePayViaMonnifyTerminal}
+                                className="w-full bg-[#2D7A3E] text-white py-4 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-900/10 active:scale-95"
                             >
                                 <CreditCard size={16} /> Pay via Monnify Terminal
                             </button>
                             <button
-                                onClick={() => {
-                                    setIsCardTransferSelectorOpen(false);
-                                    // @ts-ignore
-                                    proceedCheckout('SUCCESS');
-                                }}
-                                className="w-full bg-gray-100 text-gray-700 py-4 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+                                onClick={handleProcessManualPaymentClick}
+                                className="w-full bg-gray-100 text-gray-700 py-4 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all flex items-center justify-center gap-2 active:scale-95"
                             >
-                                <Banknote size={16} /> Process Manually (Offline)
+                                <Banknote size={16} /> Process Manual Payment (Offline)
                             </button>
                             <button
                                 onClick={() => setIsCardTransferSelectorOpen(false)}
                                 className="w-full bg-white border border-gray-200 text-gray-400 py-3 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-50 transition-all"
                             >
                                 Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* No Terminal Integration Alert Modal */}
+            {isNoTerminalModalOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsNoTerminalModalOpen(false)} />
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-5 text-center">
+                        <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-100">
+                            <CreditCard size={28} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-gray-900 tracking-tight">No POS Terminal Connected</h3>
+                            <p className="text-xs text-gray-500 font-bold mt-2 leading-relaxed">
+                                No Monnify POS terminal device has been connected to this store yet.
+                                Please ask an administrator to connect your terminal device in <strong>Settings → Integrations</strong>, or process this transaction using <strong>Offline Manual Payment mode</strong>.
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-2 pt-2">
+                            <button
+                                onClick={() => {
+                                    setIsNoTerminalModalOpen(false);
+                                    handleProcessManualPaymentClick();
+                                }}
+                                className="w-full bg-[#2D7A3E] text-white py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all shadow-lg shadow-green-900/10 active:scale-95"
+                            >
+                                Use Offline Manual Payment
+                            </button>
+                            <button
+                                onClick={() => setIsNoTerminalModalOpen(false)}
+                                className="w-full bg-gray-100 text-gray-600 py-3 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all"
+                            >
+                                Dismiss
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Monnify Unmapped Payment Retrieval & Mapping Modal */}
+            {isMonnifyMappingModalOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsMonnifyMappingModalOpen(false)} />
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg relative z-[111] overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[85vh]">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div>
+                                <h3 className="text-lg font-black text-gray-900 tracking-tight">Monnify Terminal Payments</h3>
+                                <p className="text-xs text-gray-400 font-bold">Map a successful POS payment to complete order (₦{total.toLocaleString()})</p>
+                            </div>
+                            <button onClick={() => setIsMonnifyMappingModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400">
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto flex-1 space-y-3 custom-scrollbar">
+                            {isFetchingUnmapped ? (
+                                <div className="py-12 flex flex-col items-center justify-center space-y-3 text-gray-400">
+                                    <div className="w-10 h-10 border-4 border-green-200 border-t-[#2D7A3E] rounded-full animate-spin"></div>
+                                    <p className="text-xs font-bold uppercase tracking-wider">Fetching recent Monnify terminal transactions...</p>
+                                </div>
+                            ) : unmappedTransactions.length === 0 ? (
+                                <div className="py-12 text-center space-y-3">
+                                    <div className="w-12 h-12 bg-gray-100 text-gray-400 rounded-2xl flex items-center justify-center mx-auto">
+                                        <CreditCard size={24} />
+                                    </div>
+                                    <h4 className="text-sm font-black text-gray-700">No Unmapped Payments Found</h4>
+                                    <p className="text-xs text-gray-400 font-bold max-w-xs mx-auto">
+                                        No recent unmapped transactions were found for today. Please complete card swipe on terminal, or use Manual Payment mode.
+                                    </p>
+                                    <button
+                                        onClick={() => {
+                                            setIsMonnifyMappingModalOpen(false);
+                                            setIsManualPosModalOpen(true);
+                                        }}
+                                        className="mt-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-black hover:bg-gray-200 transition-all"
+                                    >
+                                        Switch to Manual Payment Mode
+                                    </button>
+                                </div>
+                            ) : (
+                                unmappedTransactions.map((tx: any, idx: number) => (
+                                    <div key={idx} className="p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:border-[#2D7A3E] hover:bg-white hover:shadow-md transition-all flex items-center justify-between gap-4">
+                                        <div className="space-y-1 min-w-0 flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-black text-gray-900 text-base">₦{Number(tx.amount).toLocaleString()}</span>
+                                                <span className="px-2 py-0.5 bg-green-50 text-green-700 border border-green-100 rounded-full text-[9px] font-black uppercase">
+                                                    {tx.paymentMethod}
+                                                </span>
+                                            </div>
+                                            <div className="text-[11px] font-mono text-gray-500 truncate">REF: {tx.transactionReference}</div>
+                                            <div className="text-[10px] text-gray-400 font-bold">{new Date(tx.paidOn).toLocaleTimeString()} • {tx.customerName}</div>
+                                        </div>
+                                        <button
+                                            onClick={() => handleMapTransactionToOrder(tx)}
+                                            className="px-4 py-2.5 bg-[#2D7A3E] text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-[#20502E] transition-all shadow-md shadow-green-900/10 active:scale-95 shrink-0"
+                                        >
+                                            Map Payment
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Manual POS Device Type Capture Modal */}
+            {isManualPosModalOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsManualPosModalOpen(false)} />
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-6">
+                        <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+                            <div>
+                                <h3 className="text-xl font-black text-gray-900 tracking-tight">Manual POS Device Type</h3>
+                                <p className="text-xs text-gray-400 font-bold">Record offline terminal device used for order (₦{total.toLocaleString()})</p>
+                            </div>
+                            <button onClick={() => setIsManualPosModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400">
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">POS Terminal Device Type</label>
+                            <input
+                                type="text"
+                                placeholder="e.g. Moniepoint POS, Opay POS, PalmPay POS"
+                                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:border-[#2D7A3E] focus:bg-white outline-none font-bold text-sm text-gray-900 transition-all"
+                                value={posDeviceTypeInput}
+                                onChange={(e) => setPosDeviceTypeInput(e.target.value)}
+                                autoFocus
+                            />
+                            <div className="flex flex-wrap gap-2 pt-1">
+                                {['Moniepoint POS', 'Opay POS', 'PalmPay POS', 'GTBank POS', 'Zenith POS'].map((preset) => (
+                                    <button
+                                        key={preset}
+                                        onClick={() => setPosDeviceTypeInput(preset)}
+                                        className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-all"
+                                    >
+                                        {preset}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={() => setIsManualPosModalOpen(false)}
+                                className="flex-1 py-3.5 bg-gray-100 text-gray-600 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSubmitManualPosPayment}
+                                className="flex-1 py-3.5 bg-[#2D7A3E] text-white rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all shadow-lg shadow-green-900/10 active:scale-95"
+                            >
+                                Complete Payment
                             </button>
                         </div>
                     </div>
@@ -697,6 +1004,13 @@ export const ReceiptModal = ({ order, onClose }: any) => {
                             {order.cashier && <div>CASHIER: {order.cashier.name}</div>}
                             {order.customer && <div>CUSTOMER: {order.customer.name}</div>}
                             <div>PAYMENT: {order.paymentMethod}</div>
+                            {order.posDeviceType && <div>POS DEVICE: {order.posDeviceType}</div>}
+                            {order.terminalTransaction && (
+                                <>
+                                    <div>MONNIFY REF: {order.terminalTransaction.transactionRef}</div>
+                                    {order.terminalTransaction.paymentRef && <div>PAYMENT REF: {order.terminalTransaction.paymentRef}</div>}
+                                </>
+                            )}
                         </div>
                         <div className="border-b-2 border-dashed border-gray-200 my-4"></div>
                     </div>

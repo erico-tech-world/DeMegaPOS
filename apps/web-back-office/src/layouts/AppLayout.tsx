@@ -11,7 +11,8 @@ import {
     X,
     User as UserIcon,
     ChevronRight,
-    UserSquare2
+    UserSquare2,
+    CreditCard
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -47,6 +48,7 @@ const AppLayout: React.FC = () => {
         { id: 'orders', label: 'Order History', icon: Package, color: '#2D7A3E', path: '/orders' },
         { id: 'customers', label: 'Customers', icon: UserSquare2, color: '#2D7A3E', path: '/customers' },
         { id: 'staff', label: 'Staff Management', icon: Users, color: '#2D7A3E', path: '/staff' },
+        { id: 'integrations', label: 'POS Terminals', icon: CreditCard, color: '#2D7A3E', path: '/integrations' },
         { id: 'settings', label: 'Settings', icon: Settings, color: '#64748B', path: '/settings' },
     ];
 

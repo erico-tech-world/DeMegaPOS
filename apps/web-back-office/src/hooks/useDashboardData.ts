@@ -23,17 +23,87 @@ export const useDashboardData = () => {
         }
     }, [token, logout]);
 
+    const [integrations, setIntegrations] = useState<any[]>([]);
+
+    const fetchIntegrations = useCallback(async () => {
+        if (!token) return [];
+        try {
+            const res = await axios.get(`${API_URL}/integrations`);
+            setIntegrations(res.data);
+            return res.data;
+        } catch (err) {
+            console.error('Failed to fetch integrations:', err);
+            return [];
+        }
+    }, [token]);
+
+    const createIntegration = async (data: any) => {
+        try {
+            const res = await axios.post(`${API_URL}/integrations`, data);
+            await fetchIntegrations();
+            return res.data;
+        } catch (err) {
+            console.error('Failed to create integration:', err);
+            throw err;
+        }
+    };
+
+    const deleteIntegration = async (id: string) => {
+        try {
+            await axios.delete(`${API_URL}/integrations/${id}`);
+            await fetchIntegrations();
+        } catch (err) {
+            console.error('Failed to delete integration:', err);
+            throw err;
+        }
+    };
+
+    const fetchUnmappedTransactions = async (integrationId?: string) => {
+        try {
+            const res = await axios.get(`${API_URL}/integrations/unmapped-transactions`, {
+                params: { integrationId }
+            });
+            return res.data;
+        } catch (err) {
+            console.error('Failed to fetch unmapped transactions:', err);
+            return [];
+        }
+    };
+
+    const mapTerminalTransaction = async (orderId: string, data: any) => {
+        try {
+            const res = await axios.post(`${API_URL}/integrations/orders/${orderId}/map-terminal`, data);
+            await fetchData();
+            return res.data;
+        } catch (err) {
+            console.error('Failed to map terminal transaction:', err);
+            throw err;
+        }
+    };
+
+    const handleManualPayment = async (orderId: string, posDeviceType: string) => {
+        try {
+            const res = await axios.post(`${API_URL}/integrations/orders/${orderId}/manual-payment`, { posDeviceType });
+            await fetchData();
+            return res.data;
+        } catch (err) {
+            console.error('Failed to process manual payment:', err);
+            throw err;
+        }
+    };
+
     const fetchData = useCallback(async () => {
         if (!token) return;
         setIsLoading(true);
         try {
             // Fetch products independently so a failure in orders/staff/customers
             // does NOT prevent the product list from loading
-            const [pRes, oRes, sRes, cRes] = await Promise.allSettled([
+            const [pRes, oRes, sRes, cRes, iRes] = await Promise.allSettled([
                 axios.get(`${API_URL}/inventory/products`),
                 axios.get(`${API_URL}/orders`),
                 axios.get(`${API_URL}/staff`),
                 axios.get(`${API_URL}/customers`),
+                axios.get(`${API_URL}/integrations`),
             ]);
 
             if (pRes.status === 'fulfilled') setProducts(pRes.value.data);
@@ -51,6 +121,9 @@ export const useDashboardData = () => {
             if (cRes.status === 'fulfilled') setCustomers(cRes.value.data);
             else console.error('Customers fetch failed:', cRes.reason);
 
+            if (iRes.status === 'fulfilled') setIntegrations(iRes.value.data);
+            else console.error('Integrations fetch failed:', iRes.reason);
+
         } finally {
             setIsLoading(false);
         }
@@ -65,7 +138,7 @@ export const useDashboardData = () => {
         ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                if (data.event === 'ORDER_CREATED' || data.event === 'STOCK_UPDATED' || data.event === 'PRODUCT_CREATED') {
+                if (data.event === 'ORDER_CREATED' || data.event === 'STOCK_UPDATED' || data.event === 'PRODUCT_CREATED' || data.event === 'ORDER_UPDATED' || data.event === 'PAYMENT_SUCCESS') {
                     fetchData();
                 }
             } catch (e) {
@@ -92,9 +165,16 @@ export const useDashboardData = () => {
         orders,
         staff,
         customers,
+        integrations,
         isLoading,
         refresh: fetchData,
         refreshProducts: fetchProducts,
+        fetchIntegrations,
+        createIntegration,
+        deleteIntegration,
+        fetchUnmappedTransactions,
+        mapTerminalTransaction,
+        handleManualPayment,
         handleCreateOrder
     };
 };

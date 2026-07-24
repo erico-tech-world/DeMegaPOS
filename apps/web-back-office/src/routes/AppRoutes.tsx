@@ -13,6 +13,7 @@ import InventoryPage from '../pages/dashboard/InventoryPage';
 import OrdersPage from '../pages/dashboard/OrdersPage';
 import CustomersPage from '../pages/dashboard/CustomersPage';
 import StaffPage from '../pages/dashboard/StaffPage';
+import { IntegrationsPage } from '../pages/IntegrationsPage';
 import { useDashboardData } from '../hooks/useDashboardData';
 
 const AppRoutes = () => {
@@ -84,6 +85,10 @@ const AppRoutes = () => {
                             isLoading={dashboardData.isLoading}
                             refresh={dashboardData.refresh}
                         />
+                    } />
+
+                    <Route path="/integrations" element={
+                        <IntegrationsPage />
                     } />
 
                     {/* Role Protected Example */}

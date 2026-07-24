@@ -139,7 +139,8 @@ export async function getOrders(storeId?: string) {
             },
             customer: true,
             cashier: true,
-            splitPayments: true
+            splitPayments: true,
+            terminalTransaction: true
         },
         orderBy: {
             createdAt: 'desc'
@@ -158,7 +159,8 @@ export async function getOrderById(id: string) {
             },
             customer: true,
             cashier: true,
-            splitPayments: true
+            splitPayments: true,
+            terminalTransaction: true
         }
     })
 }
