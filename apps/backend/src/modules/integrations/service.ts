@@ -68,7 +68,6 @@ export async function getUnmappedMonnifyTransactions(tenantId: string, integrati
 
             if (accessToken) {
                 // 3. Search today's transactions
-                const today = new Date().toISOString().split('T')[0]
                 const searchRes = await fetch(
                     `${baseUrl}/api/v1/transactions/search?paymentStatus=PAID&page=0&size=20`,
                     {
@@ -115,12 +114,10 @@ export async function mapTerminalTransactionToOrder(orderId: string, data: MapTe
     const terminalTx = await prisma.terminalTransaction.create({
         data: {
             orderId,
-            provider: 'MONNIFY',
+            integrationId: data.integrationId || '',
             transactionRef: data.transactionRef,
             paymentRef: data.paymentRef,
             amount: data.amount,
-            customerName: data.customerName,
-            customerPhone: data.customerPhone,
             settledAt: data.settledAt ? new Date(data.settledAt) : new Date(),
             rawResponse: data.rawResponse || {},
         },

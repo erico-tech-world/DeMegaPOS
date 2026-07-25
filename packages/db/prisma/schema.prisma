@@ -46,8 +46,8 @@ model Tenant {
   activityLogs          ActivityLog[]
   staffInvitations      StaffInvitation[]
   stockAdjustments      StockAdjustment[]
-  terminalIntegrations  TerminalIntegration[]
   settings              Json?
+  terminalIntegrations  TerminalIntegration[]
 }
 
 model Store {
@@ -94,6 +94,42 @@ model UserSession {
   lastActive   DateTime @default(now())
   isMfaVerified Boolean @default(false)
   createdAt    DateTime @default(now())
+}
+
+// ─── Terminal Integration ──────────────────────────────────────────────────────
+
+model TerminalIntegration {
+  id           String   @id @default(cuid())
+  tenantId     String
+  provider     String   @default("MONNIFY")
+  label        String
+  apiKey       String
+  secretKey    String
+  contractCode String
+  baseUrl      String   @default("https://sandbox.monnify.com")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  terminalTransactions TerminalTransaction[]
+}
+
+// ─── Terminal Transaction ──────────────────────────────────────────────────────
+
+model TerminalTransaction {
+  id             String    @id @default(cuid())
+  orderId        String    @unique
+  integrationId  String
+  transactionRef String
+  paymentRef     String?
+  amount         Decimal   @db.Decimal(10, 2)
+  settledAt      DateTime?
+  rawResponse    Json?
+  createdAt      DateTime  @default(now())
+
+  order       Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  integration TerminalIntegration @relation(fields: [integrationId], references: [id])
 }
 
 enum StockAdjustmentType {
@@ -201,24 +237,24 @@ model Customer {
 }
 
 model Order {
-  id                  String               @id @default(cuid())
-  storeId             String
-  store               Store                @relation(fields: [storeId], references: [id])
-  cashierId           String?
-  cashier             User?                @relation(fields: [cashierId], references: [id], onDelete: SetNull)
-  customerId          String?
-  customer            Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  totalAmount         Decimal              @db.Decimal(10, 2)
-  paymentMethod       PaymentMethod        @default(CASH)
-  status              String               @default("NEW")
-  paymentStatus       String               @default("PENDING")
+  id            String        @id @default(cuid())
+  storeId       String
+  store         Store         @relation(fields: [storeId], references: [id])
+  cashierId     String?
+  cashier       User?         @relation(fields: [cashierId], references: [id], onDelete: SetNull)
+  customerId    String?
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  totalAmount   Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod @default(CASH)
+  status              String        @default("NEW")
+  paymentStatus       String        @default("PENDING")
   posDeviceType       String?
-  terminalTransaction TerminalTransaction?
   items               OrderItem[]
   splitPayments       SplitPayment[]
   creditSale          CreditSale?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  terminalTransaction TerminalTransaction?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 }
 
 model CreditSale {
@@ -290,37 +326,4 @@ model IntegrationApp {
   scopes      String[]
   webhookUrl  String?
   createdAt   DateTime @default(now())
-}
-
-model TerminalIntegration {
-  id           String   @id @default(cuid())
-  tenantId     String
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  provider     String   // "MONNIFY", "MONIEPOINT", etc.
-  label        String?  // e.g. "Main Counter Terminal"
-  isActive     Boolean  @default(true)
-  apiKey       String?
-  secretKey    String?
-  contractCode String?
-  baseUrl      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([tenantId, provider, label])
-}
-
-model TerminalTransaction {
-  id             String    @id @default(cuid())
-  orderId        String    @unique
-  order          Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  provider       String    // "MONNIFY"
-  transactionRef String    // Monnify transactionReference
-  paymentRef     String?   // Monnify paymentReference
-  amount         Decimal   @db.Decimal(10, 2)
-  currency       String    @default("NGN")
-  customerName   String?
-  customerPhone  String?
-  settledAt      DateTime?
-  rawResponse    Json?
-  createdAt      DateTime  @default(now())
 }
