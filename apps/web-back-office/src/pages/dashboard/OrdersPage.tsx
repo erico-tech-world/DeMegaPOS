@@ -1,19 +1,34 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Download, Calendar, ArrowRight, User as UserIcon, Tag, CreditCard, ChevronDown, X, Package } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { Search, Download, Calendar, ArrowRight, User as UserIcon, Tag, CreditCard, ChevronDown, X, Package, Clock, Play, Trash2, Lock } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
 interface OrdersPageProps {
     orders: any[];
+    draftOrders?: any[];
     isLoading: boolean;
+    refresh?: () => void;
+    cancelDraftOrder?: (id: string) => Promise<void>;
+    lockDraftOrder?: (id: string) => Promise<any>;
 }
 
-const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
+const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftOrder, lockDraftOrder }: OrdersPageProps) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [dateFilter, setDateFilter] = useState('all'); // all, today, week, month
+    const [mainTab, setMainTab] = useState<'all' | 'drafts'>('all'); // 'all' or 'drafts'
     const location = useLocation();
+    const navigate = useNavigate();
+    const { user } = useAuth();
     const queryParams = new URLSearchParams(location.search);
     const highlightId = queryParams.get('id');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
+
+    // Auto-switch to drafts tab if query param tab=drafts
+    useEffect(() => {
+        if (queryParams.get('tab') === 'drafts') {
+            setMainTab('drafts');
+        }
+    }, [location.search]);
 
     // Auto-scroll to highlighted order
     useEffect(() => {
@@ -74,16 +89,69 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
         document.body.removeChild(link);
     };
 
+    const handleResumeDraft = async (draftOrder: any) => {
+        if (lockDraftOrder) {
+            try {
+                await lockDraftOrder(draftOrder.id);
+            } catch (err) {
+                console.error('Failed to lock draft order:', err);
+            }
+        }
+        navigate('/pos', { state: { resumedDraft: draftOrder } });
+    };
+
+    const handleCancelDraft = async (draftId: string) => {
+        if (!window.confirm('Are you sure you want to cancel this draft order? Items will be released back to inventory.')) return;
+        if (cancelDraftOrder) {
+            try {
+                await cancelDraftOrder(draftId);
+                if (refresh) refresh();
+            } catch (err) {
+                console.error('Failed to cancel draft:', err);
+            }
+        }
+    };
+
+    // Filtered list based on active main tab
+    const displayList = useMemo(() => {
+        const sourceList = mainTab === 'drafts' ? draftOrders : filteredOrders;
+        return sourceList.filter(o => {
+            const matchesSearch =
+                o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (o.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (o.cashier?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+            return matchesSearch;
+        });
+    }, [mainTab, draftOrders, filteredOrders, searchQuery]);
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
             {/* Header & Controls */}
             <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
                 <div>
                     <h1 className="text-2xl font-black text-gray-900 leading-tight">Transaction Archives</h1>
-                    <p className="text-gray-500 text-sm">Review, filter and export sales data</p>
+                    <p className="text-gray-500 text-sm">Review, filter and export sales & hold orders</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+                    {/* Main Tab Switcher */}
+                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-2xl">
+                        <button
+                            onClick={() => setMainTab('all')}
+                            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'all' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-900'}`}
+                        >
+                            <Tag size={14} />
+                            All Sales ({orders.length})
+                        </button>
+                        <button
+                            onClick={() => setMainTab('drafts')}
+                            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'drafts' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 hover:text-gray-900'}`}
+                        >
+                            <Clock size={14} />
+                            Hold / Drafts ({draftOrders.length})
+                        </button>
+                    </div>
+
                     <div className="relative group flex-1 xl:flex-none xl:w-64">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-900 transition-colors" size={18} />
                         <input
@@ -95,18 +163,20 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                         />
                     </div>
 
-                    <div className="flex items-center gap-2 bg-white p-1 border border-gray-100 rounded-2xl shadow-sm">
-                        {['all', 'today', 'week', 'month'].map((f) => (
-                            <button
-                                key={f}
-                                onClick={() => setDateFilter(f)}
-                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dateFilter === f ? 'bg-gray-900 text-white shadow-lg' : 'text-gray-400 hover:text-gray-900'
-                                    }`}
-                            >
-                                {f}
-                            </button>
-                        ))}
-                    </div>
+                    {mainTab === 'all' && (
+                        <div className="flex items-center gap-2 bg-white p-1 border border-gray-100 rounded-2xl shadow-sm">
+                            {['all', 'today', 'week', 'month'].map((f) => (
+                                <button
+                                    key={f}
+                                    onClick={() => setDateFilter(f)}
+                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dateFilter === f ? 'bg-gray-900 text-white shadow-lg' : 'text-gray-400 hover:text-gray-900'
+                                        }`}
+                                >
+                                    {f}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
                     <button
                         onClick={downloadCSV}
@@ -134,9 +204,11 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                         <tbody className="divide-y divide-gray-50">
                             {isLoading ? (
                                 <tr><td colSpan={5} className="px-8 py-24 text-center text-gray-400 font-bold animate-pulse uppercase tracking-[0.2em]">Synchronizing Archives...</td></tr>
-                            ) : filteredOrders.length === 0 ? (
-                                <tr><td colSpan={5} className="px-8 py-24 text-center text-gray-400 font-bold italic">No matching records found.</td></tr>
-                            ) : filteredOrders.map(order => (
+                            ) : displayList.length === 0 ? (
+                                <tr><td colSpan={5} className="px-8 py-24 text-center text-gray-400 font-bold italic">
+                                    {mainTab === 'drafts' ? 'No active hold or draft orders found.' : 'No matching records found.'}
+                                </td></tr>
+                            ) : displayList.map(order => (
                                 <tr
                                     key={order.id}
                                     id={`order-${order.id}`}
@@ -193,24 +265,44 @@ const OrdersPage = ({ orders, isLoading }: OrdersPageProps) => {
                                             </span>
                                             {/* Payment Status */}
                                             <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
-                                                    order.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
+                                                    order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                                                    order.paymentStatus === 'DRAFT' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                                                         'bg-amber-50 text-amber-600 border-amber-100'
                                                 }`}>
                                                 <div className={`w-1.5 h-1.5 rounded-full ${order.paymentStatus === 'SUCCESS' ? 'bg-green-500' :
-                                                        order.paymentStatus === 'FAILED' ? 'bg-red-500' :
-                                                            'bg-amber-500'
+                                                        order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-500' :
+                                                        'bg-amber-500'
                                                     }`}></div>
                                                 PAY: {order.paymentStatus || 'PENDING'}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-8 py-6 text-right">
-                                        <button
-                                            onClick={() => setSelectedOrder(order)}
-                                            className="p-2 hover:bg-gray-100 rounded-xl text-gray-300 hover:text-gray-900 transition-all"
-                                        >
-                                            <ArrowRight size={20} />
-                                        </button>
+                                        {mainTab === 'drafts' ? (
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => handleResumeDraft(order)}
+                                                    className="px-3 py-1.5 bg-[#2D7A3E] text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-[#20502E] transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+                                                    title="Resume checkout in POS"
+                                                >
+                                                    <Play size={12} /> Resume
+                                                </button>
+                                                <button
+                                                    onClick={() => handleCancelDraft(order.id)}
+                                                    className="p-1.5 hover:bg-red-50 text-red-500 rounded-xl transition-colors"
+                                                    title="Cancel Draft Order"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => setSelectedOrder(order)}
+                                                className="p-2 hover:bg-gray-100 rounded-xl text-gray-300 hover:text-gray-900 transition-all"
+                                            >
+                                                <ArrowRight size={20} />
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

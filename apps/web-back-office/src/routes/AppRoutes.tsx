@@ -15,6 +15,8 @@ import CustomersPage from '../pages/dashboard/CustomersPage';
 import StaffPage from '../pages/dashboard/StaffPage';
 import { useDashboardData } from '../hooks/useDashboardData';
 
+import { IntegrationsPage } from '../pages/IntegrationsPage';
+
 const AppRoutes = () => {
     const dashboardData = useDashboardData();
 
@@ -51,6 +53,7 @@ const AppRoutes = () => {
                             products={dashboardData.products}
                             customers={dashboardData.customers}
                             onSubmitOrder={dashboardData.handleCreateOrder}
+                            createDraftOrder={dashboardData.createDraftOrder}
                             refresh={dashboardData.refresh}
                         />
                     } />
@@ -67,6 +70,7 @@ const AppRoutes = () => {
                         <OrdersPage
                             orders={dashboardData.orders}
                             isLoading={dashboardData.isLoading}
+                            refresh={dashboardData.refresh}
                         />
                     } />
 
@@ -86,8 +90,9 @@ const AppRoutes = () => {
                         />
                     } />
 
-                    {/* Role Protected Example */}
-                    <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'BRANCH_MANAGER']} />}>
+                    {/* Role Protected Routes (Admin & Manager Only) */}
+                    <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'OWNER', 'ADMIN']} />}>
+                        <Route path="/integrations" element={<IntegrationsPage />} />
                         <Route path="/settings" element={
                             <div className="p-8 bg-white rounded-[2rem] border border-gray-100 shadow-sm animate-in fade-in duration-500">
                                 <h3 className="text-xl font-black text-gray-900 tracking-tight mb-4">Core Systems Configuration</h3>

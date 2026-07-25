@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { createOrderSchema, orderResponseSchema } from './schemas.js'
-import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus } from './service.js'
+import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus, getDraftOrders, lockDraftOrder, cancelDraftOrder } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 export default async function orderRoutes(app: FastifyInstance) {
@@ -91,4 +91,61 @@ export default async function orderRoutes(app: FastifyInstance) {
             return updatedOrder
         }
     )
+
+    // Draft Orders endpoints
+    server.get(
+        '/drafts',
+        {
+            schema: {
+                querystring: z.object({
+                    storeId: z.string().optional(),
+                    cashierId: z.string().optional(),
+                }),
+                response: {
+                    200: z.array(orderResponseSchema),
+                },
+            },
+        },
+        async (request) => {
+            const { storeId, cashierId } = request.query as { storeId?: string; cashierId?: string }
+            return getDraftOrders(storeId, cashierId)
+        }
+    )
+
+    server.patch(
+        '/drafts/:id/lock',
+        {
+            schema: {
+                params: z.object({
+                    id: z.string(),
+                }),
+            },
+        },
+        async (request) => {
+            const { id } = request.params as { id: string }
+            const lockedOrder = await lockDraftOrder(id)
+            if (lockedOrder) {
+                app.broadcast('ORDER_UPDATED', lockedOrder)
+            }
+            return lockedOrder
+        }
+    )
+
+    server.delete(
+        '/drafts/:id',
+        {
+            schema: {
+                params: z.object({
+                    id: z.string(),
+                }),
+            },
+        },
+        async (request) => {
+            const { id } = request.params as { id: string }
+            await cancelDraftOrder(id)
+            app.broadcast('ORDER_UPDATED', { id, deleted: true })
+            return { success: true }
+        }
+    )
 }
+

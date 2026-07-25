@@ -67,6 +67,7 @@ async function main() {
 
     const syncRoutes = await import('./modules/sync/routes.js')
     const customerRoutes = await import('./modules/customers/routes.js')
+    const integrationRoutes = await import('./modules/integrations/routes.js')
 
     server.register(authRoutes.default, { prefix: '/auth' })
     server.register(tenantRoutes.default, { prefix: '/tenants' })
@@ -77,6 +78,7 @@ async function main() {
     server.register(paymentRoutes.default, { prefix: '/payments' })
     server.register(syncRoutes.default, { prefix: '/sync' })
     server.register(customerRoutes.default, { prefix: '/customers' })
+    server.register(integrationRoutes.default, { prefix: '/integrations' })
 
     // Helper for broadcasting WebSocket events safely
     server.decorate('broadcast', (event: string, payload: any) => {

@@ -92,18 +92,68 @@ export const useDashboardData = () => {
         }
     };
 
+    const [draftOrders, setDraftOrders] = useState<any[]>([]);
+
+    const fetchDraftOrders = useCallback(async () => {
+        if (!token) return [];
+        try {
+            const res = await axios.get(`${API_URL}/orders/drafts`);
+            setDraftOrders(res.data || []);
+            return res.data;
+        } catch (err) {
+            console.error('Failed to fetch draft orders:', err);
+            return [];
+        }
+    }, [token]);
+
+    const createDraftOrder = async (orderData: any) => {
+        try {
+            const res = await axios.post(`${API_URL}/orders`, {
+                ...orderData,
+                paymentStatus: 'DRAFT'
+            });
+            await fetchData();
+            return res.data;
+        } catch (err) {
+            console.error('Error creating draft order:', err);
+            throw err;
+        }
+    };
+
+    const lockDraftOrder = async (orderId: string) => {
+        try {
+            const res = await axios.patch(`${API_URL}/orders/drafts/${orderId}/lock`);
+            await fetchData();
+            return res.data;
+        } catch (err) {
+            console.error('Error locking draft order:', err);
+            throw err;
+        }
+    };
+
+    const cancelDraftOrder = async (orderId: string) => {
+        try {
+            await axios.delete(`${API_URL}/orders/drafts/${orderId}`);
+            await fetchData();
+        } catch (err) {
+            console.error('Error canceling draft order:', err);
+            throw err;
+        }
+    };
+
     const fetchData = useCallback(async () => {
         if (!token) return;
         setIsLoading(true);
         try {
             // Fetch products independently so a failure in orders/staff/customers
             // does NOT prevent the product list from loading
-            const [pRes, oRes, sRes, cRes, iRes] = await Promise.allSettled([
+            const [pRes, oRes, sRes, cRes, iRes, dRes] = await Promise.allSettled([
                 axios.get(`${API_URL}/inventory/products`),
                 axios.get(`${API_URL}/orders`),
                 axios.get(`${API_URL}/staff`),
                 axios.get(`${API_URL}/customers`),
                 axios.get(`${API_URL}/integrations`),
+                axios.get(`${API_URL}/orders/drafts`),
             ]);
 
             if (pRes.status === 'fulfilled') setProducts(pRes.value.data);
@@ -123,6 +173,9 @@ export const useDashboardData = () => {
 
             if (iRes.status === 'fulfilled') setIntegrations(iRes.value.data);
             else console.error('Integrations fetch failed:', iRes.reason);
+
+            if (dRes.status === 'fulfilled') setDraftOrders(dRes.value.data);
+            else console.error('Draft orders fetch failed:', dRes.reason);
 
         } finally {
             setIsLoading(false);
@@ -163,6 +216,7 @@ export const useDashboardData = () => {
     return {
         products,
         orders,
+        draftOrders,
         staff,
         customers,
         integrations,
@@ -170,11 +224,15 @@ export const useDashboardData = () => {
         refresh: fetchData,
         refreshProducts: fetchProducts,
         fetchIntegrations,
+        fetchDraftOrders,
         createIntegration,
         deleteIntegration,
         fetchUnmappedTransactions,
         mapTerminalTransaction,
         handleManualPayment,
-        handleCreateOrder
+        handleCreateOrder,
+        createDraftOrder,
+        lockDraftOrder,
+        cancelDraftOrder
     };
 };

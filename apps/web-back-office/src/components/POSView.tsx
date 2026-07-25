@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History, Plus, X, Minus, Package } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History, Plus, X, Minus, Package, Clock } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { API_URL, WS_URL } from '../lib/apiConfig';
@@ -8,7 +8,7 @@ import { API_URL, WS_URL } from '../lib/apiConfig';
 
 
 
-export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) => {
+export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, refresh, resumedDraft }: any) => {
     const [cart, setCart] = useState<any[]>([]);
     const [search, setSearch] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
@@ -21,6 +21,25 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
     const [customAlert, setCustomAlert] = useState<{ title?: string; message: string } | null>(null);
     const [customConfirm, setCustomConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [activeTab, setActiveTab] = useState<'products' | 'cart'>('products');
+    const [isSavingDraft, setIsSavingDraft] = useState(false);
+    const [isDraftGuardOpen, setIsDraftGuardOpen] = useState(false);
+
+    // Pre-populate cart if a draft order was resumed
+    useEffect(() => {
+        if (resumedDraft && resumedDraft.items && resumedDraft.items.length > 0) {
+            const draftCart = resumedDraft.items.map((item: any) => ({
+                id: item.product?.id || item.productId,
+                name: item.product?.name || item.name || 'Product',
+                price: Number(item.price),
+                quantity: item.quantity,
+                vipPrice: item.product?.vipPrice
+            }));
+            setCart(draftCart);
+            if (resumedDraft.customer) {
+                setSelectedCustomer(resumedDraft.customer);
+            }
+        }
+    }, [resumedDraft]);
 
     // Terminal push & mapping states
     const [isCardTransferSelectorOpen, setIsCardTransferSelectorOpen] = useState(false);
@@ -413,6 +432,47 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
         }
     };
 
+    const handleSaveDraft = async () => {
+        if (cart.length === 0) return;
+        setIsSavingDraft(true);
+        try {
+            const orderData = {
+                items: cart.map(item => ({
+                    productId: item.id,
+                    quantity: item.quantity,
+                    price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price)
+                })),
+                totalAmount: total,
+                paymentMethod,
+                paymentStatus: 'DRAFT',
+                customerId: selectedCustomer?.id,
+                cashierId: user?.id,
+                storeId: 'test-store-1'
+            };
+
+            if (createDraftOrder) {
+                await createDraftOrder(orderData);
+            } else if (onSubmitOrder) {
+                await onSubmitOrder(orderData);
+            }
+
+            setCart([]);
+            setSelectedCustomer(null);
+            setCustomAlert({
+                title: "Order Drafted",
+                message: "Current order has been saved as a Draft. You can resume and complete payment anytime from Order History → Hold / Drafts."
+            });
+        } catch (err: any) {
+            console.error('Failed to save draft order:', err);
+            setCustomAlert({
+                title: "Draft Failed",
+                message: err?.response?.data?.message || err?.message || "Failed to save draft order."
+            });
+        } finally {
+            setIsSavingDraft(false);
+        }
+    };
+
     const handleCustomerAdded = async (newCustomer: any) => {
         if (refresh) {
             await refresh();
@@ -763,7 +823,7 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
                             </div>
                             Active Cart
                         </h3>
-                        <button onClick={() => setCart([])} className="p-2 hover:bg-red-50 rounded-xl text-red-500 transition-colors">
+                        <button onClick={() => cart.length > 0 ? setIsDraftGuardOpen(true) : setCart([])} className="p-2 hover:bg-red-50 rounded-xl text-red-500 transition-colors" title="Clear/Draft Cart">
                             <Trash2 size={18} />
                         </button>
                     </div>
@@ -881,21 +941,77 @@ export const POSView = ({ products, customers, onSubmitOrder, refresh }: any) =>
                         </div>
                     )}
 
-                    <div className="flex justify-between items-end gap-4">
+                    <div className="flex justify-between items-end gap-3">
                         <div className="flex flex-col min-w-0">
                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Grand Total</span>
                             <span className="text-2xl md:text-3xl font-black text-gray-900 tracking-tighter truncate">₦{total.toLocaleString()}</span>
                         </div>
-                        <button
-                            onClick={handleCheckout}
-                            disabled={cart.length === 0}
-                            className="bg-[#2D7A3E] text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest hover:bg-[#235E30] disabled:bg-gray-200 disabled:text-gray-400 transition-all shadow-2xl shadow-green-900/10 active:scale-95 flex items-center space-x-2 flex-shrink-0"
-                        >
-                            <span>Checkout</span>
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleSaveDraft}
+                                disabled={cart.length === 0 || isSavingDraft}
+                                className="bg-amber-500 text-white px-4 py-3.5 rounded-2xl font-black uppercase text-xs tracking-wider hover:bg-amber-600 disabled:bg-gray-200 disabled:text-gray-400 transition-all active:scale-95 flex items-center gap-1.5 shadow-md"
+                                title="Draft/Hold order for payment later"
+                            >
+                                <Clock size={16} />
+                                <span>Draft</span>
+                            </button>
+                            <button
+                                onClick={handleCheckout}
+                                disabled={cart.length === 0}
+                                className="bg-[#2D7A3E] text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest hover:bg-[#235E30] disabled:bg-gray-200 disabled:text-gray-400 transition-all shadow-2xl shadow-green-900/10 active:scale-95 flex items-center space-x-2 flex-shrink-0"
+                            >
+                                <span>Checkout</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            {/* Draft Order Exit Guard Modal */}
+            {isDraftGuardOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsDraftGuardOpen(false)} />
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-5 text-center">
+                        <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-100">
+                            <Clock size={28} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-gray-900 tracking-tight">Active Cart Items Found</h3>
+                            <p className="text-xs text-gray-500 font-bold mt-2 leading-relaxed">
+                                You have active items in your cart. Would you like to save this order as a <strong>DRAFT</strong> to resume later, or discard the active cart?
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-2 pt-2">
+                            <button
+                                onClick={async () => {
+                                    setIsDraftGuardOpen(false);
+                                    await handleSaveDraft();
+                                }}
+                                className="w-full bg-[#2D7A3E] text-white py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all shadow-lg shadow-green-900/10 active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <Clock size={16} /> Save as Draft Order
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setIsDraftGuardOpen(false);
+                                    setCart([]);
+                                    setSelectedCustomer(null);
+                                }}
+                                className="w-full bg-red-50 text-red-600 border border-red-100 py-3 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+                            >
+                                <Trash2 size={16} /> Clear / Discard Order
+                            </button>
+                            <button
+                                onClick={() => setIsDraftGuardOpen(false)}
+                                className="w-full bg-gray-100 text-gray-600 py-3 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all"
+                            >
+                                Stay on POS
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

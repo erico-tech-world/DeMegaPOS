@@ -180,3 +180,63 @@ export async function updateOrderPaymentStatus(id: string, paymentStatus: string
     })
     return getOrderById(id)
 }
+
+export async function getDraftOrders(storeId?: string, cashierId?: string) {
+    return prisma.order.findMany({
+        where: {
+            storeId: storeId ? storeId : undefined,
+            cashierId: cashierId ? cashierId : undefined,
+            paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+        },
+        include: {
+            items: {
+                include: {
+                    product: true
+                }
+            },
+            customer: true,
+            cashier: true,
+            splitPayments: true,
+            terminalTransaction: true
+        },
+        orderBy: {
+            createdAt: 'desc'
+        }
+    })
+}
+
+export async function lockDraftOrder(id: string) {
+    await prisma.order.update({
+        where: { id },
+        data: { paymentStatus: 'IN_CHECKOUT' },
+    })
+    return getOrderById(id)
+}
+
+export async function cancelDraftOrder(id: string) {
+    const order = await prisma.order.findUnique({
+        where: { id },
+        include: { items: true }
+    })
+
+    if (!order) {
+        throw new Error('Draft order not found')
+    }
+
+    // Restore product stock upon canceling draft
+    if (order.items && order.items.length > 0) {
+        for (const item of order.items) {
+            if (item.productId) {
+                await prisma.product.update({
+                    where: { id: item.productId },
+                    data: { stock: { increment: item.quantity } }
+                }).catch(() => {})
+            }
+        }
+    }
+
+    return prisma.order.delete({
+        where: { id }
+    })
+}
+
