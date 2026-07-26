@@ -19,7 +19,7 @@ export const createOrderSchema = z.object({
     paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'WALLET', 'SPLIT', 'CREDIT']),
     paymentStatus: z.string().optional(),
     splitPayments: z.array(splitPaymentSchema).optional(),
-    dueDate: z.string().datetime().optional(), // For credit sales
+    dueDate: z.string().optional(), // For credit sales (ISO date string)
 });
 export const orderResponseSchema = z.object({
     id: z.string(),

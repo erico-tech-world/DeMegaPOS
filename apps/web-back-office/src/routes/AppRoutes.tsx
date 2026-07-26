@@ -45,6 +45,7 @@ const AppRoutes = () => {
                             orders={dashboardData.orders}
                             staff={dashboardData.staff}
                             isLoading={dashboardData.isLoading}
+                            resetFinancials={dashboardData.resetFinancials}
                         />
                     } />
 
@@ -69,8 +70,12 @@ const AppRoutes = () => {
                     <Route path="/orders" element={
                         <OrdersPage
                             orders={dashboardData.orders}
+                            draftOrders={dashboardData.draftOrders}
                             isLoading={dashboardData.isLoading}
                             refresh={dashboardData.refresh}
+                            fetchDraftOrders={dashboardData.fetchDraftOrders}
+                            lockDraftOrder={dashboardData.lockDraftOrder}
+                            cancelDraftOrder={dashboardData.cancelDraftOrder}
                         />
                     } />
 

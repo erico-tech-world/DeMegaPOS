@@ -130,7 +130,13 @@ export async function createOrder(data: CreateOrderInput) {
 
 export async function getOrders(storeId?: string) {
     return prisma.order.findMany({
-        where: storeId ? { storeId } : undefined,
+        where: {
+            ...(storeId ? { storeId } : {}),
+            // Exclude DRAFT and IN_CHECKOUT orders — those belong to the Hold/Draft bin
+            NOT: {
+                paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+            }
+        },
         include: {
             items: {
                 include: {
@@ -240,3 +246,48 @@ export async function cancelDraftOrder(id: string) {
     })
 }
 
+/**
+ * Wipe/reset all financial records (non-draft orders) for a store.
+ * This is a destructive admin-only operation — use with caution.
+ * It deletes: TerminalTransaction records, SplitPayment records, OrderItem records,
+ * and then the Orders themselves for the given storeId / tenant.
+ */
+export async function resetFinancialRecords(storeId?: string) {
+    const orderWhere = {
+        ...(storeId ? { storeId } : {}),
+        NOT: {
+            paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+        }
+    }
+
+    // Fetch order IDs to delete related data
+    const orders = await prisma.order.findMany({
+        where: orderWhere,
+        select: { id: true }
+    })
+    const orderIds = orders.map(o => o.id)
+
+    if (orderIds.length === 0) {
+        return { deleted: 0, message: 'No records to reset.' }
+    }
+
+    // Delete dependent records first (FK constraints)
+    await prisma.terminalTransaction.deleteMany({
+        where: { orderId: { in: orderIds } }
+    })
+
+    await prisma.splitPayment.deleteMany({
+        where: { orderId: { in: orderIds } }
+    })
+
+    await prisma.orderItem.deleteMany({
+        where: { orderId: { in: orderIds } }
+    })
+
+    // Finally delete the orders
+    const { count } = await prisma.order.deleteMany({
+        where: orderWhere
+    })
+
+    return { deleted: count, message: `Successfully reset ${count} financial record(s).` }
+}

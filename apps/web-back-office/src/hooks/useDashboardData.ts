@@ -213,6 +213,20 @@ export const useDashboardData = () => {
         }
     };
 
+    const resetFinancials = async (storeId?: string) => {
+        try {
+            const res = await axios.post(`${API_URL}/orders/reset-financials`, {
+                storeId,
+                confirm: true
+            });
+            await fetchData();
+            return res.data;
+        } catch (err) {
+            console.error('Error resetting financials:', err);
+            throw err;
+        }
+    };
+
     return {
         products,
         orders,
@@ -233,6 +247,7 @@ export const useDashboardData = () => {
         handleCreateOrder,
         createDraftOrder,
         lockDraftOrder,
-        cancelDraftOrder
+        cancelDraftOrder,
+        resetFinancials
     };
 };

@@ -1,13 +1,13 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Download, Calendar, ArrowRight, User as UserIcon, Tag, CreditCard, ChevronDown, X, Package, Clock, Play, Trash2, Lock } from 'lucide-react';
+import { Search, Download, Calendar, ArrowRight, User as UserIcon, Tag, CreditCard, ChevronDown, X, Package, Clock, Play, Trash2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
 
 interface OrdersPageProps {
     orders: any[];
     draftOrders?: any[];
     isLoading: boolean;
     refresh?: () => void;
+    fetchDraftOrders?: () => Promise<void>;
     cancelDraftOrder?: (id: string) => Promise<void>;
     lockDraftOrder?: (id: string) => Promise<any>;
 }
@@ -18,7 +18,6 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     const [mainTab, setMainTab] = useState<'all' | 'drafts'>('all'); // 'all' or 'drafts'
     const location = useLocation();
     const navigate = useNavigate();
-    const { user } = useAuth();
     const queryParams = new URLSearchParams(location.search);
     const highlightId = queryParams.get('id');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { createOrderSchema, orderResponseSchema } from './schemas.js'
-import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus, getDraftOrders, lockDraftOrder, cancelDraftOrder } from './service.js'
+import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus, getDraftOrders, lockDraftOrder, cancelDraftOrder, resetFinancialRecords } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 export default async function orderRoutes(app: FastifyInstance) {
@@ -147,5 +147,23 @@ export default async function orderRoutes(app: FastifyInstance) {
             return { success: true }
         }
     )
-}
 
+    // Admin-only: Reset all financial records (non-draft orders)
+    server.post(
+        '/reset-financials',
+        {
+            schema: {
+                body: z.object({
+                    storeId: z.string().optional(),
+                    confirm: z.literal(true),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { storeId } = request.body as { storeId?: string; confirm: true }
+            const result = await resetFinancialRecords(storeId)
+            app.broadcast('FINANCIAL_RESET', { storeId, deleted: result.deleted })
+            return reply.send(result)
+        }
+    )
+}

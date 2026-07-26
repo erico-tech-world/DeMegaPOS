@@ -118,7 +118,13 @@ export async function createOrder(data) {
 }
 export async function getOrders(storeId) {
     return prisma.order.findMany({
-        where: storeId ? { storeId } : undefined,
+        where: {
+            ...(storeId ? { storeId } : {}),
+            // Exclude DRAFT and IN_CHECKOUT orders — those belong to the Hold/Draft bin
+            NOT: {
+                paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+            }
+        },
         include: {
             items: {
                 include: {
@@ -127,7 +133,8 @@ export async function getOrders(storeId) {
             },
             customer: true,
             cashier: true,
-            splitPayments: true
+            splitPayments: true,
+            terminalTransaction: true
         },
         orderBy: {
             createdAt: 'desc'
@@ -145,7 +152,8 @@ export async function getOrderById(id) {
             },
             customer: true,
             cashier: true,
-            splitPayments: true
+            splitPayments: true,
+            terminalTransaction: true
         }
     });
 }
@@ -162,4 +170,95 @@ export async function updateOrderPaymentStatus(id, paymentStatus) {
         data: { paymentStatus },
     });
     return getOrderById(id);
+}
+export async function getDraftOrders(storeId, cashierId) {
+    return prisma.order.findMany({
+        where: {
+            storeId: storeId ? storeId : undefined,
+            cashierId: cashierId ? cashierId : undefined,
+            paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+        },
+        include: {
+            items: {
+                include: {
+                    product: true
+                }
+            },
+            customer: true,
+            cashier: true,
+            splitPayments: true,
+            terminalTransaction: true
+        },
+        orderBy: {
+            createdAt: 'desc'
+        }
+    });
+}
+export async function lockDraftOrder(id) {
+    await prisma.order.update({
+        where: { id },
+        data: { paymentStatus: 'IN_CHECKOUT' },
+    });
+    return getOrderById(id);
+}
+export async function cancelDraftOrder(id) {
+    const order = await prisma.order.findUnique({
+        where: { id },
+        include: { items: true }
+    });
+    if (!order) {
+        throw new Error('Draft order not found');
+    }
+    // Restore product stock upon canceling draft
+    if (order.items && order.items.length > 0) {
+        for (const item of order.items) {
+            if (item.productId) {
+                await prisma.product.update({
+                    where: { id: item.productId },
+                    data: { stock: { increment: item.quantity } }
+                }).catch(() => { });
+            }
+        }
+    }
+    return prisma.order.delete({
+        where: { id }
+    });
+}
+/**
+ * Wipe/reset all financial records (non-draft orders) for a store.
+ * This is a destructive admin-only operation — use with caution.
+ * It deletes: TerminalTransaction records, SplitPayment records, OrderItem records,
+ * and then the Orders themselves for the given storeId / tenant.
+ */
+export async function resetFinancialRecords(storeId) {
+    const orderWhere = {
+        ...(storeId ? { storeId } : {}),
+        NOT: {
+            paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+        }
+    };
+    // Fetch order IDs to delete related data
+    const orders = await prisma.order.findMany({
+        where: orderWhere,
+        select: { id: true }
+    });
+    const orderIds = orders.map(o => o.id);
+    if (orderIds.length === 0) {
+        return { deleted: 0, message: 'No records to reset.' };
+    }
+    // Delete dependent records first (FK constraints)
+    await prisma.terminalTransaction.deleteMany({
+        where: { orderId: { in: orderIds } }
+    });
+    await prisma.splitPayment.deleteMany({
+        where: { orderId: { in: orderIds } }
+    });
+    await prisma.orderItem.deleteMany({
+        where: { orderId: { in: orderIds } }
+    });
+    // Finally delete the orders
+    const { count } = await prisma.order.deleteMany({
+        where: orderWhere
+    });
+    return { deleted: count, message: `Successfully reset ${count} financial record(s).` };
 }

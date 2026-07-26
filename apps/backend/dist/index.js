@@ -1,5 +1,3 @@
-import * as dotenv from 'dotenv';
-dotenv.config({ override: true }); // Load apps/backend/.env — CWD is apps/backend/ when run via turbo
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
@@ -7,9 +5,10 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import websocket from '@fastify/websocket';
 import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod';
+import * as dotenv from 'dotenv';
+dotenv.config();
 const server = Fastify({
     logger: true,
-    bodyLimit: 10485760, // Allow up to 10MB payloads for Base64 image uploads
 });
 server.setValidatorCompiler(validatorCompiler);
 server.setSerializerCompiler(serializerCompiler);
@@ -37,12 +36,9 @@ async function main() {
     await server.register(websocket);
     server.get('/ws', { websocket: true }, (connection, req) => {
         console.log('New WS Client connected');
-        const socket = connection?.socket || connection?.raw || connection;
-        if (socket && typeof socket.on === 'function') {
-            socket.on('message', (message) => {
-                console.log('WS Message received:', message.toString());
-            });
-        }
+        connection.socket.on('message', (message) => {
+            console.log('WS Message received:', message.toString());
+        });
     });
     // Auth, Tenant, Inventory, Orders, Webhook & Payment Routes
     const authRoutes = await import('./modules/auth/routes.js');
@@ -54,6 +50,7 @@ async function main() {
     const paymentRoutes = await import('./modules/payments/routes.js');
     const syncRoutes = await import('./modules/sync/routes.js');
     const customerRoutes = await import('./modules/customers/routes.js');
+    const integrationRoutes = await import('./modules/integrations/routes.js');
     server.register(authRoutes.default, { prefix: '/auth' });
     server.register(tenantRoutes.default, { prefix: '/tenants' });
     server.register(inventoryRoutes.default, { prefix: '/inventory' });
@@ -63,6 +60,7 @@ async function main() {
     server.register(paymentRoutes.default, { prefix: '/payments' });
     server.register(syncRoutes.default, { prefix: '/sync' });
     server.register(customerRoutes.default, { prefix: '/customers' });
+    server.register(integrationRoutes.default, { prefix: '/integrations' });
     // Helper for broadcasting WebSocket events safely
     server.decorate('broadcast', (event, payload) => {
         if (!server.websocketServer)
@@ -83,7 +81,7 @@ async function main() {
         if (request.method === 'OPTIONS') {
             return;
         }
-        if (request.url.startsWith('/auth') || request.url.startsWith('/docs') || request.url === '/health' || request.url.startsWith('/ws') || request.url.startsWith('/payments/webhook')) {
+        if (request.url.startsWith('/auth') || request.url.startsWith('/docs') || request.url === '/health' || request.url.startsWith('/ws')) {
             return;
         }
         try {
