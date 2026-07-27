@@ -1,7 +1,7 @@
 {
     "version": 2,
-    "buildCommand": "pnpm --filter web-back-office build",
-    "outputDirectory": "apps/web-back-office/dist",
+    "buildCommand": "pnpm --filter web-back-office build && cp -r apps/web-back-office/dist ./dist",
+    "outputDirectory": "dist",
     "installCommand": "pnpm install --frozen-lockfile",
     "framework": null,
     "rewrites": [
