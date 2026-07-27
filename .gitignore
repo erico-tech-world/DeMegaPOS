@@ -21,7 +21,7 @@ node_modules/
 *.tmp
 
 # Build outputs and caches
-.dist/
+dist/
 build/
 coverage/
 .next/
