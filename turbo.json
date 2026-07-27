@@ -1,5 +1,8 @@
 {
     "$schema": "https://turbo.build/schema.json",
+    "globalEnv": [
+        "VERCEL_TARGET_ENV"
+    ],
     "tasks": {
         "build": {
             "dependsOn": [
@@ -8,8 +11,13 @@
             "outputs": [
                 ".next/**",
                 "dist/**",
+                "apps/*/dist/**",
                 "node_modules/.prisma/**",
                 "node_modules/@prisma/client/**"
+            ],
+            "env": [
+                "DATABASE_URL",
+                "JWT_SECRET"
             ]
         },
         "lint": {
