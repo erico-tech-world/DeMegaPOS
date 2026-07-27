@@ -1,9 +1,9 @@
 {
     "version": 2,
+    "framework": "vite",
     "buildCommand": "pnpm --filter web-back-office build",
     "outputDirectory": "dist",
     "installCommand": "pnpm install --frozen-lockfile",
-    "framework": null,
     "rewrites": [
         {
             "source": "/(.*)",

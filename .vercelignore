@@ -1,0 +1,3 @@
+apps/backend
+apps/mobile-pos
+packages/db/prisma
