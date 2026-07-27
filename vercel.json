@@ -1,6 +1,5 @@
 {
     "version": 2,
-    "framework": "vite",
     "buildCommand": "turbo run build --filter=web-back-office",
     "outputDirectory": "apps/web-back-office/dist",
     "installCommand": "pnpm install --frozen-lockfile",
