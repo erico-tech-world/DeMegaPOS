@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "postbuild": "node -e \"const{cpSync}=require('fs');cpSync('dist','../../dist',{recursive:true,force:true});console.log('Copied dist to repo root for Vercel')\"",
     "lint": "eslint .",
     "preview": "vite preview"
   },
