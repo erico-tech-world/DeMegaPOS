@@ -19,7 +19,13 @@ export const staffResponseSchema = z.object({
     phone: z.string().nullable(),
     name: z.string().nullable(),
     role: z.string(),
+    staffCode: z.string().nullable().optional(),
     branchId: z.string().nullable(),
+    status: z.string().optional(),
+    isActive: z.boolean().optional(),
+    onboardedAt: z.date().nullable().optional(),
+    terminatedAt: z.date().nullable().optional(),
+    terminationReason: z.string().nullable().optional(),
     permissions: z.any().nullable(),
 });
 export const updateStaffSchema = z.object({

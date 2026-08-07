@@ -24,9 +24,9 @@ export async function createStaffInvitation(data, tenantId) {
             expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
         },
     });
-    // 4. Build the accept-invite URL
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    const inviteUrl = `${frontendUrl}/auth/accept-invite?token=${token}`;
+    // 4. Build the accept-invite URL — dynamic resolution (no hardcoded localhost)
+    const baseUrl = process.env.APP_BASE_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+    const inviteUrl = `${baseUrl}/auth/accept-invite?token=${token}`;
     // 5. Dispatch notification (email or SMS — whichever contact was provided)
     const roleName = data.role.replace(/_/g, ' ');
     let emailSent = false;
@@ -72,7 +72,7 @@ export async function createStaffInvitation(data, tenantId) {
 // ---------------------------------------------------------------------------
 // Accept Invitation — called by the /auth/accept-invite endpoint
 // ---------------------------------------------------------------------------
-export async function acceptInvitation(token, name, password) {
+export async function acceptInvitation(token, name, password, pin) {
     const invitation = await prisma.staffInvitation.findUnique({ where: { token } });
     if (!invitation)
         throw new Error('INVALID_TOKEN');
@@ -80,10 +80,21 @@ export async function acceptInvitation(token, name, password) {
         throw new Error('ALREADY_ACCEPTED');
     if (invitation.expiresAt < new Date())
         throw new Error('TOKEN_EXPIRED');
-    // Create a hashed password
     const bcrypt = await import('bcrypt');
     const hashedPassword = await bcrypt.hash(password, 10);
-    // Create the user account and mark the invitation as accepted (sequential — PgBouncer incompatible with interactive tx)
+    // Generate unique staffCode: EMP-YYYY-NNN
+    const year = new Date().getFullYear();
+    const countThisYear = await prisma.user.count({
+        where: { staffCode: { startsWith: `EMP-${year}-` } }
+    });
+    const staffCode = `EMP-${year}-${String(countThisYear + 1).padStart(3, '0')}`;
+    let hashedPin;
+    if (pin) {
+        if (pin.length < 4 || pin.length > 6)
+            throw new Error('PIN must be 4–6 digits');
+        hashedPin = await bcrypt.hash(pin, 10);
+    }
+    // Create the user account and mark the invitation as accepted
     const user = await prisma.user.create({
         data: {
             name,
@@ -93,6 +104,11 @@ export async function acceptInvitation(token, name, password) {
             role: invitation.role,
             tenantId: invitation.tenantId,
             branchId: invitation.branchId,
+            staffCode,
+            pin: hashedPin,
+            status: 'ACTIVE',
+            isActive: true,
+            onboardedAt: new Date(),
         },
     });
     await prisma.staffInvitation.update({
@@ -113,6 +129,18 @@ export async function updatePermissions(userId, permissions) {
     return prisma.user.update({
         where: { id: userId },
         data: { permissions }
+    });
+}
+export async function updateStaffStatus(userId, tenantId, status, reason) {
+    const now = new Date();
+    return prisma.user.update({
+        where: { id: userId, tenantId },
+        data: {
+            status,
+            isActive: false,
+            terminationReason: reason,
+            terminatedAt: now,
+        },
     });
 }
 export async function updateStaff(userId, tenantId, data) {

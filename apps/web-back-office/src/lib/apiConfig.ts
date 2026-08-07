@@ -1,3 +1,5 @@
+import axios from 'axios';
+
 /**
  * Dynamic API and WebSocket URL Configurator
  * 
@@ -47,3 +49,33 @@ export const getWsUrl = (): string => {
 
 export const API_URL = getApiUrl();
 export const WS_URL = getWsUrl();
+
+// ─── Global Axios 403 Interceptor ─────────────────────────────────────────────
+// When the backend returns HTTP 403 (access revoked / account terminated/suspended),
+// immediately clear all session tokens and redirect to the login page.
+
+axios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (
+            error?.response?.status === 403 &&
+            error?.response?.data?.message?.includes('Access Revoked')
+        ) {
+            // Clear all auth tokens from localStorage
+            localStorage.removeItem('token');
+            localStorage.removeItem('demega_user');
+            // Clear any per-user theme keys (preserve pattern)
+            Object.keys(localStorage)
+                .filter((k) => k.startsWith('demega_theme_'))
+                .forEach((k) => localStorage.removeItem(k));
+
+            console.warn('[SECURITY] 403 Access Revoked — session cleared, redirecting to login.');
+
+            // Force redirect — use window.location to bypass React Router
+            if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth')) {
+                window.location.href = '/auth/login?revoked=1';
+            }
+        }
+        return Promise.reject(error);
+    }
+);

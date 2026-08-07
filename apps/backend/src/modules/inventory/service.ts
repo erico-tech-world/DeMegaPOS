@@ -1,14 +1,72 @@
 import { prisma } from '../../lib/prisma.js'
 import { CreateCategoryInput, CreateProductInput, UpdateProductInput, StockAdjustmentInput } from './schemas.js'
 
-export async function createCategory(data: CreateCategoryInput & { tenantId: string }) {
+export async function createCategory(data: CreateCategoryInput & { tenantId: string; description?: string }) {
     return prisma.category.create({
         data,
     })
 }
 
 export async function getCategories(tenantId: string) {
-    return prisma.category.findMany({ where: { tenantId } })
+    const categories = await prisma.category.findMany({
+        where: { tenantId },
+        include: {
+            _count: {
+                select: { products: true }
+            }
+        },
+        orderBy: { name: 'asc' }
+    })
+    return categories.map(c => ({
+        id: c.id,
+        name: c.name,
+        description: (c as any).description || null,
+        productCount: c._count.products
+    }))
+}
+
+export async function updateCategory(id: string, tenantId: string, data: { name?: string; description?: string }) {
+    return prisma.category.update({
+        where: { id, tenantId },
+        data,
+    })
+}
+
+export async function transferCategoryItems(tenantId: string, productIds: string[], targetCategoryId: string) {
+    return prisma.product.updateMany({
+        where: { id: { in: productIds }, tenantId },
+        data: { categoryId: targetCategoryId }
+    })
+}
+
+export async function deleteCategory(id: string, tenantId: string, reassignToCategoryId?: string) {
+    const count = await prisma.product.count({ where: { categoryId: id, tenantId } })
+
+    if (count > 0) {
+        let fallbackId = reassignToCategoryId
+        if (!fallbackId) {
+            // Find or create 'Uncategorized' system category for this tenant
+            let uncategorized = await prisma.category.findFirst({
+                where: { name: 'Uncategorized', tenantId }
+            })
+            if (!uncategorized) {
+                uncategorized = await prisma.category.create({
+                    data: { name: 'Uncategorized', tenantId }
+                })
+            }
+            fallbackId = uncategorized.id
+        }
+
+        // Reassign items to fallback category
+        await prisma.product.updateMany({
+            where: { categoryId: id, tenantId },
+            data: { categoryId: fallbackId }
+        })
+    }
+
+    return prisma.category.delete({
+        where: { id, tenantId }
+    })
 }
 
 export async function createProduct(data: CreateProductInput & { tenantId: string }) {

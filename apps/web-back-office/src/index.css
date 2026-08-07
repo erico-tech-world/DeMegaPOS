@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* DeMega Brand Colors - Extracted from Logo */
 :root {
   /* Primary Brand Colors */

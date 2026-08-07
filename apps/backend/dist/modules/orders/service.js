@@ -262,3 +262,139 @@ export async function resetFinancialRecords(storeId) {
     });
     return { deleted: count, message: `Successfully reset ${count} financial record(s).` };
 }
+export async function refundOrder(orderId, authorizedBy, reason) {
+    const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: { include: { product: true } } }
+    });
+    if (!order)
+        throw new Error('Order not found');
+    if (order.paymentStatus !== 'SUCCESS' && order.paymentStatus !== 'PAID') {
+        throw new Error('Only completed (paid) orders can be refunded.');
+    }
+    // Reverse stock for each item
+    for (const item of order.items) {
+        if (item.variantId) {
+            await prisma.productVariant.update({
+                where: { id: item.variantId },
+                data: { stock: { increment: item.quantity } }
+            }).catch(() => { });
+        }
+        else if (item.productId) {
+            await prisma.product.update({
+                where: { id: item.productId },
+                data: { stock: { increment: item.quantity } }
+            }).catch(() => { });
+        }
+    }
+    // Mark order as REFUNDED
+    await prisma.order.update({
+        where: { id: orderId },
+        data: { paymentStatus: 'REFUNDED' }
+    });
+    // Log the refund activity & record in Refund database table
+    const storeRecord = await prisma.store.findUnique({ where: { id: order.storeId }, select: { tenantId: true } });
+    if (storeRecord) {
+        await prisma.refund.create({
+            data: {
+                orderId: order.id,
+                amount: order.totalAmount,
+                reason,
+                processedBy: authorizedBy,
+            }
+        }).catch((err) => console.error('[REFUND] Failed to create Refund record:', err));
+        await prisma.activityLog.create({
+            data: {
+                action: 'REFUND_ISSUED',
+                entity: 'Order',
+                entityId: orderId,
+                details: { reason, authorizedBy, amount: order.totalAmount.toString() },
+                userId: authorizedBy,
+                tenantId: storeRecord.tenantId,
+            }
+        }).catch(() => { });
+    }
+    return { success: true, orderId, amount: order.totalAmount.toString() };
+}
+export async function getAnalyticsData(storeId, tenantId, startDate, endDate) {
+    const now = endDate || new Date();
+    const start = startDate || new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const whereClause = {
+        paymentStatus: { in: ['SUCCESS', 'PAID'] },
+        createdAt: { gte: start, lte: now }
+    };
+    if (storeId)
+        whereClause.storeId = storeId;
+    if (tenantId && !storeId) {
+        whereClause.store = { tenantId };
+    }
+    const orders = await prisma.order.findMany({
+        where: whereClause,
+        include: {
+            items: { include: { product: { select: { name: true, costPrice: true } } } },
+            cashier: { select: { id: true, name: true } }
+        },
+        orderBy: { createdAt: 'asc' }
+    });
+    const totalRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
+    const totalCost = orders.reduce((sum, o) => sum + o.items.reduce((s, i) => s + (Number(i.product?.costPrice || 0) * i.quantity), 0), 0);
+    const netProfit = totalRevenue - totalCost;
+    const aov = orders.length > 0 ? totalRevenue / orders.length : 0;
+    // Daily revenue timeline
+    const dailyMap = {};
+    for (const order of orders) {
+        const day = order.createdAt.toISOString().split('T')[0];
+        dailyMap[day] = (dailyMap[day] || 0) + Number(order.totalAmount);
+    }
+    const dailyRevenue = Object.entries(dailyMap).map(([date, revenue]) => ({ date, revenue }));
+    // Payment method distribution
+    const methodMap = {};
+    for (const order of orders) {
+        const method = order.paymentMethod;
+        methodMap[method] = (methodMap[method] || 0) + 1;
+    }
+    const paymentMethods = Object.entries(methodMap).map(([method, count]) => ({ method, count }));
+    // Peak hours heatmap (0–23)
+    const hourMap = {};
+    for (const order of orders) {
+        const hour = new Date(order.createdAt).getHours();
+        hourMap[hour] = (hourMap[hour] || 0) + 1;
+    }
+    const peakHours = Array.from({ length: 24 }, (_, h) => ({ hour: h, count: hourMap[h] || 0 }));
+    // Top 10 products by revenue
+    const productMap = {};
+    for (const order of orders) {
+        for (const item of order.items) {
+            const key = item.productId;
+            if (!productMap[key])
+                productMap[key] = { name: item.product?.name || 'Unknown', revenue: 0, qty: 0 };
+            productMap[key].revenue += Number(item.price) * item.quantity;
+            productMap[key].qty += item.quantity;
+        }
+    }
+    const topProducts = Object.values(productMap)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+    // Staff leaderboard
+    const cashierMap = {};
+    for (const order of orders) {
+        if (!order.cashierId || !order.cashier)
+            continue;
+        const key = order.cashierId;
+        if (!cashierMap[key])
+            cashierMap[key] = { name: order.cashier.name || 'Unknown', sales: 0, revenue: 0 };
+        cashierMap[key].sales++;
+        cashierMap[key].revenue += Number(order.totalAmount);
+    }
+    const staffLeaderboard = Object.values(cashierMap)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10);
+    return {
+        summary: { totalRevenue, netProfit, aov, totalOrders: orders.length },
+        dailyRevenue,
+        paymentMethods,
+        peakHours,
+        topProducts,
+        staffLeaderboard,
+    };
+}

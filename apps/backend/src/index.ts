@@ -68,6 +68,7 @@ async function main() {
     const syncRoutes = await import('./modules/sync/routes.js')
     const customerRoutes = await import('./modules/customers/routes.js')
     const integrationRoutes = await import('./modules/integrations/routes.js')
+    const platformRoutes = await import('./modules/platform/routes.js')
 
     server.register(authRoutes.default, { prefix: '/auth' })
     server.register(tenantRoutes.default, { prefix: '/tenants' })
@@ -79,6 +80,7 @@ async function main() {
     server.register(syncRoutes.default, { prefix: '/sync' })
     server.register(customerRoutes.default, { prefix: '/customers' })
     server.register(integrationRoutes.default, { prefix: '/integrations' })
+    server.register(platformRoutes.default, { prefix: '/platform' })
 
     // Helper for broadcasting WebSocket events safely
     server.decorate('broadcast', (event: string, payload: any) => {
@@ -99,7 +101,7 @@ async function main() {
         if (request.method === 'OPTIONS') {
             return
         }
-        if (request.url.startsWith('/auth') || request.url.startsWith('/docs') || request.url === '/health' || request.url.startsWith('/ws')) {
+        if (request.url.startsWith('/auth') || request.url.startsWith('/platform') || request.url.startsWith('/docs') || request.url === '/health' || request.url.startsWith('/ws')) {
             return
         }
         try {

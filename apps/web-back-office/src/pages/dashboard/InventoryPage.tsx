@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { InventoryView, AddItemModal, EditItemModal, StockAdjustmentModal, CustomAlertModal, CustomConfirmModal } from '../../components/InventoryComponents';
+import { InventoryView, AddItemModal, EditItemModal, StockAdjustmentModal, CustomAlertModal, CustomConfirmModal, CategoriesView } from '../../components/InventoryComponents';
 import axios from 'axios';
 import { API_URL } from '../../lib/apiConfig';
-
+import { Package, Tag } from 'lucide-react';
 
 interface InventoryPageProps {
     products: any[];
@@ -12,6 +12,7 @@ interface InventoryPageProps {
 }
 
 const InventoryPage = ({ products, isLoading, refresh }: InventoryPageProps) => {
+    const [activeTab, setActiveTab] = useState<'products' | 'categories'>('products');
     const [searchQuery, setSearchQuery] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
@@ -57,38 +58,68 @@ const InventoryPage = ({ products, isLoading, refresh }: InventoryPageProps) => 
     };
 
     return (
-        <div className="animate-in fade-in duration-500">
-            <InventoryView
-                items={products}
-                isLoading={isLoading}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-                onAddItem={() => setIsAddModalOpen(true)}
-                onAdjustStock={handleAdjustStock}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                highlightId={highlightId}
-            />
+        <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Navigation Tabs */}
+            <div className="flex border-b border-gray-200 dark:border-gray-800 gap-2">
+                <button
+                    onClick={() => setActiveTab('products')}
+                    className={`flex items-center gap-2 px-6 py-3 font-black text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                        activeTab === 'products'
+                            ? 'border-[#2D7A3E] text-[#2D7A3E] dark:text-green-400 bg-green-50/50 dark:bg-green-950/30 rounded-t-2xl'
+                            : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                    }`}
+                >
+                    <Package size={16} /> Products Directory
+                </button>
+                <button
+                    onClick={() => setActiveTab('categories')}
+                    className={`flex items-center gap-2 px-6 py-3 font-black text-xs uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                        activeTab === 'categories'
+                            ? 'border-[#2D7A3E] text-[#2D7A3E] dark:text-green-400 bg-green-50/50 dark:bg-green-950/30 rounded-t-2xl'
+                            : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                    }`}
+                >
+                    <Tag size={16} /> Categories &amp; Tags
+                </button>
+            </div>
 
-            <AddItemModal
-                isOpen={isAddModalOpen}
-                onClose={() => setIsAddModalOpen(false)}
-                onSuccess={refresh}
-            />
+            {activeTab === 'products' ? (
+                <>
+                    <InventoryView
+                        items={products}
+                        isLoading={isLoading}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        onAddItem={() => setIsAddModalOpen(true)}
+                        onAdjustStock={handleAdjustStock}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        highlightId={highlightId}
+                    />
 
-            <EditItemModal
-                isOpen={isEditModalOpen}
-                onClose={() => setIsEditModalOpen(false)}
-                product={selectedProduct}
-                onSuccess={refresh}
-            />
+                    <AddItemModal
+                        isOpen={isAddModalOpen}
+                        onClose={() => setIsAddModalOpen(false)}
+                        onSuccess={refresh}
+                    />
 
-            <StockAdjustmentModal
-                isOpen={isAdjustModalOpen}
-                onClose={() => setIsAdjustModalOpen(false)}
-                product={selectedProduct}
-                onSuccess={refresh}
-            />
+                    <EditItemModal
+                        isOpen={isEditModalOpen}
+                        onClose={() => setIsEditModalOpen(false)}
+                        product={selectedProduct}
+                        onSuccess={refresh}
+                    />
+
+                    <StockAdjustmentModal
+                        isOpen={isAdjustModalOpen}
+                        onClose={() => setIsAdjustModalOpen(false)}
+                        product={selectedProduct}
+                        onSuccess={refresh}
+                    />
+                </>
+            ) : (
+                <CategoriesView products={products} refreshProducts={refresh} />
+            )}
 
             {customConfirm && (
                 <CustomConfirmModal

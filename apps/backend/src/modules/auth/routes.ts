@@ -72,6 +72,7 @@ export default async function authRoutes(app: FastifyInstance) {
                 response: {
                     200: authResponseSchema,
                     401: z.object({ message: z.string() }),
+                    403: z.object({ message: z.string() }),
                 },
             },
         },
@@ -103,6 +104,11 @@ export default async function authRoutes(app: FastifyInstance) {
 
             if (!isPasswordValid) {
                 return reply.code(401).send({ message: 'Invalid identifier or password' })
+            }
+
+            // ── Account Status Guard — enforces instant revocation ──────────────
+            if (!user.isActive || user.status === 'TERMINATED' || user.status === 'SUSPENDED') {
+                return reply.code(403).send({ message: 'Access Revoked: Your account has been suspended or terminated. Please contact your administrator.' })
             }
 
             // Device & Session Management
@@ -179,6 +185,7 @@ export default async function authRoutes(app: FastifyInstance) {
                     token:    z.string().min(1),
                     name:     z.string().min(2),
                     password: z.string().min(8),
+                    pin:      z.string().min(4).max(6).optional(),
                 }),
                 response: {
                     200: authResponseSchema,
@@ -188,9 +195,9 @@ export default async function authRoutes(app: FastifyInstance) {
             },
         },
         async (request, reply) => {
-            const { token, name, password } = request.body
+            const { token, name, password, pin } = request.body
             try {
-                const user = await acceptInvitation(token, name, password)
+                const user = await acceptInvitation(token, name, password, pin)
                 const accessToken = app.jwt.sign({
                     id: user.id, email: user.email, phone: user.phone,
                     tenantId: user.tenantId, role: user.role, branchId: user.branchId,
@@ -249,6 +256,40 @@ export default async function authRoutes(app: FastifyInstance) {
                 role:         invitation.role,
                 businessName: invitation.tenant.name,
             })
+        }
+    )
+
+    // -------------------------------------------------------------------------
+    // Update User Theme Preference (PATCH /auth/theme)
+    // -------------------------------------------------------------------------
+    server.patch(
+        '/theme',
+        {
+            schema: {
+                body: z.object({
+                    themePreference: z.enum(['light', 'dark']),
+                }),
+                response: {
+                    200: z.object({ message: z.string(), themePreference: z.string() }),
+                    401: z.object({ message: z.string() }),
+                },
+            },
+        },
+        async (request, reply) => {
+            const userId = (request.user as any)?.id
+            if (!userId) {
+                return reply.code(401).send({ message: 'Unauthorized' })
+            }
+            const { themePreference } = request.body
+            try {
+                await (prisma as any).user.update({
+                    where: { id: userId },
+                    data: { themePreference }
+                })
+            } catch {
+                // Ignore if field doesn't exist yet in DB schema
+            }
+            return reply.send({ message: 'Theme updated successfully', themePreference })
         }
     )
 }

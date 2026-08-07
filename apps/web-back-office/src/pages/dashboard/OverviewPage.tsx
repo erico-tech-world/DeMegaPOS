@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, ShoppingCart, AlertTriangle, Users, Package, RotateCcw, X, Loader2 } from 'lucide-react';
+import { TrendingUp, ShoppingCart, AlertTriangle, Users, Package, RotateCcw, X, Loader2, CalendarRange, Monitor, Archive, UserCircle, BarChart2, Settings as SettingsIcon } from 'lucide-react';
 import { StatCard, OrdersView } from '../../components/DashboardComponents';
 import { useAuth } from '../../context/AuthContext';
 
@@ -24,31 +24,59 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
     const todayStr = new Date().toDateString();
     const todaySales = Array.isArray(orders)
         ? orders
-              .filter((o: any) => o?.createdAt && new Date(o.createdAt).toDateString() === todayStr)
+              .filter((o: any) => {
+                  const isToday = o?.createdAt && new Date(o.createdAt).toDateString() === todayStr;
+                  const isPaid = o?.paymentStatus === 'SUCCESS' || o?.paymentStatus === 'PAID';
+                  // Cashiers see only their own shift
+                  if (!isElevated) return isToday && isPaid && o.cashierId === (user as any)?.id;
+                  return isToday && isPaid;
+              })
               .reduce((acc: number, o: any) => acc + Number(o?.totalAmount || 0), 0)
         : 0;
 
     // ── All-Time Sales (Admins/Managers only) ────────────────────────────────────
     const allTimeSales = Array.isArray(orders)
-        ? orders.reduce((acc: number, o: any) => acc + Number(o?.totalAmount || 0), 0)
+        ? orders
+              .filter((o: any) => o?.paymentStatus === 'SUCCESS' || o?.paymentStatus === 'PAID')
+              .reduce((acc: number, o: any) => acc + Number(o?.totalAmount || 0), 0)
         : 0;
+
+    // ── Monthly Sales (current calendar month, elevated roles only) ──────────────
+    const now = new Date();
+    const monthlySales = Array.isArray(orders)
+        ? orders
+              .filter((o: any) => {
+                  if (!o?.createdAt) return false;
+                  const isPaid = o?.paymentStatus === 'SUCCESS' || o?.paymentStatus === 'PAID';
+                  const d = new Date(o.createdAt);
+                  return isPaid && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+              })
+              .reduce((acc: number, o: any) => acc + Number(o?.totalAmount || 0), 0)
+        : 0;
+
+    // ── Cashier's Own Orders (shift-scoped) ──────────────────────────────────────
+    const cashierOrders = Array.isArray(orders)
+        ? orders.filter((o: any) => !isElevated ? o.cashierId === (user as any)?.id : true)
+        : [];
 
     const activeOrdersCount = Array.isArray(orders) ? orders.length : 0;
 
-    // ── FIFO Recent Activity: sort by createdAt descending, take top 7 ──────────
-    const recentActivity = Array.isArray(orders)
-        ? [...orders]
-              .sort((a: any, b: any) => {
-                  const dateA = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
-                  const dateB = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
-                  return dateB - dateA; // newest first
-              })
-              .slice(0, 7)
-        : [];
 
     const inventoryGlance = Array.isArray(products) ? products.slice(0, 7) : [];
     const lowStockCount = Array.isArray(products) ? products.filter((p: any) => (p?.stock || 0) < 10).length : 0;
     const staffCount = Array.isArray(staff) ? staff.length : 0;
+
+    // Scope recent activity for cashiers to their own orders only
+    const scopedOrders = isElevated ? orders : cashierOrders;
+    const recentActivity = Array.isArray(scopedOrders)
+        ? [...scopedOrders]
+              .sort((a: any, b: any) => {
+                  const dateA = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+                  const dateB = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+                  return dateB - dateA;
+              })
+              .slice(0, 7)
+        : [];
 
     // ── Reset Financials Modal State ─────────────────────────────────────────────
     const [showResetModal, setShowResetModal] = useState(false);
@@ -74,6 +102,17 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
         }
     };
 
+    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    const quickActions = [
+        { id: 'qa-pos', label: 'POS Terminal', icon: Monitor, path: '/pos', color: 'from-[#2D7A3E] to-emerald-600', light: 'bg-emerald-50 text-emerald-700', desc: 'Open cashier terminal' },
+        { id: 'qa-inventory', label: 'Inventory', icon: Package, path: '/inventory', color: 'from-blue-600 to-blue-700', light: 'bg-blue-50 text-blue-700', desc: 'Manage stock & products' },
+        { id: 'qa-orders', label: 'Order History', icon: Archive, path: '/orders', color: 'from-violet-600 to-violet-700', light: 'bg-violet-50 text-violet-700', desc: 'View all transactions' },
+        { id: 'qa-customers', label: 'Customers', icon: UserCircle, path: '/customers', color: 'from-orange-500 to-orange-600', light: 'bg-orange-50 text-orange-700', desc: 'CRM & client records' },
+        { id: 'qa-analytics', label: 'Analytics', icon: BarChart2, path: '/analytics', color: 'from-pink-500 to-rose-600', light: 'bg-pink-50 text-pink-700', desc: 'Revenue & insights' },
+        { id: 'qa-settings', label: 'Settings', icon: SettingsIcon, path: '/settings', color: 'from-gray-600 to-gray-700', light: 'bg-gray-100 text-gray-700', desc: 'Configure your system' },
+    ];
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
             {/* ── Stat Cards ── */}
@@ -86,6 +125,17 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
                     trend="up"
                     icon={TrendingUp}
                 />
+
+                {/* Monthly Sales (elevated roles only) */}
+                {isElevated && (
+                    <StatCard
+                        title={`${MONTH_NAMES[now.getMonth()]} Sales`}
+                        value={`₦${monthlySales.toLocaleString()}`}
+                        change=""
+                        trend="up"
+                        icon={CalendarRange}
+                    />
+                )}
 
                 {/* Total All-Time Sales (Admins/Managers only) */}
                 {isElevated && (
@@ -132,19 +182,45 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
                 />
             </div>
 
+            {/* ── Quick Actions Shortcut Bar ── */}
+            <div className="bg-white dark:bg-gray-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm p-6">
+                <h3 className="text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-5 flex items-center gap-2">
+                    <div className="w-1 h-4 bg-[#2D7A3E] rounded-full"></div>
+                    Quick Actions
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    {quickActions.map((qa) => (
+                        <button
+                            key={qa.id}
+                            id={qa.id}
+                            onClick={() => navigate(qa.path)}
+                            className="group flex flex-col items-center gap-3 p-4 rounded-2xl border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 hover:scale-[1.04] hover:shadow-lg hover:border-gray-200 dark:hover:border-gray-600 active:scale-95 transition-all duration-200"
+                        >
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${qa.light} group-hover:bg-gradient-to-br group-hover:${qa.color} group-hover:text-white transition-all duration-200`}>
+                                <qa.icon size={20} />
+                            </div>
+                            <div className="text-center">
+                                <div className="text-[11px] font-black text-gray-900 dark:text-gray-100 leading-none">{qa.label}</div>
+                                <div className="text-[9px] text-gray-400 dark:text-gray-500 mt-1 leading-tight">{qa.desc}</div>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </div>
+
             {/* ── Content Grid ── */}
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
                 {/* Recent Activity (FIFO — newest on top) */}
-                <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col">
                     <div className="flex justify-between items-center mb-8">
-                        <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-[#2D7A3E] rounded-full"></div>
                             Recent Activity
                         </h3>
                         {Array.isArray(orders) && orders.length >= 7 && (
                             <button
                                 onClick={() => navigate('/orders')}
-                                className="text-xs font-black text-[#2D7A3E] hover:underline uppercase tracking-widest"
+                                className="text-xs font-black text-[#2D7A3E] dark:text-green-400 hover:underline uppercase tracking-widest"
                             >
                                 See More
                             </button>
@@ -160,16 +236,16 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
                 </div>
 
                 {/* Inventory Glance */}
-                <div className="bg-white p-8 rounded-[2rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden flex flex-col">
                     <div className="flex justify-between items-center mb-8">
-                        <h3 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+                        <h3 className="text-xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-3">
                             <div className="w-1.5 h-6 bg-[#8B1538] rounded-full"></div>
                             Inventory Glance
                         </h3>
                         {products.length >= 7 && (
                             <button
                                 onClick={() => navigate('/inventory')}
-                                className="text-xs font-black text-[#8B1538] hover:underline uppercase tracking-widest"
+                                className="text-xs font-black text-[#8B1538] dark:text-rose-400 hover:underline uppercase tracking-widest"
                             >
                                 See More
                             </button>
@@ -180,20 +256,20 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
                             <div
                                 key={p.id}
                                 onClick={() => navigate(`/inventory?productId=${p.id}`)}
-                                className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl group hover:bg-white border border-transparent hover:border-gray-100 transition-all cursor-pointer"
+                                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-800/80 rounded-2xl group hover:bg-white dark:hover:bg-slate-800 border border-transparent hover:border-gray-100 dark:hover:border-gray-700 transition-all cursor-pointer"
                             >
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center font-bold text-gray-300 border border-gray-100 shadow-sm group-hover:text-[#8B1538] transition-colors">
+                                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-xl flex items-center justify-center font-bold text-gray-300 dark:text-gray-400 border border-gray-100 dark:border-gray-600 shadow-sm group-hover:text-[#8B1538] transition-colors">
                                         <Package size={20} />
                                     </div>
                                     <div>
-                                        <div className="font-black text-sm text-gray-900">{p.name}</div>
-                                        <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-none mt-1">Units: {p.stock}</div>
+                                        <div className="font-black text-sm text-gray-900 dark:text-white">{p.name}</div>
+                                        <div className="text-[10px] text-gray-400 dark:text-gray-400 font-bold uppercase tracking-widest leading-none mt-1">Units: {p.stock}</div>
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-sm font-black text-gray-900">₦{(Number(p?.price) || 0).toLocaleString()}</div>
-                                    <div className={`text-[8px] font-black uppercase mt-1 ${(p?.stock || 0) < 10 ? 'text-red-500' : 'text-green-500'}`}>
+                                    <div className="text-sm font-black text-gray-900 dark:text-white">₦{(Number(p?.price) || 0).toLocaleString()}</div>
+                                    <div className={`text-[8px] font-black uppercase mt-1 ${(p?.stock || 0) < 10 ? 'text-red-500 dark:text-red-400' : 'text-green-500 dark:text-green-400'}`}>
                                         {(p?.stock || 0) < 10 ? 'Low Stock' : 'Optimized'}
                                     </div>
                                 </div>
@@ -206,10 +282,10 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
             {/* ── Reset Financials Confirmation Modal ── */}
             {showResetModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md mx-4 p-8 space-y-6 relative">
+                    <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-md mx-4 p-8 space-y-6 relative border border-gray-100 dark:border-gray-800">
                         <button
                             onClick={() => setShowResetModal(false)}
-                            className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 transition-colors"
+                            className="absolute top-5 right-5 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
                         >
                             <X size={20} />
                         </button>
@@ -219,12 +295,12 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
                                 <RotateCcw size={28} className="text-red-500" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-black text-gray-900">Reset Financial Records</h2>
-                                <p className="text-sm text-gray-500 mt-1">This action is <span className="font-black text-red-500">permanent</span> and cannot be undone.</p>
+                                <h2 className="text-lg font-black text-gray-900 dark:text-white">Reset Financial Records</h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">This action is <span className="font-black text-red-500">permanent</span> and cannot be undone.</p>
                             </div>
                         </div>
 
-                        <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-sm text-red-700 font-medium">
+                        <div className="bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-800 rounded-2xl p-4 text-sm text-red-700 dark:text-red-400 font-medium">
                             ⚠️ This will permanently delete all completed order records, split payments, and terminal transaction logs. Draft orders will be preserved.
                         </div>
 
@@ -234,7 +310,7 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                <label className="block text-sm font-black text-gray-700">
+                                <label className="block text-sm font-black text-gray-700 dark:text-gray-300">
                                     Type <span className="font-black text-red-500 font-mono">RESET</span> to confirm:
                                 </label>
                                 <input
@@ -243,7 +319,7 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
                                     value={resetConfirmText}
                                     onChange={(e) => setResetConfirmText(e.target.value)}
                                     placeholder="RESET"
-                                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm font-bold font-mono focus:outline-none focus:border-red-400 transition-colors"
+                                    className="w-full border-2 border-gray-200 dark:border-gray-700 dark:bg-slate-800 dark:text-white rounded-xl px-4 py-3 text-sm font-bold font-mono focus:outline-none focus:border-red-400 transition-colors"
                                     autoFocus
                                 />
                                 <button

@@ -82,15 +82,15 @@ export const IntegrationsPage = () => {
     return (
         <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-300">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-xl shadow-gray-900/5">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-800 p-6 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-xl shadow-gray-900/5">
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-green-50 rounded-2xl flex items-center justify-center text-[#2D7A3E]">
                             <CreditCard size={22} />
                         </div>
-                        <h1 className="text-2xl font-black text-gray-900 tracking-tight">POS Terminal Integrations</h1>
+                        <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">POS Terminal Integrations</h1>
                     </div>
-                    <p className="text-xs font-bold text-gray-400">
+                    <p className="text-xs font-bold text-gray-400 dark:text-gray-500">
                         Connect and manage your Monnify and Moniepoint POS card terminals for automatic payment mapping.
                     </p>
                 </div>
@@ -111,13 +111,13 @@ export const IntegrationsPage = () => {
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Loading Integrations...</p>
                 </div>
             ) : integrations.length === 0 ? (
-                <div className="p-12 text-center bg-white rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                <div className="p-12 text-center bg-white dark:bg-slate-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm space-y-4">
                     <div className="w-16 h-16 bg-gray-50 text-gray-400 rounded-3xl flex items-center justify-center mx-auto border border-gray-100">
                         <Server size={32} />
                     </div>
                     <div className="space-y-1">
-                        <h3 className="text-lg font-black text-gray-900">No Terminal Devices Connected</h3>
-                        <p className="text-xs font-bold text-gray-400 max-w-md mx-auto">
+                        <h3 className="text-lg font-black text-gray-900 dark:text-white">No Terminal Devices Connected</h3>
+                        <p className="text-xs font-bold text-gray-400 dark:text-gray-500 max-w-md mx-auto">
                             Connect your Monnify or Moniepoint terminal API keys to enable live payment mapping during cashier checkout.
                         </p>
                     </div>
@@ -131,14 +131,14 @@ export const IntegrationsPage = () => {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {integrations.map((item) => (
-                        <div key={item.id} className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-900/5 p-6 space-y-5 hover:border-[#2D7A3E] transition-all">
+                        <div key={item.id} className="bg-white dark:bg-slate-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-xl shadow-gray-900/5 p-6 space-y-5 hover:border-[#2D7A3E] dark:hover:border-green-500 transition-all">
                             <div className="flex justify-between items-start">
                                 <div className="space-y-1">
                                     <span className="px-3 py-1 bg-green-50 text-[#2D7A3E] border border-green-100 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5">
                                         <CheckCircle size={12} />
                                         {item.provider}
                                     </span>
-                                    <h3 className="text-lg font-black text-gray-900 tracking-tight pt-1">{item.label || 'POS Terminal'}</h3>
+                                    <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight pt-1">{item.label || 'POS Terminal'}</h3>
                                 </div>
                                 <button
                                     onClick={() => handleDelete(item.id)}
@@ -149,19 +149,19 @@ export const IntegrationsPage = () => {
                                 </button>
                             </div>
 
-                            <div className="space-y-2 text-xs font-mono text-gray-600 bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                            <div className="space-y-2 text-xs font-mono text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-slate-700 p-4 rounded-2xl border border-gray-100 dark:border-gray-600">
                                 {item.contractCode && (
                                     <div className="flex justify-between">
-                                        <span className="text-gray-400 font-bold font-sans text-[10px] uppercase">Contract Code</span>
-                                        <span className="font-bold text-gray-800">{item.contractCode}</span>
+                                        <span className="text-gray-400 dark:text-gray-500 font-bold font-sans text-[10px] uppercase">Contract Code</span>
+                                        <span className="font-bold text-gray-800 dark:text-gray-200">{item.contractCode}</span>
                                     </div>
                                 )}
                                 <div className="flex justify-between">
-                                    <span className="text-gray-400 font-bold font-sans text-[10px] uppercase">Base Environment</span>
-                                    <span className="font-bold text-gray-800 truncate max-w-[160px]">{item.baseUrl || 'Sandbox'}</span>
+                                    <span className="text-gray-400 dark:text-gray-500 font-bold font-sans text-[10px] uppercase">Base Environment</span>
+                                    <span className="font-bold text-gray-800 dark:text-gray-200 truncate max-w-[160px]">{item.baseUrl || 'Sandbox'}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-gray-400 font-bold font-sans text-[10px] uppercase">Status</span>
+                                    <span className="text-gray-400 dark:text-gray-500 font-bold font-sans text-[10px] uppercase">Status</span>
                                     <span className={`font-black uppercase text-[10px] ${item.isActive ? 'text-green-600' : 'text-amber-600'}`}>
                                         {item.isActive ? 'Active' : 'Disabled'}
                                     </span>
@@ -183,11 +183,11 @@ export const IntegrationsPage = () => {
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsAddModalOpen(false)} />
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg relative z-[101] overflow-hidden animate-in zoom-in-95 p-6 md:p-8 space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                    <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-lg relative z-[101] overflow-hidden animate-in zoom-in-95 p-6 md:p-8 space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar border border-gray-100 dark:border-gray-800">
                         <div className="flex items-center justify-between border-b border-gray-100 pb-4">
                             <div>
-                                <h2 className="text-xl font-black text-gray-900 uppercase tracking-tight">Connect POS Terminal</h2>
-                                <p className="text-xs font-bold text-gray-400">Add API credentials for Monnify / Moniepoint terminal</p>
+                                <h2 className="text-xl font-black text-gray-900 dark:text-white uppercase tracking-tight">Connect POS Terminal</h2>
+                                <p className="text-xs font-bold text-gray-400 dark:text-gray-500">Add API credentials for Monnify / Moniepoint terminal</p>
                             </div>
                             <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-gray-50 rounded-xl text-gray-400">
                                 <X size={20} />

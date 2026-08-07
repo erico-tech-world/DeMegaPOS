@@ -128,15 +128,20 @@ export async function createOrder(data: CreateOrderInput) {
     return order
 }
 
-export async function getOrders(storeId?: string) {
+export async function getOrders(storeId?: string, tenantId?: string) {
+    const whereClause: any = {
+        NOT: {
+            paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+        }
+    }
+    if (storeId) {
+        whereClause.storeId = storeId
+    } else if (tenantId) {
+        whereClause.store = { tenantId }
+    }
+
     return prisma.order.findMany({
-        where: {
-            ...(storeId ? { storeId } : {}),
-            // Exclude DRAFT and IN_CHECKOUT orders — those belong to the Hold/Draft bin
-            NOT: {
-                paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
-            }
-        },
+        where: whereClause,
         include: {
             items: {
                 include: {
@@ -241,9 +246,121 @@ export async function cancelDraftOrder(id: string) {
         }
     }
 
+    // Delete dependent records first to prevent foreign key errors
+    await prisma.orderItem.deleteMany({ where: { orderId: id } })
+    await prisma.splitPayment.deleteMany({ where: { orderId: id } })
+    await prisma.terminalTransaction.deleteMany({ where: { orderId: id } }).catch(() => {})
+
     return prisma.order.delete({
         where: { id }
     })
+}
+
+export async function sendDigitalReceiptEmail(
+    orderId: string,
+    recipientEmail: string,
+    saveToCrm?: boolean,
+    customerId?: string
+) {
+    const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+            items: { include: { product: true } },
+            customer: true,
+            cashier: true,
+            store: { select: { name: true, tenant: { select: { name: true } } } }
+        }
+    })
+
+    if (!order) throw new Error('Order not found')
+
+    // Update customer CRM email if requested
+    if (saveToCrm && (customerId || order.customerId)) {
+        const targetCustId = customerId || order.customerId
+        if (targetCustId) {
+            await prisma.customer.update({
+                where: { id: targetCustId },
+                data: { email: recipientEmail }
+            }).catch((err) => console.error('[CRM] Failed to update customer email:', err))
+        }
+    }
+
+    const businessName = order.store?.tenant?.name || order.store?.name || 'DeMegaPOS'
+    const invoiceNumber = order.id.slice(-8).toUpperCase()
+    const formattedDate = new Date(order.createdAt).toLocaleString()
+
+    const itemsHtml = order.items.map(item => `
+        <tr>
+            <td style="padding: 8px 0; border-bottom: 1px solid #F3F4F6;">${item.product?.name || 'Item'}</td>
+            <td style="padding: 8px 0; text-align: center; border-bottom: 1px solid #F3F4F6;">${item.quantity}</td>
+            <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #F3F4F6;">₦${Number(item.price).toLocaleString()}</td>
+            <td style="padding: 8px 0; text-align: right; border-bottom: 1px solid #F3F4F6;">₦${(Number(item.price) * item.quantity).toLocaleString()}</td>
+        </tr>
+    `).join('')
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #F9FAFB; padding: 30px; margin: 0; }
+    .card { background: #FFFFFF; max-width: 520px; margin: 0 auto; border-radius: 20px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.06); }
+    .header { text-align: center; border-bottom: 2px dashed #E5E7EB; padding-bottom: 20px; margin-bottom: 20px; }
+    .title { font-size: 22px; font-weight: 900; color: #111827; text-transform: uppercase; margin: 0; }
+    .subtitle { font-size: 11px; font-weight: 700; color: #6B7280; letter-spacing: 1px; margin-top: 4px; }
+    .meta { font-family: monospace; font-size: 12px; color: #4B5563; line-height: 1.6; margin-bottom: 20px; text-align: left; }
+    table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 12px; margin-bottom: 20px; }
+    th { text-align: left; font-weight: 900; color: #111827; padding-bottom: 8px; border-bottom: 1px solid #E5E7EB; }
+    .total-row { font-family: monospace; font-size: 16px; font-weight: 900; color: #111827; display: flex; justify-content: space-between; border-top: 2px dashed #E5E7EB; padding-top: 16px; margin-top: 16px; }
+    .footer { text-align: center; font-size: 11px; font-weight: 700; color: #9CA3AF; text-transform: uppercase; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="title">${businessName}</div>
+      <div class="subtitle">Official POS Digital Invoice</div>
+    </div>
+    <div class="meta">
+      <div>INVOICE: #${invoiceNumber}</div>
+      <div>DATE: ${formattedDate}</div>
+      <div>PAYMENT METHOD: ${order.paymentMethod}</div>
+      ${order.customer?.name ? `<div>CUSTOMER: ${order.customer.name}</div>` : ''}
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>ITEM</th>
+          <th style="text-align:center">QTY</th>
+          <th style="text-align:right">PRICE</th>
+          <th style="text-align:right">TOTAL</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsHtml}
+      </tbody>
+    </table>
+    <div class="total-row">
+      <span>TOTAL PAID</span>
+      <span>₦${Number(order.totalAmount).toLocaleString()}</span>
+    </div>
+    <div class="footer">
+      Thank you for shopping with ${businessName}!
+    </div>
+  </div>
+</body>
+</html>
+    `
+
+    const { sendMail } = await import('../../lib/mail.js')
+    await sendMail({
+        to: recipientEmail,
+        subject: `Digital Receipt #${invoiceNumber} - ${businessName}`,
+        html
+    })
+
+    return { success: true, message: `Digital receipt successfully sent to ${recipientEmail}` }
 }
 
 /**
@@ -290,4 +407,203 @@ export async function resetFinancialRecords(storeId?: string) {
     })
 
     return { deleted: count, message: `Successfully reset ${count} financial record(s).` }
+}
+
+export async function refundOrder(orderId: string, authorizedBy: string, reason: string) {
+    const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: { include: { product: true } } }
+    })
+
+    if (!order) throw new Error('Order not found')
+    if (order.paymentStatus !== 'SUCCESS' && order.paymentStatus !== 'PAID') {
+        throw new Error('Only completed (paid) orders can be refunded.')
+    }
+
+    // Reverse stock for each item
+    for (const item of order.items) {
+        if (item.variantId) {
+            await prisma.productVariant.update({
+                where: { id: item.variantId },
+                data: { stock: { increment: item.quantity } }
+            }).catch(() => {})
+        } else if (item.productId) {
+            await prisma.product.update({
+                where: { id: item.productId },
+                data: { stock: { increment: item.quantity } }
+            }).catch(() => {})
+        }
+    }
+
+    // Mark order as REFUNDED
+    await prisma.order.update({
+        where: { id: orderId },
+        data: { paymentStatus: 'REFUNDED' }
+    })
+
+    // Log the refund activity & record in Refund database table
+    const storeRecord = await prisma.store.findUnique({ where: { id: order.storeId }, select: { tenantId: true } })
+    if (storeRecord) {
+        await prisma.refund.create({
+            data: {
+                orderId: order.id,
+                amount: order.totalAmount,
+                reason,
+                processedBy: authorizedBy,
+            }
+        }).catch((err) => console.error('[REFUND] Failed to create Refund record:', err))
+
+        await prisma.activityLog.create({
+            data: {
+                action: 'REFUND_ISSUED',
+                entity: 'Order',
+                entityId: orderId,
+                details: { reason, authorizedBy, amount: order.totalAmount.toString() },
+                userId: authorizedBy,
+                tenantId: storeRecord.tenantId,
+            }
+        }).catch(() => {})
+    }
+
+    return { success: true, orderId, amount: order.totalAmount.toString() }
+}
+
+export async function getAnalyticsData(storeId?: string, tenantId?: string, startDate?: Date, endDate?: Date) {
+    const now = endDate || new Date()
+    const start = startDate || new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+    const whereClause: any = {
+        paymentStatus: { in: ['SUCCESS', 'PAID'] },
+        createdAt: { gte: start, lte: now }
+    }
+    if (storeId) whereClause.storeId = storeId
+    if (tenantId && !storeId) {
+        whereClause.store = { tenantId }
+    }
+
+    const orders = await prisma.order.findMany({
+        where: whereClause,
+        include: {
+            items: { include: { product: { select: { name: true, costPrice: true } } } },
+            cashier: { select: { id: true, name: true } }
+        },
+        orderBy: { createdAt: 'asc' }
+    })
+
+    // Fetch refund records for net calculation
+    const refundWhere: any = { createdAt: { gte: start, lte: now } }
+    if (storeId) {
+        refundWhere.order = { storeId }
+    } else if (tenantId) {
+        refundWhere.order = { store: { tenantId } }
+    }
+    const refunds = await prisma.refund.findMany({
+        where: refundWhere,
+        include: { order: true }
+    }).catch(() => [])
+
+    const grossRevenue = orders.reduce((sum, o) => sum + Number(o.totalAmount), 0)
+    const totalRefundedAmount = refunds.reduce((sum, r) => sum + Number(r.amount), 0)
+    const netRevenue = Math.max(0, grossRevenue - totalRefundedAmount)
+
+    const totalCost = orders.reduce((sum, o) =>
+        sum + o.items.reduce((s, i) =>
+            s + (Number(i.product?.costPrice || 0) * i.quantity), 0), 0)
+    const netProfit = netRevenue - totalCost
+    const aov = orders.length > 0 ? netRevenue / orders.length : 0
+
+    const totalOrdersCount = orders.length
+    const totalRefundVolume = refunds.length
+    const refundRate = (totalOrdersCount + totalRefundVolume) > 0 ? (totalRefundVolume / (totalOrdersCount + totalRefundVolume)) * 100 : 0
+
+    // Refund reasons breakdown
+    const reasonMap: Record<string, number> = {}
+    for (const r of refunds) {
+        const reason = r.reason || 'General Return / Customer Choice'
+        reasonMap[reason] = (reasonMap[reason] || 0) + 1
+    }
+    const refundReasonsBreakdown = Object.entries(reasonMap).map(([reason, count]) => ({ reason, count }))
+
+    // Daily revenue timeline
+    const dailyMap: Record<string, number> = {}
+    for (const order of orders) {
+        const day = order.createdAt.toISOString().split('T')[0]
+        dailyMap[day] = (dailyMap[day] || 0) + Number(order.totalAmount)
+    }
+    // Deduct refunds per day
+    for (const r of refunds) {
+        const day = r.createdAt.toISOString().split('T')[0]
+        if (dailyMap[day]) {
+            dailyMap[day] = Math.max(0, dailyMap[day] - Number(r.amount))
+        }
+    }
+    const dailyRevenue = Object.entries(dailyMap).map(([date, revenue]) => ({ date, revenue }))
+
+    // Payment method distribution
+    const methodMap: Record<string, number> = {}
+    for (const order of orders) {
+        const method = order.paymentMethod
+        methodMap[method] = (methodMap[method] || 0) + 1
+    }
+    const paymentMethods = Object.entries(methodMap).map(([method, count]) => ({ method, count }))
+
+    // Peak hours heatmap (0–23)
+    const hourMap: Record<number, number> = {}
+    for (const order of orders) {
+        const hour = new Date(order.createdAt).getHours()
+        hourMap[hour] = (hourMap[hour] || 0) + 1
+    }
+    const peakHours = Array.from({ length: 24 }, (_, h) => ({ hour: h, count: hourMap[h] || 0 }))
+
+    // Top 10 products by revenue
+    const productMap: Record<string, { name: string; revenue: number; qty: number }> = {}
+    for (const order of orders) {
+        for (const item of order.items) {
+            const key = item.productId
+            if (!productMap[key]) productMap[key] = { name: item.product?.name || 'Unknown', revenue: 0, qty: 0 }
+            productMap[key].revenue += Number(item.price) * item.quantity
+            productMap[key].qty += item.quantity
+        }
+    }
+    const topProducts = Object.values(productMap)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10)
+
+    // Staff leaderboard
+    const cashierMap: Record<string, { name: string; sales: number; revenue: number }> = {}
+    for (const order of orders) {
+        if (!order.cashierId || !order.cashier) continue
+        const key = order.cashierId
+        if (!cashierMap[key]) cashierMap[key] = { name: order.cashier.name || 'Unknown', sales: 0, revenue: 0 }
+        cashierMap[key].sales++
+        cashierMap[key].revenue += Number(order.totalAmount)
+    }
+    const staffLeaderboard = Object.values(cashierMap)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 10)
+
+    return {
+        summary: {
+            grossRevenue,
+            totalRefundedAmount,
+            netRevenue,
+            totalRevenue: netRevenue,
+            netProfit,
+            aov,
+            totalOrders: totalOrdersCount,
+            refundRate: Number(refundRate.toFixed(1)),
+            totalRefundVolume
+        },
+        refundsSummary: {
+            totalRefundedAmount,
+            totalRefundVolume,
+            refundRate: Number(refundRate.toFixed(1)),
+            reasonsBreakdown: refundReasonsBreakdown
+        },
+        dailyRevenue,
+        paymentMethods,
+        peakHours,
+        topProducts,
+        staffLeaderboard,
+    }
 }

@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { createOrderSchema, orderResponseSchema } from './schemas.js'
-import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus, getDraftOrders, lockDraftOrder, cancelDraftOrder, resetFinancialRecords } from './service.js'
+import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus, getDraftOrders, lockDraftOrder, cancelDraftOrder, resetFinancialRecords, refundOrder, getAnalyticsData, sendDigitalReceiptEmail } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 export default async function orderRoutes(app: FastifyInstance) {
@@ -39,7 +39,8 @@ export default async function orderRoutes(app: FastifyInstance) {
         },
         async (request) => {
             const { storeId } = request.query as { storeId: string }
-            return getOrders(storeId)
+            const { tenantId } = request.user as any
+            return getOrders(storeId, tenantId)
         }
     )
 
@@ -164,6 +165,79 @@ export default async function orderRoutes(app: FastifyInstance) {
             const result = await resetFinancialRecords(storeId)
             app.broadcast('FINANCIAL_RESET', { storeId, deleted: result.deleted })
             return reply.send(result)
+        }
+    )
+
+    // Analytics: GET /orders/analytics
+    server.get(
+        '/analytics',
+        {
+            schema: {
+                querystring: z.object({
+                    storeId: z.string().optional(),
+                    startDate: z.string().optional(),
+                    endDate: z.string().optional(),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { storeId, startDate, endDate } = request.query as { storeId?: string; startDate?: string; endDate?: string }
+            const { tenantId } = request.user as any
+            const start = startDate ? new Date(startDate) : undefined
+            const end = endDate ? new Date(endDate) : undefined
+            const data = await getAnalyticsData(storeId, tenantId, start, end)
+            return reply.send(data)
+        }
+    )
+
+    // Refund: POST /orders/:id/refund
+    server.post(
+        '/:id/refund',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+                body: z.object({
+                    reason: z.string().min(1),
+                    managerPin: z.string().optional(),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { id } = request.params as { id: string }
+            const { reason } = request.body as { reason: string; managerPin?: string }
+            const { id: userId } = request.user as any
+            try {
+                const result = await refundOrder(id, userId, reason)
+                app.broadcast('ORDER_UPDATED', { id, paymentStatus: 'REFUNDED' })
+                return reply.send(result)
+            } catch (err: any) {
+                return reply.code(400).send({ message: err.message })
+            }
+        }
+    )
+
+    // Email Digital Receipt: POST /orders/:id/email-receipt
+    server.post(
+        '/:id/email-receipt',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+                body: z.object({
+                    email: z.string().email(),
+                    saveToCrm: z.boolean().optional(),
+                    customerId: z.string().optional(),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { id } = request.params as { id: string }
+            const { email, saveToCrm, customerId } = request.body as { email: string; saveToCrm?: boolean; customerId?: string }
+            try {
+                const result = await sendDigitalReceiptEmail(id, email, saveToCrm, customerId)
+                return reply.send(result)
+            } catch (err: any) {
+                return reply.code(500).send({ message: err.message || 'Failed to send digital receipt.' })
+            }
         }
     )
 }

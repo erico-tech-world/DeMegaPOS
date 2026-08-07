@@ -1,5 +1,5 @@
 import { inviteStaffSchema, updatePermissionsSchema, staffResponseSchema, updateStaffSchema } from './schemas.js';
-import { createStaffInvitation, getStaffList, updatePermissions, updateStaff, deleteStaff } from './service.js';
+import { createStaffInvitation, getStaffList, updatePermissions, updateStaff, deleteStaff, updateStaffStatus } from './service.js';
 import { z } from 'zod';
 export default async function staffRoutes(app) {
     const server = app.withTypeProvider();
@@ -31,6 +31,35 @@ export default async function staffRoutes(app) {
         const { userId, permissions } = request.body;
         const updatedUser = await updatePermissions(userId, permissions);
         return reply.send(updatedUser);
+    });
+    // ── Staff Suspend / Terminate ─────────────────────────────────────────────
+    server.patch('/:id/status', {
+        schema: {
+            params: z.object({ id: z.string() }),
+            body: z.object({
+                status: z.enum(['SUSPENDED', 'TERMINATED']),
+                reason: z.string().optional(),
+            }),
+            response: {
+                200: z.object({ message: z.string(), userId: z.string(), status: z.string() }),
+                404: z.object({ message: z.string() }),
+            },
+        },
+    }, async (request, reply) => {
+        const { tenantId } = request.user;
+        const { id } = request.params;
+        const { status, reason } = request.body;
+        try {
+            const updated = await updateStaffStatus(id, tenantId, status, reason);
+            return reply.send({
+                message: `Staff member has been ${status.toLowerCase()} and access has been revoked.`,
+                userId: updated.id,
+                status: updated.status,
+            });
+        }
+        catch {
+            return reply.code(404).send({ message: 'Staff member not found.' });
+        }
     });
     server.put('/:id', {
         schema: {

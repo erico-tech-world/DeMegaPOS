@@ -144,16 +144,17 @@ export const useDashboardData = () => {
     const fetchData = useCallback(async () => {
         if (!token) return;
         setIsLoading(true);
+        const storeId = localStorage.getItem('selectedBranchId') || undefined;
         try {
             // Fetch products independently so a failure in orders/staff/customers
             // does NOT prevent the product list from loading
             const [pRes, oRes, sRes, cRes, iRes, dRes] = await Promise.allSettled([
                 axios.get(`${API_URL}/inventory/products`),
-                axios.get(`${API_URL}/orders`),
+                axios.get(`${API_URL}/orders`, { params: { storeId } }),
                 axios.get(`${API_URL}/staff`),
                 axios.get(`${API_URL}/customers`),
                 axios.get(`${API_URL}/integrations`),
-                axios.get(`${API_URL}/orders/drafts`),
+                axios.get(`${API_URL}/orders/drafts`, { params: { storeId } }),
             ]);
 
             if (pRes.status === 'fulfilled') setProducts(pRes.value.data);
