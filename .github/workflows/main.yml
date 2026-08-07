@@ -12,10 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ── pnpm: version MUST match the "packageManager" field in package.json ──
+      # Using version: 10 to match pnpm@10.18.3 declared in root package.json.
+      # pnpm v8 does NOT support the `pnpm run <script> --filter=<pkg>` syntax
+      # correctly — it strips the filter and looks for the script inside the
+      # filtered package directly, causing ERR_PNPM_NO_SCRIPT.
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 10
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -26,18 +31,29 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build Database Package
-        run: pnpm run build --filter=@demegapos/db
+      # ── DB package: generate Prisma Client ──────────────────────────────────
+      # Uses canonical `pnpm --filter <pkg> <script>` syntax (not pnpm run <script> --filter).
+      # prisma generate does NOT require DATABASE_URL — only the schema file.
+      - name: Build Database Package (Prisma Generate)
+        run: pnpm --filter @demegapos/db build
 
+      # ── Backend: TypeScript compile ─────────────────────────────────────────
       - name: Build Backend Application
-        run: pnpm run build --filter=demegapos-backend
+        run: pnpm --filter demegapos-backend build
 
-      - name: Build Web Dashboards
-        run: |
-          pnpm run build --filter=web-back-office
-          pnpm run build --filter=web-kitchen
-          pnpm run build --filter=web-customer
+      # ── Web frontends: TypeScript + Vite bundle ─────────────────────────────
+      - name: Build Web Back-Office
+        run: pnpm --filter web-back-office build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost:3000' }}
 
+      - name: Build Web Kitchen Display
+        run: pnpm --filter web-kitchen build
+
+      - name: Build Web Customer Portal
+        run: pnpm --filter web-customer build
+
+      # ── Docker Images ───────────────────────────────────────────────────────
       - name: Docker Build (Backend)
         run: docker build -t demegapos-backend -f apps/backend/Dockerfile .
 
