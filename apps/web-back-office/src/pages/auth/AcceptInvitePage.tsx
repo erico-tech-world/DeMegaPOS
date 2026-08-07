@@ -2,7 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
-import { User, Lock, Loader2, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { User, Lock, Loader2, AlertCircle, Eye, EyeOff, ShieldCheck, Hash } from 'lucide-react';
 import { API_URL } from '../../lib/apiConfig';
 
 
@@ -24,6 +24,9 @@ const AcceptInvitePage = () => {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [pin, setPin] = useState('');
+    const [confirmPin, setConfirmPin] = useState('');
+    const [showPin, setShowPin] = useState(false);
     
     const [isValidating, setIsValidating] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,9 +68,16 @@ const AcceptInvitePage = () => {
             setError('Password must be at least 8 characters long.');
             return;
         }
-
         if (password !== confirmPassword) {
             setError('Passwords do not match.');
+            return;
+        }
+        if (pin && (pin.length < 4 || pin.length > 6)) {
+            setError('Terminal PIN must be 4–6 digits.');
+            return;
+        }
+        if (pin && pin !== confirmPin) {
+            setError('Terminal PINs do not match.');
             return;
         }
 
@@ -77,7 +87,8 @@ const AcceptInvitePage = () => {
             const res = await axios.post(`${API_URL}/auth/accept-invite`, {
                 token,
                 name,
-                password
+                password,
+                ...(pin ? { pin } : {}),
             });
 
             // Log in the newly onboarded user
@@ -211,6 +222,46 @@ const AcceptInvitePage = () => {
                             className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 pl-12 pr-12 text-sm font-bold focus:bg-white focus:border-[#2D7A3E] focus:ring-4 focus:ring-green-900/5 outline-none transition-all"
                             placeholder="••••••••"
                         />
+                    </div>
+                </div>
+
+                {/* POS Terminal PIN Section */}
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                        <Hash size={16} className="text-blue-600" />
+                        <span className="text-xs font-black text-blue-700 uppercase tracking-widest">POS Terminal PIN (Optional)</span>
+                    </div>
+                    <p className="text-[11px] text-blue-600 font-bold leading-relaxed">
+                        Set a 4–6 digit PIN to sign in directly to the POS Terminal. Required if you'll be operating as a cashier.
+                    </p>
+                    <div className="space-y-3">
+                        <div className="relative group">
+                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:text-blue-600 transition-colors" size={18} />
+                            <input
+                                type={showPin ? "text" : "password"}
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={pin}
+                                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                className="w-full bg-white border border-blue-200 rounded-2xl py-3.5 pl-11 pr-11 text-sm font-black font-mono tracking-[0.4em] focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all"
+                                placeholder="● ● ● ●"
+                            />
+                            <button type="button" tabIndex={-1} onClick={() => setShowPin(!showPin)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400 hover:text-blue-600 transition-colors focus:outline-none">
+                                {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
+                        {pin && (
+                            <input
+                                type={showPin ? "text" : "password"}
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={confirmPin}
+                                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                className="w-full bg-white border border-blue-200 rounded-2xl py-3.5 px-5 text-sm font-black font-mono tracking-[0.4em] focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all"
+                                placeholder="Confirm PIN"
+                            />
+                        )}
                     </div>
                 </div>
 

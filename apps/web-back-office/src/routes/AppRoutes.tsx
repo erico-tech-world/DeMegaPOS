@@ -13,9 +13,13 @@ import InventoryPage from '../pages/dashboard/InventoryPage';
 import OrdersPage from '../pages/dashboard/OrdersPage';
 import CustomersPage from '../pages/dashboard/CustomersPage';
 import StaffPage from '../pages/dashboard/StaffPage';
+import AnalyticsPage from '../pages/dashboard/AnalyticsPage';
+import SettingsPage from '../pages/SettingsPage';
+import PlatformLoginPage from '../pages/platform/PlatformLoginPage';
+import PlatformDashboard from '../pages/platform/PlatformDashboard';
 import { useDashboardData } from '../hooks/useDashboardData';
-
 import { IntegrationsPage } from '../pages/IntegrationsPage';
+import MultiBranchComparison from '../pages/analytics/MultiBranchComparison';
 
 const AppRoutes = () => {
     const dashboardData = useDashboardData();
@@ -24,6 +28,13 @@ const AppRoutes = () => {
         <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
+
+            {/* Platform Control Tower — completely isolated, no tenant AppLayout */}
+            <Route path="/platform/login" element={<PlatformLoginPage />} />
+            <Route path="/platform/dashboard" element={<PlatformDashboard />} />
+            {/* Dedicated Control Tower route aliases */}
+            <Route path="/control-tower" element={<Navigate to="/platform/login" replace />} />
+            <Route path="/super-admin" element={<Navigate to="/platform/login" replace />} />
 
             {/* Auth Routes (Public Only) */}
             <Route element={<PublicOnlyRoute />}>
@@ -87,29 +98,24 @@ const AppRoutes = () => {
                         />
                     } />
 
-                    <Route path="/staff" element={
-                        <StaffPage
-                            staff={dashboardData.staff}
-                            isLoading={dashboardData.isLoading}
-                            refresh={dashboardData.refresh}
-                        />
-                    } />
-
                     {/* Role Protected Routes (Admin & Manager Only) */}
                     <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'BRANCH_MANAGER', 'OWNER', 'ADMIN']} />}>
-                        <Route path="/integrations" element={<IntegrationsPage />} />
-                        <Route path="/settings" element={
-                            <div className="p-8 bg-white rounded-[2rem] border border-gray-100 shadow-sm animate-in fade-in duration-500">
-                                <h3 className="text-xl font-black text-gray-900 tracking-tight mb-4">Core Systems Configuration</h3>
-                                <p className="text-sm text-gray-500 font-bold uppercase tracking-widest">Sector Access: Restricted</p>
-                                <div className="mt-8 p-12 border-2 border-dashed border-gray-100 rounded-3xl flex flex-col items-center justify-center text-gray-300">
-                                    <span className="font-black text-xs uppercase tracking-[0.3em]">Module Under Development</span>
-                                </div>
-                            </div>
+                        <Route path="/analytics" element={<AnalyticsPage />} />
+                        <Route path="/staff" element={
+                            <StaffPage
+                                staff={dashboardData.staff}
+                                isLoading={dashboardData.isLoading}
+                                refresh={dashboardData.refresh}
+                            />
                         } />
+                        <Route path="/integrations" element={<IntegrationsPage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
                     </Route>
 
-                    <Route path="/analytics" element={<Navigate to="/dashboard" replace />} />
+                    {/* Super Admin / Owner Only Routes */}
+                    <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'OWNER']} />}>
+                        <Route path="/analytics/multi-branch" element={<MultiBranchComparison />} />
+                    </Route>
                 </Route>
             </Route>
 

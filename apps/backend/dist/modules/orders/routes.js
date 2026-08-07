@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { createOrderSchema, orderResponseSchema } from './schemas.js';
-import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus, getDraftOrders, lockDraftOrder, cancelDraftOrder, resetFinancialRecords } from './service.js';
+import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus, getDraftOrders, lockDraftOrder, cancelDraftOrder, resetFinancialRecords, refundOrder, getAnalyticsData } from './service.js';
 export default async function orderRoutes(app) {
     const server = app.withTypeProvider();
     server.post('/', {
@@ -122,5 +122,44 @@ export default async function orderRoutes(app) {
         const result = await resetFinancialRecords(storeId);
         app.broadcast('FINANCIAL_RESET', { storeId, deleted: result.deleted });
         return reply.send(result);
+    });
+    // Analytics: GET /orders/analytics
+    server.get('/analytics', {
+        schema: {
+            querystring: z.object({
+                storeId: z.string().optional(),
+                startDate: z.string().optional(),
+                endDate: z.string().optional(),
+            }),
+        },
+    }, async (request, reply) => {
+        const { storeId, startDate, endDate } = request.query;
+        const { tenantId } = request.user;
+        const start = startDate ? new Date(startDate) : undefined;
+        const end = endDate ? new Date(endDate) : undefined;
+        const data = await getAnalyticsData(storeId, tenantId, start, end);
+        return reply.send(data);
+    });
+    // Refund: POST /orders/:id/refund
+    server.post('/:id/refund', {
+        schema: {
+            params: z.object({ id: z.string() }),
+            body: z.object({
+                reason: z.string().min(1),
+                managerPin: z.string().optional(),
+            }),
+        },
+    }, async (request, reply) => {
+        const { id } = request.params;
+        const { reason } = request.body;
+        const { id: userId } = request.user;
+        try {
+            const result = await refundOrder(id, userId, reason);
+            app.broadcast('ORDER_UPDATED', { id, paymentStatus: 'REFUNDED' });
+            return reply.send(result);
+        }
+        catch (err) {
+            return reply.code(400).send({ message: err.message });
+        }
     });
 }

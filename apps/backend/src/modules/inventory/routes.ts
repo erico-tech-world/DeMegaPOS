@@ -2,6 +2,8 @@ import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import {
     createCategorySchema,
+    updateCategorySchema,
+    transferCategorySchema,
     categoryResponseSchema,
     createProductSchema,
     updateProductSchema,
@@ -11,6 +13,9 @@ import {
 import {
     createCategory,
     getCategories,
+    updateCategory,
+    transferCategoryItems,
+    deleteCategory,
     createProduct,
     getProducts,
     updateProduct,
@@ -52,6 +57,52 @@ export default async function inventoryRoutes(app: FastifyInstance) {
         async (request, reply) => {
             const tenantId = (request.user as any).tenantId
             return getCategories(tenantId)
+        }
+    )
+
+    server.put(
+        '/categories/:id',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+                body: updateCategorySchema,
+            },
+        },
+        async (request, reply) => {
+            const tenantId = (request.user as any).tenantId
+            const updated = await updateCategory(request.params.id, tenantId, request.body)
+            return reply.send(updated)
+        }
+    )
+
+    server.patch(
+        '/categories/transfer',
+        {
+            schema: {
+                body: transferCategorySchema,
+            },
+        },
+        async (request, reply) => {
+            const tenantId = (request.user as any).tenantId
+            const { productIds, targetCategoryId } = request.body
+            const result = await transferCategoryItems(tenantId, productIds, targetCategoryId)
+            return reply.send({ success: true, count: result.count })
+        }
+    )
+
+    server.delete(
+        '/categories/:id',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+                querystring: z.object({ reassignToCategoryId: z.string().optional() }),
+            },
+        },
+        async (request, reply) => {
+            const tenantId = (request.user as any).tenantId
+            const { reassignToCategoryId } = request.query as { reassignToCategoryId?: string }
+            await deleteCategory(request.params.id, tenantId, reassignToCategoryId)
+            return reply.send({ success: true })
         }
     )
 

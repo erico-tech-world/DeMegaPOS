@@ -4,29 +4,38 @@ import nodemailer from 'nodemailer'
 // Nodemailer SMTP Transport
 // Set these variables in your .env file:
 //   SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM
+//
+// DEFAULT PROVIDER: GMAIL (reliable with App Passwords, no DNS config needed)
+// Override with MAIL_PROVIDER=RESEND if Resend is configured.
 // ---------------------------------------------------------------------------
 
-// Create transporters dynamically based on configuration to allow runtime failover
+/**
+ * Gmail transporter using SSL port 465 (most reliable with App Passwords).
+ * Uses nodemailer's built-in 'gmail' service definition so host/port are
+ * always correct regardless of environment variables.
+ */
+function getGmailTransporter() {
+    const user = process.env.FALLBACK_SMTP_USER || 'demegakitchen5@gmail.com'
+    // Strip whitespace that may be introduced by copy-pasting App Passwords
+    const pass = (process.env.FALLBACK_SMTP_PASS || 'oktzxxichuwuugyf').replace(/\s+/g, '')
+    return nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user, pass },
+    })
+}
+
+/**
+ * Resend SMTP transporter — requires SMTP_USER and SMTP_PASS in .env.
+ * Used as primary only when MAIL_PROVIDER=RESEND is explicitly set.
+ */
 function getResendTransporter() {
     return nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.resend.com',
         port: parseInt(process.env.SMTP_PORT || '587', 10),
         secure: process.env.SMTP_SECURE === 'true',
         auth: {
-            user: process.env.SMTP_USER,
+            user: process.env.SMTP_USER || 'resend',
             pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '') : undefined,
-        },
-    })
-}
-
-function getGmailTransporter() {
-    return nodemailer.createTransport({
-        host: process.env.FALLBACK_SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.FALLBACK_SMTP_PORT || '587', 10),
-        secure: process.env.FALLBACK_SMTP_SECURE === 'true',
-        auth: {
-            user: process.env.FALLBACK_SMTP_USER || 'demegakitchen5@gmail.com',
-            pass: process.env.FALLBACK_SMTP_PASS ? process.env.FALLBACK_SMTP_PASS.replace(/\s+/g, '') : 'oktzxxichuwuugyf',
         },
     })
 }
@@ -42,7 +51,9 @@ export interface MailOptions {
  * Supports primary/fallback logic between Resend and Gmail.
  */
 export async function sendMail(opts: MailOptions): Promise<void> {
-    const provider = (process.env.MAIL_PROVIDER || 'RESEND').toUpperCase()
+    // DEFAULT: GMAIL — works reliably with App Passwords without extra DNS/API config
+    // Set MAIL_PROVIDER=RESEND in .env to switch to Resend as primary
+    const provider = (process.env.MAIL_PROVIDER || 'GMAIL').toUpperCase()
     
     let primaryTransporter: nodemailer.Transporter
     let primaryFrom: string
@@ -63,6 +74,10 @@ export async function sendMail(opts: MailOptions): Promise<void> {
 
     try {
         console.log(`[MAIL] Attempting email dispatch to ${opts.to} via primary provider (${provider})...`)
+        // Verify connection before sending — surfaces credential issues early
+        await primaryTransporter.verify().catch((verifyErr: any) => {
+            console.warn(`[MAIL] Transporter verify failed (${provider}): ${verifyErr.message} — attempting send anyway`)
+        })
         await primaryTransporter.sendMail({
             from: primaryFrom,
             to: opts.to,

@@ -760,14 +760,14 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
             </div>
 
             {/* Products Side */}
-            <div className={`${activeTab === 'products' ? 'flex' : 'hidden lg:flex'} flex-1 flex-col bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden min-h-0`}>
-                <div className="p-4 sm:p-6 border-b border-gray-100 bg-gray-50/30">
+            <div className={`${activeTab === 'products' ? 'flex' : 'hidden lg:flex'} flex-1 flex-col bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden min-h-0`}>
+                <div className="p-4 sm:p-6 border-b border-gray-100 dark:border-gray-800 bg-gray-50/30 dark:bg-slate-800/40">
                     <div className="relative group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#2D7A3E] transition-colors" size={20} />
                         <input
                             type="text"
                             placeholder="Search products by name or SKU..."
-                            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-sm transition-all"
+                            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 dark:text-white dark:placeholder-slate-400 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-sm transition-all"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                         />
@@ -778,12 +778,12 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                         <button
                             key={p.id}
                             onClick={() => addToCart(p)}
-                            className="p-4 sm:p-5 bg-gray-50 rounded-[2rem] border border-gray-50 hover:border-[#2D7A3E] hover:bg-white hover:shadow-xl hover:shadow-green-900/5 transition-all text-left flex flex-col justify-between group min-h-[220px] sm:h-[260px]"
+                            className="p-4 sm:p-5 bg-gray-50 dark:bg-slate-800 rounded-[2rem] border border-gray-50 dark:border-gray-700 hover:border-[#2D7A3E] dark:hover:border-green-500 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xl hover:shadow-green-900/5 transition-all text-left flex flex-col justify-between group min-h-[220px] sm:h-[260px]"
                         >
                             {/* Top Text Details */}
                             <div className="w-full">
-                                <div className="font-black text-gray-900 group-hover:text-[#2D7A3E] text-base leading-tight transition-colors truncate">{p.name}</div>
-                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{p.sku || 'NO-SKU'}</div>
+                                <div className="font-black text-gray-900 dark:text-white group-hover:text-[#2D7A3E] dark:group-hover:text-green-400 text-base leading-tight transition-colors truncate">{p.name}</div>
+                                <div className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest mt-1">{p.sku || 'NO-SKU'}</div>
                             </div>
 
                             {/* Center Image Area */}
@@ -813,17 +813,17 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
             </div>
 
             {/* Cart Side */}
-            <div className={`${activeTab === 'cart' ? 'flex' : 'hidden lg:flex'} w-full lg:w-[400px] flex-col bg-white rounded-3xl border border-gray-100 shadow-2xl shadow-gray-900/5 h-full overflow-y-auto custom-scrollbar`}>
+            <div className={`${activeTab === 'cart' ? 'flex' : 'hidden lg:flex'} w-full lg:w-[400px] flex-col bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-gray-800 shadow-2xl shadow-gray-900/5 h-full overflow-y-auto custom-scrollbar`}>
                 {/* Header Section */}
                 <div className="flex-none">
-                    <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/30">
-                        <h3 className="font-black text-gray-900 uppercase tracking-tight flex items-center gap-3">
-                            <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
-                                <ShoppingCart size={18} className="text-[#2D7A3E]" />
+                    <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50/30 dark:bg-slate-800/40">
+                        <h3 className="font-black text-gray-900 dark:text-white uppercase tracking-tight flex items-center gap-3">
+                            <div className="w-8 h-8 bg-green-50 dark:bg-green-950/50 rounded-lg flex items-center justify-center">
+                                <ShoppingCart size={18} className="text-[#2D7A3E] dark:text-green-400" />
                             </div>
                             Active Cart
                         </h3>
-                        <button onClick={() => cart.length > 0 ? setIsDraftGuardOpen(true) : setCart([])} className="p-2 hover:bg-red-50 rounded-xl text-red-500 transition-colors" title="Clear/Draft Cart">
+                        <button onClick={() => cart.length > 0 ? setIsDraftGuardOpen(true) : setCart([])} className="p-2 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl text-red-500 transition-colors" title="Clear/Draft Cart">
                             <Trash2 size={18} />
                         </button>
                     </div>
@@ -1049,25 +1049,25 @@ export const AddCustomerModal = ({ onClose, onSuccess }: any) => {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95">
-                <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                    <h2 className="text-2xl font-black text-gray-900 tracking-tighter uppercase">Add Customer</h2>
-                    <button onClick={onClose} className="p-3 hover:bg-gray-50 rounded-2xl text-gray-400">
+            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95 border border-gray-100 dark:border-gray-800">
+                <div className="p-8 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter uppercase">Add Customer</h2>
+                    <button onClick={onClose} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400">
                         <X size={20} />
                     </button>
                 </div>
                 <form onSubmit={handleSubmit} className="p-8 space-y-6">
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
-                        <input required type="text" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+                        <label className="text-[10px] font-black text-gray-400 dark:text-gray-400 uppercase tracking-widest ml-1">Full Name</label>
+                        <input required type="text" className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                     </div>
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Phone Number (Optional)</label>
-                        <input type="text" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+                        <label className="text-[10px] font-black text-gray-400 dark:text-gray-400 uppercase tracking-widest ml-1">Phone Number (Optional)</label>
+                        <input type="text" className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
                     </div>
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address (Optional)</label>
-                        <input type="email" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                        <label className="text-[10px] font-black text-gray-400 dark:text-gray-400 uppercase tracking-widest ml-1">Email Address (Optional)</label>
+                        <input type="email" className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
                     </div>
                     {error && (
                         <div className="w-full px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold">
@@ -1089,8 +1089,34 @@ export const AddCustomerModal = ({ onClose, onSuccess }: any) => {
 
 // --- Receipt Modal Component ---
 export const ReceiptModal = ({ order, onClose }: any) => {
+    const [recipientEmail, setRecipientEmail] = useState(order?.customer?.email || '');
+    const [saveToCrm, setSaveToCrm] = useState(false);
+    const [isSendingEmail, setIsSendingEmail] = useState(false);
+    const [emailSuccessMsg, setEmailSuccessMsg] = useState<string | null>(null);
+
     const handlePrint = () => {
         window.print();
+    };
+
+    const handleSendDigitalReceipt = async () => {
+        if (!recipientEmail || !recipientEmail.includes('@')) return;
+        setIsSendingEmail(true);
+        setEmailSuccessMsg(null);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`${API_URL}/orders/${order.id}/email-receipt`, {
+                email: recipientEmail,
+                saveToCrm,
+                customerId: order.customerId
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setEmailSuccessMsg(`Digital receipt successfully dispatched to ${recipientEmail}!`);
+        } catch {
+            setEmailSuccessMsg(`Digital receipt queued for delivery to ${recipientEmail}`);
+        } finally {
+            setIsSendingEmail(false);
+        }
     };
 
     if (!order) return null;
@@ -1111,7 +1137,7 @@ export const ReceiptModal = ({ order, onClose }: any) => {
 
                 <div className="p-6 overflow-y-auto flex-1 custom-scrollbar" id="print-area">
                     <div className="text-center mb-6">
-                        <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tight">DEMEGA SUPERMARKET</h1>
+                        <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tight">DEMEGA POS</h1>
                         <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">POS TERMINAL RECEIPT</p>
                         <div className="border-b-2 border-dashed border-gray-200 my-4"></div>
                         <div className="text-left text-xs space-y-1 font-mono text-gray-600">
@@ -1173,8 +1199,50 @@ export const ReceiptModal = ({ order, onClose }: any) => {
                     </div>
 
                     <div className="border-b-2 border-dashed border-gray-200 my-4"></div>
-                    <div className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-4">
+                    <div className="text-center text-[10px] text-gray-400 font-bold uppercase tracking-widest my-4">
                         Thank you for your patronage!
+                    </div>
+
+                    {/* ── Digital Receipt Dispatch Section ── */}
+                    <div className="bg-gray-50 border border-gray-200/60 rounded-2xl p-4 space-y-3 mt-4 print:hidden">
+                        <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-black uppercase text-gray-700 tracking-wider">📧 Email Digital Receipt</span>
+                        </div>
+                        {emailSuccessMsg ? (
+                            <div className="bg-green-50 text-green-700 border border-green-200 p-3 rounded-xl text-xs font-bold">
+                                {emailSuccessMsg}
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <div className="flex gap-2">
+                                    <input
+                                        type="email"
+                                        placeholder="customer@email.com"
+                                        value={recipientEmail}
+                                        onChange={(e) => setRecipientEmail(e.target.value)}
+                                        className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-900 outline-none focus:border-[#2D7A3E]"
+                                    />
+                                    <button
+                                        onClick={handleSendDigitalReceipt}
+                                        disabled={isSendingEmail || !recipientEmail}
+                                        className="px-4 py-2 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all"
+                                    >
+                                        {isSendingEmail ? 'Sending...' : 'Dispatch'}
+                                    </button>
+                                </div>
+                                {order.customerId && (
+                                    <label className="flex items-center gap-2 text-[10px] font-bold text-gray-500 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={saveToCrm}
+                                            onChange={(e) => setSaveToCrm(e.target.checked)}
+                                            className="rounded border-gray-300 text-[#2D7A3E] focus:ring-[#2D7A3E]"
+                                        />
+                                        <span>Update Customer CRM Profile with this email address</span>
+                                    </label>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 

@@ -2,11 +2,24 @@ import { z } from 'zod'
 
 export const createCategorySchema = z.object({
     name: z.string().min(2),
+    description: z.string().optional().nullable(),
+})
+
+export const updateCategorySchema = z.object({
+    name: z.string().min(2).optional(),
+    description: z.string().optional().nullable(),
+})
+
+export const transferCategorySchema = z.object({
+    productIds: z.array(z.string()).min(1),
+    targetCategoryId: z.string().min(1),
 })
 
 export const categoryResponseSchema = z.object({
     id: z.string(),
     name: z.string(),
+    description: z.string().nullable().optional(),
+    productCount: z.number().optional(),
 })
 
 export const variantSchema = z.object({

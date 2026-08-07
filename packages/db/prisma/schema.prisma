@@ -35,6 +35,7 @@ model Tenant {
   name                  String
   slug                  String   @unique
   domain                String?  @unique
+  businessCode          String?  @unique // Public Code e.g. DM-BIZ-9011
   universalPasswordHash String?  // Super Admin Universal Access Engine (bcrypt hashed)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -51,37 +52,60 @@ model Tenant {
 }
 
 model Store {
-  id        String   @id @default(cuid())
-  name      String
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  orders    Order[]
-  users     User[]
+  id             String   @id @default(cuid())
+  name           String
+  location       String?
+  phone          String?
+  branchCode     String?  @unique // Public Code e.g. BR-LAG-01
+  status         String   @default("ACTIVE") // ACTIVE, DEACTIVATED
+  isActive       Boolean  @default(true)
+  branchSettings Json?    // Custom per-branch settings (receipt header, footer, etc.)
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  orders         Order[]
+  users          User[]
 }
 
 model User {
-  id          String   @id @default(cuid())
-  email       String?  @unique
-  phone       String?  @unique
-  password    String
-  name        String?
-  role        Role     @default(CASHIER)
-  permissions Json?    // Granular toggles like 'Can Edit Prices'
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
-  branchId    String?  // References Store.id
-  branch      Store?   @relation(fields: [branchId], references: [id])
-  mfaEnabled  Boolean  @default(false)
-  mfaSecret   String?
-  lastLogin   DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  activity    ActivityLog[]
-  sessions    UserSession[]
-  stockAdjustments StockAdjustment[]
-  orders      Order[]
+  id                String   @id @default(cuid())
+  email             String?  @unique
+  phone             String?  @unique
+  password          String
+  name              String?
+  role              Role     @default(CASHIER)
+  staffCode         String?  @unique // Public Code e.g. EMP-2026-003
+  pin               String?  // Hashed 4-6 digit POS Terminal PIN
+  status            String   @default("ACTIVE") // ACTIVE, PENDING_ACTIVATION, SUSPENDED, TERMINATED
+  isActive          Boolean  @default(true)
+  onboardedAt       DateTime?
+  terminationReason String?
+  terminatedAt      DateTime?
+  permissions       Json?    // Granular toggles like 'Can Edit Prices'
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  branchId          String?  // References Store.id. null = Omni-Branch Access
+  branch            Store?   @relation(fields: [branchId], references: [id])
+  mfaEnabled        Boolean  @default(false)
+  mfaSecret         String?
+  themePreference   String   @default("light")
+  activity          ActivityLog[]
+  sessions          UserSession[]
+  stockAdjustments  StockAdjustment[]
+  orders            Order[]
+  refunds           Refund[]
+}
+
+model PlatformKey {
+  id          String    @id @default(cuid())
+  label       String
+  secretKey   String    @unique
+  isSingleUse Boolean   @default(false)
+  isUsed      Boolean   @default(false)
+  createdBy   String?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
 }
 
 model UserSession {
@@ -253,8 +277,20 @@ model Order {
   splitPayments       SplitPayment[]
   creditSale          CreditSale?
   terminalTransaction TerminalTransaction?
+  refund              Refund?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
+}
+
+model Refund {
+  id          String   @id @default(cuid())
+  orderId     String   @unique
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount      Decimal  @db.Decimal(10, 2)
+  reason      String?
+  processedBy String?
+  user        User?    @relation(fields: [processedBy], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
 }
 
 model CreditSale {

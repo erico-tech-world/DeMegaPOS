@@ -43,10 +43,10 @@
   - `[x]` Document manual step-by-step guides in chat for any setup action requiring user dashboard access (e.g. whitelisting IPs)
 
 - **Verification & Testing**
-  - `[ ]` Verify E2E placing order in Back-Office POS -> Kitchen displays instantly via WebSocket
-  - `[ ]` Verify E2E paying via terminal -> POS spinner resolves and order turns green automatically
-  - `[ ]` Verify E2E kitchen marks order as "Ready" -> Back-Office reflects status while payment status remains unchanged
-  - `[ ]` Perform final monorepo compilation check (`pnpm build`)
+  - `[x]` Verify E2E placing order in Back-Office POS -> Kitchen displays instantly via WebSocket
+  - `[x]` Verify E2E paying via terminal -> POS spinner resolves and order turns green automatically
+  - `[x]` Verify E2E kitchen marks order as "Ready" -> Back-Office reflects status while payment status remains unchanged
+  - `[x]` Perform final monorepo compilation check (`pnpm build`)
 
 - **Phase 5: Local Image Upload Integration (Completed)**
   - `[x]` Update Fastify server initialization options to support larger request body limits (10MB) for Base64 image payload transfers
@@ -72,3 +72,43 @@
   - `[x]` Push images to Docker Hub with `docker push`
   - `[x]` Update `docker-compose.prod.yml` to use `image:` (pull) instead of `build:` (local build) for registry deployment
   - `[x]` Verify image visible on Docker Hub dashboard
+
+---
+
+# Enterprise Upgrade Multi-Phase Expansion
+
+## Phase 0: Receipt Update
+- `[x]` Update receipt header in `apps/web-back-office/src/components/POSView.tsx` from "DEMEGA SUPERMARKET" to "DEMEGA POS"
+- `[x]` Audit project web app to ensure receipt header fallback defaults to "DEMEGA POS" everywhere
+
+## Phase 1: Core Data & Security Logic (Step 1)
+- `[x]` Implement `GET /tenants/branches` backend endpoint filtering strictly by authenticated user's `tenantId`
+- `[x]` Update `POST /staff/invite` & `PUT /staff/:id` endpoints for nullable `branchId` (Omni-Access) vs specific branch assignment
+- `[x]` Enforce backend RBAC query middleware: restrict branch staff to assigned `branchId` while granting Omni-Access (`branchId: null`) cross-sector access under `tenantId`
+- `[x]` Refactor `InviteStaffModal` and `EditStaffModal` in `PeopleComponents.tsx`: convert Assigned Sector into styled `<select>` dropdown populated dynamically with active tenant branches and default option `"Omni-Access (All Sectors / Branches)"` (`value=""`)
+
+## Phase 2: Local Infrastructure Engine (Step 2)
+- `[x]` Codebase Audit Confirmation: Verified offline persistence engine using IndexedDB was not present in `web-back-office`
+- `[x]` Build local-first IndexedDB storage manager (`offlineStorage.ts`) for offline sales, cart, draft orders, and receipts
+- `[x]` Implement background sync & conflict resolution engine (`syncEngine.ts`) with network status listeners and "OFFLINE MODE (LOCAL DRIVE ACTIVE)" UI status indicator
+- `[x]` Build Admin Storage Utilities: Local Storage Health Monitor (MB/GB used vs available quota), Manual Sync Trigger, Database Backup (.json export) & Restore (.json import)
+
+## Phase 3: Tenant Store Analytics Page (Step 3) — Completed
+- `[x]` Build real-time Tenant Store Analytics Page (`AnalyticsPage.tsx` at `/analytics`)
+- `[x]` Implement real-time backend endpoint `GET /orders/analytics` returning revenue, AOV, net profit, payment breakdown, peak hour heatmap, and top products
+- `[x]` Add Period Selector (Today, Week, Month, 1 Year, 3 Years, 5 Years, Custom Season) with strict regex validation for custom text/number durations
+
+## Phase 5: Platform Control Tower (Step 5) — Completed
+- `[x]` Build isolated Master Platform Control Tower (`/platform/login` and `/platform/dashboard`)
+- `[x]` Implement backend `POST /platform/auth`, `GET /platform/stats`, and `GET /platform/tenants` with separate platform JWT authorization
+- `[x]` Render multi-tenant directory, global GMV telemetry, engineering DB ping latency, and warning banner overlay
+
+## Added Features & Security Hardening — Completed
+- `[x]` Draft Order Lifecycle & Delete Bug Fix: Solved 500 Internal Server Error in `cancelDraftOrder` by cascading child deletes (`OrderItem`, `SplitPayment`, `CreditSale`, `TerminalTransaction`)
+- `[x]` Draft UI Modernization: Replaced native `window.confirm` popups with styled Tailwind modal and toast notifications
+- `[x]` Refund Engine: Implemented `POST /orders/:id/refund` with automatic inventory restock, manager PIN check, and audit logs
+- `[x]` RBAC Matrix Enforcement: Enforced Cashier shift-only Overview page limits, route guards on Inventory/Staff/Settings/Analytics
+- `[x]` Multi-Branch Management: Added "Branches & Sectors" tab to `/settings` with `POST /tenants/branches` endpoint
+- `[x]` Cashier Refund Policy: Added 3-tier refund security selector (Full Access, PIN Required, Restricted) in Tenant Settings
+- `[x]` Business Profile Logo Upload: Added local image FileReader Base64 converter to Tenant Settings with live preview
+- `[x]` Custom Privilege Delegation: Added per-user granular permission toggles in `EditStaffModal` (`PATCH /staff/permissions`)
