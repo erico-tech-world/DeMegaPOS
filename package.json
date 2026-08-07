@@ -1,5 +1,30 @@
 {
-  "name": "deMegaPOS-monorepo",
+  "name": "demegapos",
+  "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@10.18.3"
+  "description": "Enterprise-grade Open-Source POS, Inventory, and Business Platform",
+  "license": "AGPL-3.0",
+  "scripts": {
+    "build": "pnpm --filter @demegapos/db build && pnpm --filter web-back-office build",
+    "dev": "turbo run dev",
+    "dev:admin": "turbo run dev --filter demegapos-backend --filter web-back-office",
+    "dev:pos": "turbo run dev --filter demegapos-backend --filter web-pos",
+    "dev:kitchen": "turbo run dev --filter demegapos-backend --filter web-kitchen",
+    "dev:customer": "turbo run dev --filter demegapos-backend --filter web-customer",
+    "dev:mobile": "turbo run dev --filter demegapos-backend --filter mobile-pos",
+    "studio": "pnpm --filter @demegapos/db studio",
+    "db:push": "pnpm --filter @demegapos/db db:push --skip-generate",
+    "db:seed": "pnpm --filter @demegapos/db db:seed"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^25.2.1",
+    "prettier": "latest",
+    "prisma": "^6.2.1",
+    "turbo": "^2.10.1"
+  },
+  "packageManager": "pnpm@10.18.3",
+  "dependencies": {
+    "@prisma/client": "^6.2.1"
+  }
 }
