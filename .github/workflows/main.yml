@@ -12,40 +12,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ── pnpm: version MUST match the "packageManager" field in package.json ──
-      # Using version: 10 to match pnpm@10.18.3 declared in root package.json.
-      # pnpm v8 does NOT support the `pnpm run <script> --filter=<pkg>` syntax
-      # correctly — it strips the filter and looks for the script inside the
-      # filtered package directly, causing ERR_PNPM_NO_SCRIPT.
+      # ── pnpm ─────────────────────────────────────────────────────────────────
+      # pnpm/action-setup@v4 reads the "packageManager" field from package.json
+      # automatically (pnpm@10.18.3). Do NOT also specify "version:" here —
+      # that causes ERR_PNPM_BAD_PM_VERSION / "Multiple versions specified".
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
+      # ── Node.js ───────────────────────────────────────────────────────────────
+      # Node 20 is deprecated on GitHub-hosted runners (default is now Node 24).
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install
 
-      # ── DB package: generate Prisma Client ──────────────────────────────────
-      # Uses canonical `pnpm --filter <pkg> <script>` syntax (not pnpm run <script> --filter).
-      # prisma generate does NOT require DATABASE_URL — only the schema file.
+      # ── DB: Prisma Client generation ─────────────────────────────────────────
+      # prisma generate only needs the schema file — no DATABASE_URL required.
       - name: Build Database Package (Prisma Generate)
         run: pnpm --filter @demegapos/db build
 
-      # ── Backend: TypeScript compile ─────────────────────────────────────────
+      # ── Backend: TypeScript compile ──────────────────────────────────────────
       - name: Build Backend Application
         run: pnpm --filter demegapos-backend build
 
-      # ── Web frontends: TypeScript + Vite bundle ─────────────────────────────
+      # ── Web frontends ────────────────────────────────────────────────────────
       - name: Build Web Back-Office
         run: pnpm --filter web-back-office build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost:3000' }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
 
       - name: Build Web Kitchen Display
         run: pnpm --filter web-kitchen build
@@ -53,7 +51,7 @@ jobs:
       - name: Build Web Customer Portal
         run: pnpm --filter web-customer build
 
-      # ── Docker Images ───────────────────────────────────────────────────────
+      # ── Docker Images ─────────────────────────────────────────────────────────
       - name: Docker Build (Backend)
         run: docker build -t demegapos-backend -f apps/backend/Dockerfile .
 
