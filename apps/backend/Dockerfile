@@ -13,11 +13,11 @@ COPY . /usr/src/app
 WORKDIR /usr/src/app
 
 # use the cache mount for pnpm store; now pnpm matches the lockfile version
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --no-frozen-lockfile
 
 # build prisma client in the db package, then build backend package
-RUN pnpm --filter=@demegapos/db run build
-RUN pnpm --filter=demegapos-backend run build
+RUN pnpm --filter @demegapos/db build
+RUN pnpm --filter demegapos-backend build
 
 FROM base AS runner
 # Install OpenSSL in the runner image too (needed at runtime by Prisma query engine)

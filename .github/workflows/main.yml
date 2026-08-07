@@ -57,3 +57,9 @@ jobs:
 
       - name: Docker Build (Web Back-Office)
         run: docker build -t demegapos-back-office -f apps/web-back-office/Dockerfile .
+
+      - name: Docker Build (Web Kitchen)
+        run: docker build -t demegapos-kitchen -f apps/web-kitchen/Dockerfile .
+
+      - name: Docker Build (Web Customer)
+        run: docker build -t demegapos-customer -f apps/web-customer/Dockerfile .
