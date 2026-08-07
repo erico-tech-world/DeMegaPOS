@@ -28,7 +28,7 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       # ── DB: Prisma Client generation ─────────────────────────────────────────
       # prisma generate only needs the schema file — no DATABASE_URL required.
@@ -43,7 +43,7 @@ jobs:
       - name: Build Web Back-Office
         run: pnpm --filter web-back-office build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost:3000' }}
 
       - name: Build Web Kitchen Display
         run: pnpm --filter web-kitchen build
