@@ -1,9 +1,9 @@
 import { prisma } from '../../lib/prisma.js'
 import { CreateCategoryInput, CreateProductInput, UpdateProductInput, StockAdjustmentInput } from './schemas.js'
 
-export async function createCategory(data: CreateCategoryInput & { tenantId: string; description?: string }) {
+export async function createCategory(data: CreateCategoryInput & { tenantId: string; description?: string | null }) {
     return prisma.category.create({
-        data,
+        data: data as any,
     })
 }
 
@@ -25,10 +25,10 @@ export async function getCategories(tenantId: string) {
     }))
 }
 
-export async function updateCategory(id: string, tenantId: string, data: { name?: string; description?: string }) {
+export async function updateCategory(id: string, tenantId: string, data: { name?: string; description?: string | null }) {
     return prisma.category.update({
         where: { id, tenantId },
-        data,
+        data: data as any,
     })
 }
 
