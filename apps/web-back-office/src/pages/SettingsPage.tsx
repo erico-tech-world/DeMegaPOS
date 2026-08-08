@@ -3,7 +3,7 @@ import { Store, Shield, CreditCard, Receipt, Building2, Plus, Upload, KeyRound, 
 import axios from 'axios';
 import { useTheme } from '../context/ThemeContext';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { API_URL } from '../lib/apiConfig';
 
 const SettingsPage = () => {
     const { theme, toggleTheme } = useTheme();

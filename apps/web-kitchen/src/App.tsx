@@ -91,6 +91,11 @@ const getApiUrl = () => {
     if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
     if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
         const { protocol, hostname, port } = window.location;
+        const isStaticHost = hostname.endsWith('.netlify.app') || 
+                             hostname.endsWith('.vercel.app') || 
+                             hostname.endsWith('.pages.dev') || 
+                             hostname.endsWith('.github.io');
+        if (isStaticHost) return (window as any).DEMEGA_BACKEND_URL || 'https://demegapos-backend.onrender.com';
         if (hostname.startsWith('kitchen.')) return `${protocol}//${hostname.replace(/^kitchen\./, 'api.')}`;
         return `${protocol}//${hostname}${port ? `:${port}` : ''}`;
     }

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Shield, KeyRound, ArrowRight, AlertTriangle, Info, Copy, Check, Eye, EyeOff } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { API_URL } from '../../lib/apiConfig';
 
 const PlatformLoginPage = () => {
     const [secretKey, setSecretKey] = useState('');

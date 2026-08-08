@@ -5,7 +5,7 @@ import {
     RefreshCw, AlertTriangle, BarChart2, Building2, Award
 } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { API_URL } from '../../lib/apiConfig';
 
 // ─── Mini StatCard ────────────────────────────────────────────────────────────
 const StatCard = ({ title, value, icon: Icon, color, sub }: any) => (
