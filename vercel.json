@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install --prefix apps/web-back-office",
-  "buildCommand": "npm run build --prefix apps/web-back-office",
-  "outputDirectory": "apps/web-back-office/dist",
+  "installCommand": "npm install --prefix ../web-back-office",
+  "buildCommand": "npm run build --prefix ../web-back-office",
+  "outputDirectory": "../web-back-office/dist",
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
