@@ -23,10 +23,54 @@ server.setValidatorCompiler(validatorCompiler);
 server.setSerializerCompiler(serializerCompiler);
 
 async function main() {
+    // ─── Dynamic CORS Allowlist ────────────────────────────────────────────────
+    // Reads from environment variables so no code change is needed when adding
+    // a custom domain.  Set FRONTEND_URL and/or ALLOWED_ORIGINS (comma-separated)
+    // on your host (Render, Railway, etc.).
+    const buildAllowedOrigins = (): string[] => {
+        const origins = new Set<string>([
+            // Local development
+            'http://localhost:5173',
+            'http://localhost:5174',
+            'http://localhost:4173',
+            'http://localhost:3000',
+            // Netlify production deployment
+            'https://demegapos.netlify.app',
+        ]);
+
+        // FRONTEND_URL env variable (single URL configured on the host)
+        if (process.env.FRONTEND_URL) {
+            process.env.FRONTEND_URL.split(',').map(u => u.trim()).filter(Boolean).forEach(u => origins.add(u));
+        }
+
+        // ALLOWED_ORIGINS env variable (comma-separated list for multiple domains)
+        if (process.env.ALLOWED_ORIGINS) {
+            process.env.ALLOWED_ORIGINS.split(',').map(u => u.trim()).filter(Boolean).forEach(u => origins.add(u));
+        }
+
+        return Array.from(origins);
+    };
+
+    const allowedOrigins = buildAllowedOrigins();
+    console.log('[CORS] Allowed origins:', allowedOrigins);
+
     await server.register(cors, {
-        origin: '*',
+        origin: (requestOrigin, cb) => {
+            // Allow requests with no Origin (server-to-server, Postman, mobile apps)
+            if (!requestOrigin) return cb(null, true);
+            if (allowedOrigins.includes(requestOrigin)) return cb(null, true);
+            // Allow any *.netlify.app preview deploy URLs (branch deploys)
+            if (requestOrigin.endsWith('.netlify.app')) return cb(null, true);
+            // Allow any localhost port for development
+            if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin)) return cb(null, true);
+            console.warn(`[CORS] Blocked origin: ${requestOrigin}`);
+            cb(null, false);
+        },
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
         allowedHeaders: ['Content-Type', 'Authorization'],
+        credentials: true,
+        preflight: true,
+        strictPreflight: false,
     })
 
     await server.register(jwt, {
