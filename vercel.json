@@ -1,9 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
+  "installCommand": "corepack enable && corepack prepare pnpm@10.18.3 --activate && pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm --filter @demegapos/db build && pnpm --filter web-back-office build",
   "outputDirectory": "apps/web-back-office/dist",
-  "installCommand": "corepack enable && corepack prepare pnpm@10.18.3 --activate && pnpm install --no-frozen-lockfile",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
