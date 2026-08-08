@@ -3,10 +3,10 @@ import axios from 'axios';
 /**
  * Dynamic API and WebSocket URL Configurator
  * 
- * Dynamically resolves API_URL and WS_URL for localhost and cloud deployment platforms (Vercel, Render, Railway, AWS).
+ * Dynamically resolves API_URL and WS_URL for localhost and cloud deployment platforms (Netlify, Render, Railway, AWS, Custom Domains).
  * Priorities:
  * 1. Environment Variables (`import.meta.env.VITE_API_URL`, `import.meta.env.VITE_WS_URL`)
- * 2. Window Origin resolution (in browser cloud deployments)
+ * 2. Window Origin resolution (in browser cloud deployments e.g., Netlify / Custom Domain)
  * 3. Localhost fallback (`http://localhost:3000`, `ws://localhost:3000/ws`)
  */
 
@@ -17,7 +17,7 @@ export const getApiUrl = (): string => {
     if (typeof window !== 'undefined') {
         const { protocol, hostname, port } = window.location;
         if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-            // Production deployment on Vercel or custom domain
+            // Production deployment on Netlify or custom domain
             // e.g., if app is at https://pos.mydomain.com, backend API is at https://api.mydomain.com or relative
             if (hostname.startsWith('app.') || hostname.startsWith('pos.')) {
                 const apiHost = hostname.replace(/^(app|pos)\./, 'api.');
