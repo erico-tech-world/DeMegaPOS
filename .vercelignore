@@ -1,3 +1,3 @@
-apps/backend
-apps/mobile-pos
-turbo.json
+# Keep all workspace directories intact so pnpm workspace resolution succeeds in Vercel CLI
+*.log
+build_backend.log
