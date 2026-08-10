@@ -20,15 +20,13 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --no-frozen-lockf
 RUN pnpm --filter @demegapos/db run db:generate
 
 # ── Step 2: Compile packages/db TypeScript → JavaScript ──────────────────────
-# Runs `tsc -p packages/db/tsconfig.json` using the TypeScript binary that
-# pnpm hoisted into the root node_modules/.bin during `pnpm install`.
-# This produces packages/db/dist/index.js and packages/db/dist/context.js.
-RUN node_modules/.bin/tsc -p packages/db/tsconfig.json
+# Uses npx tsc to compile packages/db/tsconfig.json into packages/db/dist/
+RUN npx tsc -p packages/db/tsconfig.json
 
 # ── Step 3: Compile backend TypeScript → JavaScript ──────────────────────────
 # The backend's @demegapos/db import now resolves to packages/db/dist/index.js.
 WORKDIR /usr/src/app/apps/backend
-RUN node_modules/.bin/tsc
+RUN npx tsc
 
 FROM base AS runner
 # Install OpenSSL in the runner image too (needed at runtime by Prisma query engine)
