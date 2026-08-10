@@ -3,10 +3,17 @@
     "version": "1.0.0",
     "private": true,
     "type": "module",
-    "main": "./index.ts",
-    "types": "./index.ts",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js",
+            "default": "./dist/index.js"
+        }
+    },
     "scripts": {
-        "build": "prisma generate",
+        "build": "prisma generate && tsc",
         "db:generate": "prisma generate",
         "db:push": "prisma db push",
         "db:seed": "tsx seed.ts",
@@ -22,7 +29,9 @@
     },
     "devDependencies": {
         "@types/bcryptjs": "^2.4.6",
+        "@types/node": "latest",
         "prisma": "^6.2.1",
-        "tsx": "latest"
+        "tsx": "latest",
+        "typescript": "latest"
     }
 }
