@@ -156,33 +156,52 @@ async function main() {
     })
 
     server.get('/health', async () => {
-        const resendKeyPresent = !!(process.env.RESEND_API_KEY || process.env.SMTP_PASS)
-        const resendKeyValid = (process.env.RESEND_API_KEY || process.env.SMTP_PASS || '').trim().startsWith('re_')
+        const resendKey = (process.env.RESEND_API_KEY || process.env.SMTP_PASS || '').trim()
+        const gmailUser = (process.env.FALLBACK_SMTP_USER || process.env.GMAIL_USER || '').trim()
+        const gmailPass = (process.env.FALLBACK_SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').trim()
+
         return {
             status: 'OK',
             mail: {
-                provider: process.env.MAIL_PROVIDER || 'RESEND',
-                resendKeyPresent,
-                resendKeyValid,
+                preferredProvider: process.env.MAIL_PROVIDER || 'RESEND',
+                resend: {
+                    configured: resendKey.startsWith('re_'),
+                    from: process.env.SMTP_FROM || 'DeMegaPOS <onboarding@resend.dev>',
+                },
+                gmail: {
+                    configured: Boolean(gmailUser && gmailPass),
+                    user: gmailUser ? `${gmailUser.split('@')[0]}@...` : '(not configured)',
+                },
                 appBaseUrl: process.env.APP_BASE_URL || process.env.FRONTEND_URL || '(not set)',
             },
-            version: '2.0.0-resend-http',
+            version: '2.1.0-hybrid-mail',
         }
     })
 
-    // Mail diagnostic — fires a real test email through the same path as staff invites
-    // Auth-free so it can be tested without a JWT token
-    server.get('/health/mail', async (request, reply) => {
+    // Mail diagnostic endpoint — tests full dispatch pipeline (Resend -> Gmail fallback)
+    // Query param ?to=email@domain.com allows testing any recipient
+    server.get('/health/mail', async (request: any, reply) => {
         const { sendMail } = await import('./modules/../lib/mail.js')
+        const targetEmail = (request.query?.to as string) || 'delivered@resend.dev'
         try {
-            await sendMail({
-                to: 'delivered@resend.dev',
-                subject: '[DeMegaPOS] Mail System Diagnostic',
-                html: '<p>If you see this, the DeMegaPOS mail system is working correctly via Resend HTTP API.</p>',
+            const result = await sendMail({
+                to: targetEmail,
+                subject: '[DeMegaPOS] Mail Diagnostic Test',
+                html: '<p>DeMegaPOS mail delivery is operational via the Hybrid Mailer (Resend / Gmail SMTP fallback).</p>',
             })
-            return reply.send({ success: true, message: 'Mail dispatched successfully via Resend HTTP API.' })
+            return reply.send({
+                success: true,
+                recipient: targetEmail,
+                providerUsed: result.provider,
+                messageId: result.messageId,
+                message: `Mail dispatched successfully to ${targetEmail} via ${result.provider}.`
+            })
         } catch (err: any) {
-            return reply.status(500).send({ success: false, error: err.message })
+            return reply.status(500).send({
+                success: false,
+                recipient: targetEmail,
+                error: err.message || String(err)
+            })
         }
     })
 

@@ -51,10 +51,15 @@ services:
         sync: false
       - key: SMTP_FROM
         value: "DeMegaPOS <onboarding@resend.dev>"
-      # Gmail fallback (optional — leave blank if not configured)
+      # Gmail fallback (Google App Password)
       - key: FALLBACK_SMTP_USER
         sync: false
       - key: FALLBACK_SMTP_PASS
         sync: false
       - key: FALLBACK_SMTP_FROM
         sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+
