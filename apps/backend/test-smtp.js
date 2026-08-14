@@ -1,33 +1,23 @@
-import nodemailer from 'nodemailer';
 import * as dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ path: 'apps/backend/.env' });
+import { sendMail } from './src/lib/mail.ts';
 
-async function testSmtp() {
-    console.log("MAIL_PROVIDER:", process.env.MAIL_PROVIDER);
-    console.log("Testing Gmail SMTP...");
-    const gmailTransporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-            user: process.env.FALLBACK_SMTP_USER || 'demegakitchen5@gmail.com',
-            pass: process.env.FALLBACK_SMTP_PASS ? process.env.FALLBACK_SMTP_PASS.replace(/\s+/g, '') : 'oktzxxichuwuugyf',
-        },
-    });
+async function runDiagnostic() {
+    console.log('=== DeMegaPOS Mail Diagnostic ===');
+    console.log('MAIL_PROVIDER:', process.env.MAIL_PROVIDER);
+    console.log('RESEND_API_KEY present:', Boolean(process.env.RESEND_API_KEY || process.env.SMTP_PASS));
+    console.log('Dispatching test email...');
 
     try {
-        console.log("Verifying Gmail transport connection...");
-        await gmailTransporter.verify();
-        console.log("Gmail SMTP Verified Successfully!");
-
-        const info = await gmailTransporter.sendMail({
-            from: `"DeMegaPOS" <${process.env.FALLBACK_SMTP_USER || 'demegakitchen5@gmail.com'}>`,
-            to: 'demegakitchen5@gmail.com',
-            subject: 'DeMegaPOS Test Email',
-            text: 'This is a test email from DeMegaPOS SMTP diagnostic.'
+        await sendMail({
+            to: 'delivered@resend.dev',
+            subject: 'DeMegaPOS System Diagnostic Test',
+            html: '<p>All systems operational. Mail dispatcher working as expected.</p>',
         });
-        console.log("Sent successfully! MessageID:", info.messageId);
+        console.log('✅ Diagnostic test passed: Mail delivered successfully.');
     } catch (err) {
-        console.error("Gmail SMTP Failed:", err);
+        console.error('❌ Diagnostic test failed:', err);
     }
 }
 
-testSmtp();
+runDiagnostic();

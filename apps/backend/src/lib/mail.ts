@@ -1,60 +1,124 @@
 import nodemailer from 'nodemailer'
 
 // ---------------------------------------------------------------------------
-// Nodemailer SMTP Transport
-// Set these variables in your .env file:
-//   SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS, SMTP_FROM
+// Mail Provider & Dispatcher
 //
-// DEFAULT PROVIDER: GMAIL (reliable with App Passwords, no DNS config needed)
-// Override with MAIL_PROVIDER=RESEND if Resend is configured.
+// Supports:
+// 1. Resend HTTPS REST API (Primary / Fastest — immune to cloud SMTP port blocking)
+// 2. Resend SMTP (Port 465 / 587 with strict 5s connection timeouts)
+// 3. Gmail SMTP (via App Password with strict 5s connection timeouts)
 // ---------------------------------------------------------------------------
 
+export interface MailOptions {
+    to: string
+    subject: string
+    html: string
+    from?: string
+}
+
 /**
- * Gmail transporter using SSL port 465 (most reliable with App Passwords).
- * Uses nodemailer's built-in 'gmail' service definition so host/port are
- * always correct regardless of environment variables.
+ * Dispatch an email via the Resend HTTPS REST API (port 443).
+ * This is the most reliable method on cloud platforms (Render, Railway, Fly.io)
+ * where outbound SMTP ports (587, 465, 25) are frequently filtered or blocked.
+ */
+async function sendViaResendHttpApi(opts: MailOptions, apiKey: string): Promise<boolean> {
+    const fromAddress = opts.from || process.env.SMTP_FROM || 'DeMegaPOS <onboarding@resend.dev>'
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
+
+    try {
+        console.log(`[MAIL:Resend-HTTP] Dispatching email to ${opts.to} via Resend REST API...`)
+        const response = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey.trim()}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                from: fromAddress,
+                to: [opts.to],
+                subject: opts.subject,
+                html: opts.html,
+            }),
+            signal: controller.signal,
+        })
+
+        const data: any = await response.json().catch(() => ({}))
+
+        if (response.ok && data?.id) {
+            console.log(`[MAIL:Resend-HTTP] Email successfully delivered to ${opts.to}. MessageID: ${data.id}`)
+            return true
+        } else {
+            console.warn(`[MAIL:Resend-HTTP] Resend API returned status ${response.status}:`, data?.message || data)
+            return false
+        }
+    } catch (err: any) {
+        if (err.name === 'AbortError') {
+            console.warn(`[MAIL:Resend-HTTP] Request timed out after 8s.`)
+        } else {
+            console.warn(`[MAIL:Resend-HTTP] Request failed:`, err.message || err)
+        }
+        return false
+    } finally {
+        clearTimeout(timeoutId)
+    }
+}
+
+/**
+ * Gmail transporter using SSL port 465 with strict timeouts.
  */
 function getGmailTransporter() {
-    const user = process.env.FALLBACK_SMTP_USER || 'demegakitchen5@gmail.com'
-    // Strip whitespace that may be introduced by copy-pasting App Passwords
-    const pass = (process.env.FALLBACK_SMTP_PASS || 'oktzxxichuwuugyf').replace(/\s+/g, '')
+    const user = process.env.FALLBACK_SMTP_USER || ''
+    const pass = (process.env.FALLBACK_SMTP_PASS || '').replace(/\s+/g, '')
     return nodemailer.createTransport({
         service: 'gmail',
         auth: { user, pass },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
     })
 }
 
 /**
- * Resend SMTP transporter — requires SMTP_USER and SMTP_PASS in .env.
- * Used as primary only when MAIL_PROVIDER=RESEND is explicitly set.
+ * Resend SMTP transporter with strict timeouts.
  */
 function getResendTransporter() {
+    const pass = process.env.RESEND_API_KEY || process.env.SMTP_PASS || ''
     return nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.resend.com',
         port: parseInt(process.env.SMTP_PORT || '587', 10),
         secure: process.env.SMTP_SECURE === 'true',
         auth: {
             user: process.env.SMTP_USER || 'resend',
-            pass: process.env.SMTP_PASS ? process.env.SMTP_PASS.replace(/\s+/g, '') : undefined,
+            pass: pass ? pass.trim() : undefined,
         },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
     })
 }
 
-export interface MailOptions {
-    to: string
-    subject: string
-    html: string
-}
-
 /**
- * Send an email via the configured SMTP transporter.
- * Supports primary/fallback logic between Resend and Gmail.
+ * Send an email via the best available provider.
+ * Priority:
+ * 1. Resend HTTPS REST API (if apiKey present starting with 're_')
+ * 2. Primary SMTP transporter (with 5s timeout)
+ * 3. Fallback SMTP transporter (with 5s timeout)
  */
 export async function sendMail(opts: MailOptions): Promise<void> {
-    // DEFAULT: GMAIL — works reliably with App Passwords without extra DNS/API config
-    // Set MAIL_PROVIDER=RESEND in .env to switch to Resend as primary
-    const provider = (process.env.MAIL_PROVIDER || 'GMAIL').toUpperCase()
-    
+    const resendApiKey = (process.env.RESEND_API_KEY || process.env.SMTP_PASS || '').trim()
+
+    // 1. Fast Path: Resend HTTPS API (never blocked by host firewalls)
+    if (resendApiKey && resendApiKey.startsWith('re_')) {
+        const httpSuccess = await sendViaResendHttpApi(opts, resendApiKey)
+        if (httpSuccess) {
+            return
+        }
+        console.log('[MAIL] Resend HTTPS API was unsuccessful, falling back to SMTP transports...')
+    }
+
+    // 2. SMTP Transporters with strict 5-second connection timeouts
+    const provider = (process.env.MAIL_PROVIDER || 'RESEND').toUpperCase()
     let primaryTransporter: nodemailer.Transporter
     let primaryFrom: string
     let fallbackTransporter: nodemailer.Transporter
@@ -73,22 +137,18 @@ export async function sendMail(opts: MailOptions): Promise<void> {
     }
 
     try {
-        console.log(`[MAIL] Attempting email dispatch to ${opts.to} via primary provider (${provider})...`)
-        // Verify connection before sending — surfaces credential issues early
-        await primaryTransporter.verify().catch((verifyErr: any) => {
-            console.warn(`[MAIL] Transporter verify failed (${provider}): ${verifyErr.message} — attempting send anyway`)
-        })
+        console.log(`[MAIL:SMTP] Attempting email dispatch to ${opts.to} via ${provider}...`)
         await primaryTransporter.sendMail({
             from: primaryFrom,
             to: opts.to,
             subject: opts.subject,
             html: opts.html,
         })
-        console.log(`[MAIL] Email successfully sent to ${opts.to} via primary provider (${provider}).`)
+        console.log(`[MAIL:SMTP] Email successfully sent to ${opts.to} via ${provider}.`)
     } catch (err: any) {
-        console.error(`[MAIL] Primary email dispatch failed via ${provider}:`, err.message || err)
-        console.log(`[MAIL] Executing automatic failover to fallback provider...`)
-        
+        console.warn(`[MAIL:SMTP] Primary provider (${provider}) failed:`, err.message || err)
+        console.log(`[MAIL:SMTP] Trying fallback provider...`)
+
         try {
             await fallbackTransporter.sendMail({
                 from: fallbackFrom,
@@ -96,14 +156,13 @@ export async function sendMail(opts: MailOptions): Promise<void> {
                 subject: opts.subject,
                 html: opts.html,
             })
-            console.log(`[MAIL] Fallback email dispatch successful to ${opts.to}.`)
+            console.log(`[MAIL:SMTP] Fallback provider successfully sent email to ${opts.to}.`)
         } catch (fallbackErr: any) {
-            console.error(`[MAIL] Fallback email dispatch also failed:`, fallbackErr.message || fallbackErr)
-            throw new Error(`Email dispatch failed on both primary and fallback providers. Primary error: ${err.message}. Fallback error: ${fallbackErr.message}`)
+            console.error(`[MAIL:SMTP] Fallback also failed:`, fallbackErr.message || fallbackErr)
+            throw new Error(`Email dispatch failed. Primary error: ${err.message}. Fallback error: ${fallbackErr.message}`)
         }
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Reusable HTML email templates
