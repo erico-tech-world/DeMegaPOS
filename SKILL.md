@@ -74,4 +74,13 @@ By default, Fastify restricts incoming request bodies to 1MB. Because high-resol
 1. Always configure the Fastify server instance with `bodyLimit: 10485760` (10MB) in `apps/backend/src/index.ts`.
 2. Do not upload raw images larger than 5MB; if needed, implement local canvas resizing or compression on the client side before base64 encoding to save bandwidth and database storage space.
 
+---
+
+## 🔄 Git Source Control & Remote Synchronization Standard
+
+1. **Continuous Remote Sync**: Always push and synchronize changes via the Git source control tab / terminal to remote repositories (`origin` and `megakash`) immediately after any meaningful edits or fixes.
+2. **Branch Parity with Production**: Netlify and other CI/CD pipelines deploy directly from `main`. Ensure all tested fixes and synchronized lockfiles on feature branches are merged and pushed directly to `main` to trigger immediate, successful cloud deployments.
+3. **Commit Rigor**: Stage all modified files along with lockfiles (`pnpm-lock.yaml`) and use descriptive conventional commit messages (e.g., `feat:`, `fix:`, `chore:`, `ci:`).
+
+
 

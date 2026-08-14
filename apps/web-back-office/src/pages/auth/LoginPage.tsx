@@ -33,17 +33,24 @@ const LoginPage = () => {
         setIsLoading(true);
         setError(null);
         try {
+            if (!API_URL && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                throw new Error('API_UNCONFIGURED');
+            }
             const res = await axios.post(`${API_URL}/auth/login`, { identifier, password });
             login(res.data.user, res.data.accessToken);
             const role = res.data.user.role;
             if (role === 'CASHIER') navigate('/pos');
             else navigate('/dashboard');
         } catch (err: any) {
-            const msg = err.response?.data?.message;
-            if (msg?.includes('Access Revoked')) {
-                setError(msg);
+            if (err.message === 'API_UNCONFIGURED' || !err.response || err.response.status === 404 || err.code === 'ERR_NETWORK') {
+                setError('Cannot reach backend server. Please configure VITE_API_URL in your hosting dashboard and ensure your Fastify backend is running.');
             } else {
-                setError(msg || 'Invalid credentials. Please try again.');
+                const msg = err.response?.data?.message;
+                if (msg?.includes('Access Revoked')) {
+                    setError(msg);
+                } else {
+                    setError(msg || 'Invalid identifier or password. Please try again.');
+                }
             }
         } finally {
             setIsLoading(false);
@@ -59,6 +66,9 @@ const LoginPage = () => {
         setIsLoading(true);
         setError(null);
         try {
+            if (!API_URL && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                throw new Error('API_UNCONFIGURED');
+            }
             // Staff PIN login uses the same /auth/login endpoint — password field = PIN
             const res = await axios.post(`${API_URL}/auth/login`, {
                 identifier: staffIdentifier,
@@ -68,11 +78,15 @@ const LoginPage = () => {
             // Staff always routes directly to POS terminal
             navigate('/pos');
         } catch (err: any) {
-            const msg = err.response?.data?.message;
-            if (msg?.includes('Access Revoked')) {
-                setError(msg);
+            if (err.message === 'API_UNCONFIGURED' || !err.response || err.response.status === 404 || err.code === 'ERR_NETWORK') {
+                setError('Cannot reach backend server. Please configure VITE_API_URL in your hosting dashboard and ensure your Fastify backend is running.');
             } else {
-                setError(msg || 'Invalid Staff ID or PIN. Please try again.');
+                const msg = err.response?.data?.message;
+                if (msg?.includes('Access Revoked')) {
+                    setError(msg);
+                } else {
+                    setError(msg || 'Invalid Staff ID or PIN. Please try again.');
+                }
             }
         } finally {
             setIsLoading(false);
