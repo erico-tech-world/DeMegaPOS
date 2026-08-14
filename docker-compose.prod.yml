@@ -18,20 +18,23 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=c4800476e4470153535d86f2f3dc83d4582e62c3dc8f322718456742b286ed4a
       - PORT=3000
-      - FRONTEND_URL=http://localhost:8080
+      - FRONTEND_URL=https://demegapos.netlify.app
+      - APP_BASE_URL=https://demegapos.netlify.app
+      - ALLOWED_ORIGINS=https://demegapos.netlify.app,https://demegapos.onrender.com,http://localhost:5173
       - MAIL_PROVIDER=RESEND
+      - RESEND_API_KEY=${RESEND_API_KEY}
       - SMTP_HOST=smtp.resend.com
       - SMTP_PORT=587
       - SMTP_SECURE=false
       - SMTP_USER=resend
-      - SMTP_PASS=re_NStgbNAb_GQFQp2W8bDvoK3TQTEVi3mkf
+      - SMTP_PASS=${RESEND_API_KEY}
       - SMTP_FROM=DeMegaPOS <onboarding@resend.dev>
       - FALLBACK_SMTP_HOST=smtp.gmail.com
       - FALLBACK_SMTP_PORT=587
       - FALLBACK_SMTP_SECURE=false
-      - FALLBACK_SMTP_USER=demegakitchen5@gmail.com
-      - FALLBACK_SMTP_PASS=oktz xxic huwu ugyf
-      - FALLBACK_SMTP_FROM=DeMegaPOS <demegakitchen5@gmail.com>
+      - FALLBACK_SMTP_USER=${FALLBACK_SMTP_USER}
+      - FALLBACK_SMTP_PASS=${FALLBACK_SMTP_PASS}
+      - FALLBACK_SMTP_FROM=DeMegaPOS <${FALLBACK_SMTP_USER}>
     depends_on:
       - redis
     ports:
