@@ -33,6 +33,12 @@ DeMega POS is built as a multi-tenant, micro-service ready monolith (Fastify + V
     - [x] Fulfillment (`status`) and Financial (`paymentStatus`) tracks split.
     - [x] Front-end build resolution and Vercel build configuration (`vercel.json`).
     - [x] Prisma Client & CLI version alignment (`^6.2.1`) to resolve generator crashes.
+- **Phase 18**: Mobile POS & Offline-First WatermelonDB Sync (Completed).
+    - [x] React Native / Expo Mobile POS with offline-first local database (WatermelonDB).
+    - [x] SQLite native storage adapter on mobile / LokiJS in-memory adapter on Web.
+    - [x] Bi-directional delta sync engine (`/sync/pull` and `/sync/push`) with timestamp resolution.
+    - [x] Draft order lifecycle, VIP price overrides, customer wallet integration, and multi-tender checkout (`CASH`, `CARD`, `TRANSFER`, `SPLIT`, `CREDIT`).
+    - [x] Reactive UI observables via `@nozbe/with-observables` with instant live search and barcode ready data modeling.
 
 ---
-*Last Updated: 2026-07-15*
+*Last Updated: 2026-08-14*
