@@ -5,6 +5,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  PNPM_FLAGS = "--no-frozen-lockfile"
 
 # SPA fallback — all routes served by index.html
 [[redirects]]
