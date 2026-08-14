@@ -43,7 +43,7 @@ const LoginPage = () => {
             else navigate('/dashboard');
         } catch (err: any) {
             if (err.message === 'API_UNCONFIGURED' || !err.response || err.response.status === 404 || err.code === 'ERR_NETWORK') {
-                setError('Cannot reach backend server. Please configure VITE_API_URL in your hosting dashboard and ensure your Fastify backend is running.');
+                setError('Our services are currently unavailable. Please try again shortly or contact your administrator if the issue persists.');
             } else {
                 const msg = err.response?.data?.message;
                 if (msg?.includes('Access Revoked')) {
@@ -79,7 +79,7 @@ const LoginPage = () => {
             navigate('/pos');
         } catch (err: any) {
             if (err.message === 'API_UNCONFIGURED' || !err.response || err.response.status === 404 || err.code === 'ERR_NETWORK') {
-                setError('Cannot reach backend server. Please configure VITE_API_URL in your hosting dashboard and ensure your Fastify backend is running.');
+                setError('Our services are currently unavailable. Please try again shortly or contact your administrator if the issue persists.');
             } else {
                 const msg = err.response?.data?.message;
                 if (msg?.includes('Access Revoked')) {
