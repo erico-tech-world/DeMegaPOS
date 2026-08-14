@@ -145,7 +145,7 @@ async function main() {
         if (request.method === 'OPTIONS') {
             return
         }
-        if (request.url.startsWith('/auth') || request.url.startsWith('/platform') || request.url.startsWith('/docs') || request.url === '/health' || request.url.startsWith('/ws')) {
+        if (request.url.startsWith('/auth') || request.url.startsWith('/platform') || request.url.startsWith('/docs') || request.url.startsWith('/health') || request.url.startsWith('/ws')) {
             return
         }
         try {
@@ -156,7 +156,34 @@ async function main() {
     })
 
     server.get('/health', async () => {
-        return { status: 'OK' }
+        const resendKeyPresent = !!(process.env.RESEND_API_KEY || process.env.SMTP_PASS)
+        const resendKeyValid = (process.env.RESEND_API_KEY || process.env.SMTP_PASS || '').trim().startsWith('re_')
+        return {
+            status: 'OK',
+            mail: {
+                provider: process.env.MAIL_PROVIDER || 'RESEND',
+                resendKeyPresent,
+                resendKeyValid,
+                appBaseUrl: process.env.APP_BASE_URL || process.env.FRONTEND_URL || '(not set)',
+            },
+            version: '2.0.0-resend-http',
+        }
+    })
+
+    // Mail diagnostic — fires a real test email through the same path as staff invites
+    // Auth-free so it can be tested without a JWT token
+    server.get('/health/mail', async (request, reply) => {
+        const { sendMail } = await import('./modules/../lib/mail.js')
+        try {
+            await sendMail({
+                to: 'delivered@resend.dev',
+                subject: '[DeMegaPOS] Mail System Diagnostic',
+                html: '<p>If you see this, the DeMegaPOS mail system is working correctly via Resend HTTP API.</p>',
+            })
+            return reply.send({ success: true, message: 'Mail dispatched successfully via Resend HTTP API.' })
+        } catch (err: any) {
+            return reply.status(500).send({ success: false, error: err.message })
+        }
     })
 
     try {

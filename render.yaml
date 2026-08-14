@@ -1,0 +1,60 @@
+# render.yaml — Render Infrastructure as Code
+# Docs: https://render.com/docs/render-yaml
+#
+# This file defines the DeMegaPOS backend service on Render.
+# Connect your GitHub repo to Render and it will use this config automatically.
+
+services:
+  - type: web
+    name: demegapos-backend
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: .
+    buildCommand: "corepack enable && corepack prepare pnpm@10.18.3 --activate && pnpm install --no-frozen-lockfile && pnpm --filter @demegapos/db run build && pnpm --filter demegapos-backend build"
+    startCommand: "node apps/backend/dist/index.js"
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: FRONTEND_URL
+        value: https://demegapos.netlify.app
+      - key: APP_BASE_URL
+        value: https://demegapos.netlify.app
+      - key: ALLOWED_ORIGINS
+        value: "https://demegapos.netlify.app,https://demegapos.onrender.com,http://localhost:5173"
+      # Mail — Resend HTTP API (port 443, works on Render free tier)
+      - key: MAIL_PROVIDER
+        value: RESEND
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.resend.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        value: resend
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        value: "DeMegaPOS <onboarding@resend.dev>"
+      # Gmail fallback (optional — leave blank if not configured)
+      - key: FALLBACK_SMTP_USER
+        sync: false
+      - key: FALLBACK_SMTP_PASS
+        sync: false
+      - key: FALLBACK_SMTP_FROM
+        sync: false
