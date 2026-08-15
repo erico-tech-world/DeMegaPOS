@@ -162,6 +162,7 @@ async function main() {
 
     server.get('/health', async () => {
         const resendKey = (process.env.RESEND_API_KEY || process.env.SMTP_PASS || '').trim()
+        const brevoKey = (process.env.BREVO_API_KEY || '').trim()
         const gmailUser = (process.env.FALLBACK_SMTP_USER || process.env.GMAIL_USER || '').trim()
         const gmailPass = (process.env.FALLBACK_SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').trim()
 
@@ -173,13 +174,16 @@ async function main() {
                     configured: resendKey.startsWith('re_'),
                     from: 'DeMegaPOS <onboarding@resend.dev>',
                 },
+                brevo: {
+                    configured: Boolean(brevoKey),
+                },
                 gmail: {
                     configured: Boolean(gmailUser && gmailPass),
                     user: gmailUser ? `${gmailUser.split('@')[0]}@...` : '(not configured)',
                 },
                 appBaseUrl: process.env.APP_BASE_URL || process.env.FRONTEND_URL || '(not set)',
             },
-            version: '2.2.0-ipv4-dns-active',
+            version: '2.3.0-multi-rest-active',
         }
     })
 
