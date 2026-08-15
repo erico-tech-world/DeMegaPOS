@@ -47,7 +47,8 @@ export interface MailOptions {
  * 1. Resend HTTPS REST API (Port 443)
  */
 async function sendViaResendHttpApi(opts: MailOptions, apiKey: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    const resendFrom = (process.env.RESEND_FROM || '').trim() || 'DeMegaPOS <onboarding@resend.dev>'
+    const cleanKey = apiKey.trim().replace(/^["']+|["']+$/g, '')
+    const resendFrom = (process.env.RESEND_FROM || '').trim().replace(/^["']+|["']+$/g, '') || 'DeMegaPOS <onboarding@resend.dev>'
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 7000)
 
@@ -56,12 +57,12 @@ async function sendViaResendHttpApi(opts: MailOptions, apiKey: string): Promise<
         const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${apiKey.trim()}`,
+                'Authorization': `Bearer ${cleanKey}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
                 from: resendFrom,
-                to: [opts.to],
+                to: [opts.to.trim()],
                 subject: opts.subject,
                 html: opts.html,
             }),
@@ -88,24 +89,26 @@ async function sendViaResendHttpApi(opts: MailOptions, apiKey: string): Promise<
 }
 
 /**
- * 2. Brevo (Sendinblue) HTTPS REST API (Port 443 — 300 free emails/day to ANY domain with zero restrictions)
+ * 2. Brevo (Sendinblue) HTTPS REST API (Port 443 — free 300 emails/day to ANY domain with zero restrictions)
  */
 async function sendViaBrevoHttpApi(opts: MailOptions, apiKey: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    const senderEmail = (process.env.GMAIL_USER || process.env.FALLBACK_SMTP_USER || 'demegakitchen5@gmail.com').trim()
+    const cleanKey = apiKey.trim().replace(/^["']+|["']+$/g, '')
+    const senderEmail = (process.env.BREVO_SENDER_EMAIL || process.env.GMAIL_USER || process.env.FALLBACK_SMTP_USER || 'demegakitchen5@gmail.com').trim().replace(/^["']+|["']+$/g, '')
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 7000)
 
     try {
-        console.log(`[MAIL:Brevo-HTTP] Dispatching email to ${opts.to} via Brevo HTTPS REST API...`)
+        console.log(`[MAIL:Brevo-HTTP] Dispatching email to ${opts.to} via Brevo HTTPS REST API (sender: ${senderEmail})...`)
         const response = await fetch('https://api.brevo.com/v3/smtp/email', {
             method: 'POST',
             headers: {
-                'api-key': apiKey.trim(),
-                'Content-Type': 'application/json',
+                'accept': 'application/json',
+                'api-key': cleanKey,
+                'content-type': 'application/json',
             },
             body: JSON.stringify({
                 sender: { name: 'DeMegaPOS', email: senderEmail },
-                to: [{ email: opts.to }],
+                to: [{ email: opts.to.trim() }],
                 subject: opts.subject,
                 htmlContent: opts.html,
             }),
@@ -118,9 +121,9 @@ async function sendViaBrevoHttpApi(opts: MailOptions, apiKey: string): Promise<{
             console.log(`[MAIL:Brevo-HTTP] Delivered successfully to ${opts.to}. MessageID: ${data.messageId}`)
             return { success: true, messageId: data.messageId }
         } else {
-            const errMsg = data?.message || `HTTP ${response.status}`
+            const errMsg = data?.message || data?.error || `HTTP ${response.status}`
             console.warn(`[MAIL:Brevo-HTTP] Brevo dispatch failed for ${opts.to}: ${errMsg}`)
-            return { success: false, error: errMsg }
+            return { success: false, error: `Brevo API: ${errMsg}` }
         }
     } catch (err: any) {
         const errMsg = err.name === 'AbortError' ? 'Timeout after 7s' : (err.message || String(err))
@@ -154,9 +157,9 @@ async function sendViaGmailSmtp(opts: MailOptions): Promise<{ success: boolean; 
             auth: { user, pass },
             lookup: ipv4Lookup,
             family: 4,
-            connectionTimeout: 5000,
-            greetingTimeout: 5000,
-            socketTimeout: 5000,
+            connectionTimeout: 4000,
+            greetingTimeout: 4000,
+            socketTimeout: 4000,
         } as any)
 
         const info = await transporter465.sendMail({
@@ -179,9 +182,9 @@ async function sendViaGmailSmtp(opts: MailOptions): Promise<{ success: boolean; 
                 auth: { user, pass },
                 lookup: ipv4Lookup,
                 family: 4,
-                connectionTimeout: 5000,
-                greetingTimeout: 5000,
-                socketTimeout: 5000,
+                connectionTimeout: 4000,
+                greetingTimeout: 4000,
+                socketTimeout: 4000,
             } as any)
 
             const info = await transporter587.sendMail({
@@ -204,7 +207,7 @@ async function sendViaGmailSmtp(opts: MailOptions): Promise<{ success: boolean; 
 
 export async function sendMail(opts: MailOptions): Promise<{ provider: string; messageId?: string }> {
     const resendApiKey = (process.env.RESEND_API_KEY || process.env.SMTP_PASS || '').trim()
-    const brevoApiKey = (process.env.BREVO_API_KEY || '').trim()
+    const brevoApiKey = (process.env.BREVO_API_KEY || process.env.BREVO_KEY || process.env.SENDINBLUE_API_KEY || '').trim()
     const hasResend = resendApiKey.startsWith('re_')
     const hasBrevo = Boolean(brevoApiKey)
     const hasGmail = Boolean(
