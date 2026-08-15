@@ -19,12 +19,27 @@ const ipv4Lookup = (hostname: string, options: any, callback: any) => {
     return dns.lookup(hostname, { family: 4 }, callback)
 }
 
+/**
+ * Helper to sanitize and fix malformed 'from' email headers (e.g. missing brackets, stray quotes)
+ */
+function sanitizeFrom(raw: string | undefined, defaultEmail: string): string {
+    if (!raw) return `DeMegaPOS <${defaultEmail}>`
+    let s = raw.trim().replace(/^["']+|["']+$/g, '')
+    if (s.includes('<') && !s.includes('>')) {
+        s += '>'
+    }
+    if (!s.includes('<') && s.includes('@')) {
+        s = `DeMegaPOS <${s}>`
+    }
+    return s
+}
+
 // ---------------------------------------------------------------------------
 // Resilient Hybrid Mail Provider & Dispatcher
 //
 // Provider Architecture:
-// 1. Gmail SMTP (Forced IPv4 on Port 465 SSL / 587 TLS)
-//    - Sends to ANY recipient/domain (no free-tier single-recipient restriction)
+// 1. Gmail SMTP (Primary by default — forced IPv4 on Port 465 SSL / 587 TLS)
+//    - Sends to ANY recipient/domain (unrestricted)
 // 2. Resend HTTPS REST API (Port 443 — fast alternative)
 // ---------------------------------------------------------------------------
 
@@ -37,10 +52,9 @@ export interface MailOptions {
 
 /**
  * Dispatch an email via Resend HTTPS REST API (Port 443).
- * Uses 'DeMegaPOS <onboarding@resend.dev>' by default to comply with Resend format rules.
+ * Always uses 'DeMegaPOS <onboarding@resend.dev>' or custom verified RESEND_FROM.
  */
 async function sendViaResendHttpApi(opts: MailOptions, apiKey: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    // Resend requires verified domain or onboarding@resend.dev
     const resendFrom = (process.env.RESEND_FROM || '').trim() || 'DeMegaPOS <onboarding@resend.dev>'
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 7000)
@@ -89,11 +103,11 @@ async function sendViaResendHttpApi(opts: MailOptions, apiKey: string): Promise<
 async function sendViaGmailSmtp(opts: MailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const user = (process.env.FALLBACK_SMTP_USER || process.env.GMAIL_USER || '').trim()
     const pass = (process.env.FALLBACK_SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim()
-    const gmailFrom = user ? `DeMegaPOS <${user}>` : 'DeMegaPOS <demegakitchen5@gmail.com>'
+    const gmailFrom = sanitizeFrom(opts.from || process.env.SMTP_FROM || process.env.FALLBACK_SMTP_FROM || process.env.GMAIL_FROM, user || 'demegakitchen5@gmail.com')
 
     if (!user || !pass) {
         console.warn('[MAIL:Gmail-SMTP] Skipping Gmail: GMAIL_USER or App Password not configured.')
-        return { success: false, error: 'Gmail credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured.' }
+        return { success: false, error: 'Gmail credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured in environment.' }
     }
 
     // ── Strategy 1: Host smtp.gmail.com on Port 465 (SSL) with forced IPv4 DNS ──

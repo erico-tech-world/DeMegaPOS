@@ -168,10 +168,10 @@ async function main() {
         return {
             status: 'OK',
             mail: {
-                preferredProvider: process.env.MAIL_PROVIDER || 'RESEND',
+                preferredProvider: (process.env.MAIL_PROVIDER || 'GMAIL').toUpperCase(),
                 resend: {
                     configured: resendKey.startsWith('re_'),
-                    from: process.env.SMTP_FROM || 'DeMegaPOS <onboarding@resend.dev>',
+                    from: 'DeMegaPOS <onboarding@resend.dev>',
                 },
                 gmail: {
                     configured: Boolean(gmailUser && gmailPass),
@@ -179,7 +179,7 @@ async function main() {
                 },
                 appBaseUrl: process.env.APP_BASE_URL || process.env.FRONTEND_URL || '(not set)',
             },
-            version: '2.1.0-hybrid-mail',
+            version: '2.2.0-ipv4-dns-active',
         }
     })
 
