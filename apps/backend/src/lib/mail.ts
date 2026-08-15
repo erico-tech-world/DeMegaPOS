@@ -6,11 +6,24 @@ try {
     dns.setDefaultResultOrder('ipv4first')
 } catch (_) {}
 
+/**
+ * Custom DNS lookup function that strictly forces IPv4 resolution.
+ * This guarantees Node.js and Nodemailer never attempt IPv6 socket connections
+ * on cloud environments (like Render/Docker) that lack IPv6 outbound routing.
+ */
+const ipv4Lookup = (hostname: string, options: any, callback: any) => {
+    if (typeof options === 'function') {
+        callback = options
+        options = {}
+    }
+    return dns.lookup(hostname, { family: 4 }, callback)
+}
+
 // ---------------------------------------------------------------------------
 // Resilient Hybrid Mail Provider & Dispatcher
 //
 // Provider Architecture:
-// 1. Gmail SMTP (IPv4 forced on Port 465 SSL / 587 TLS)
+// 1. Gmail SMTP (Forced IPv4 on Port 465 SSL / 587 TLS)
 //    - Sends to ANY recipient/domain (no free-tier single-recipient restriction)
 // 2. Resend HTTPS REST API (Port 443 — fast alternative)
 // ---------------------------------------------------------------------------
@@ -24,14 +37,16 @@ export interface MailOptions {
 
 /**
  * Dispatch an email via Resend HTTPS REST API (Port 443).
+ * Uses 'DeMegaPOS <onboarding@resend.dev>' by default to comply with Resend format rules.
  */
 async function sendViaResendHttpApi(opts: MailOptions, apiKey: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    const fromAddress = opts.from || process.env.SMTP_FROM || 'DeMegaPOS <onboarding@resend.dev>'
+    // Resend requires verified domain or onboarding@resend.dev
+    const resendFrom = (process.env.RESEND_FROM || '').trim() || 'DeMegaPOS <onboarding@resend.dev>'
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 7000)
 
     try {
-        console.log(`[MAIL:Resend-HTTP] Dispatching email to ${opts.to}...`)
+        console.log(`[MAIL:Resend-HTTP] Dispatching email to ${opts.to} from ${resendFrom}...`)
         const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -39,7 +54,7 @@ async function sendViaResendHttpApi(opts: MailOptions, apiKey: string): Promise<
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                from: fromAddress,
+                from: resendFrom,
                 to: [opts.to],
                 subject: opts.subject,
                 html: opts.html,
@@ -68,20 +83,20 @@ async function sendViaResendHttpApi(opts: MailOptions, apiKey: string): Promise<
 
 /**
  * Dispatch an email via Gmail SMTP using Google App Password.
- * Forces IPv4 (family: 4) to prevent ENETUNREACH on cloud containers without IPv6 routes.
- * Tries Port 465 (SSL) first, and falls back to Port 587 (STARTTLS).
+ * Uses ipv4Lookup to strictly force IPv4 connections, eliminating ENETUNREACH in Render/Docker.
+ * Tries Port 465 (SSL) first, then Port 587 (STARTTLS), then built-in 'gmail' service.
  */
 async function sendViaGmailSmtp(opts: MailOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
     const user = (process.env.FALLBACK_SMTP_USER || process.env.GMAIL_USER || '').trim()
     const pass = (process.env.FALLBACK_SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '').trim()
-    const fromAddress = opts.from || process.env.FALLBACK_SMTP_FROM || process.env.GMAIL_FROM || (user ? `"DeMegaPOS" <${user}>` : `"DeMegaPOS" <demegakitchen5@gmail.com>`)
+    const gmailFrom = user ? `DeMegaPOS <${user}>` : 'DeMegaPOS <demegakitchen5@gmail.com>'
 
     if (!user || !pass) {
         console.warn('[MAIL:Gmail-SMTP] Skipping Gmail: GMAIL_USER or App Password not configured.')
         return { success: false, error: 'Gmail credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured.' }
     }
 
-    // Try SSL Port 465 (IPv4 forced) first
+    // ── Strategy 1: Host smtp.gmail.com on Port 465 (SSL) with forced IPv4 DNS ──
     try {
         console.log(`[MAIL:Gmail-SMTP] Attempting dispatch to ${opts.to} via Gmail SMTP SSL (port 465, IPv4)...`)
         const transporter465 = nodemailer.createTransport({
@@ -89,14 +104,15 @@ async function sendViaGmailSmtp(opts: MailOptions): Promise<{ success: boolean; 
             port: 465,
             secure: true,
             auth: { user, pass },
-            family: 4, // <-- Force IPv4 socket connection to prevent ENETUNREACH in Docker/Render
+            lookup: ipv4Lookup,
+            family: 4,
             connectionTimeout: 8000,
             greetingTimeout: 8000,
             socketTimeout: 8000,
         } as any)
 
         const info = await transporter465.sendMail({
-            from: fromAddress,
+            from: gmailFrom,
             to: opts.to,
             subject: opts.subject,
             html: opts.html,
@@ -106,21 +122,22 @@ async function sendViaGmailSmtp(opts: MailOptions): Promise<{ success: boolean; 
     } catch (err465: any) {
         console.warn(`[MAIL:Gmail-SMTP] Port 465 attempt failed: ${err465.message}. Attempting Port 587 STARTTLS (IPv4)...`)
 
-        // Fallback to Port 587 TLS (IPv4 forced)
+        // ── Strategy 2: Host smtp.gmail.com on Port 587 (STARTTLS) with forced IPv4 DNS ──
         try {
             const transporter587 = nodemailer.createTransport({
                 host: 'smtp.gmail.com',
                 port: 587,
                 secure: false,
                 auth: { user, pass },
-                family: 4, // <-- Force IPv4 socket connection
+                lookup: ipv4Lookup,
+                family: 4,
                 connectionTimeout: 8000,
                 greetingTimeout: 8000,
                 socketTimeout: 8000,
             } as any)
 
             const info = await transporter587.sendMail({
-                from: fromAddress,
+                from: gmailFrom,
                 to: opts.to,
                 subject: opts.subject,
                 html: opts.html,
@@ -128,8 +145,32 @@ async function sendViaGmailSmtp(opts: MailOptions): Promise<{ success: boolean; 
             console.log(`[MAIL:Gmail-SMTP] Delivered successfully via port 587 to ${opts.to}. MessageID: ${info.messageId}`)
             return { success: true, messageId: info.messageId }
         } catch (err587: any) {
-            console.error(`[MAIL:Gmail-SMTP] Port 587 attempt also failed: ${err587.message}`)
-            return { success: false, error: `Gmail SMTP failed (465: ${err465.message}, 587: ${err587.message})` }
+            console.warn(`[MAIL:Gmail-SMTP] Port 587 attempt failed: ${err587.message}. Attempting service definition...`)
+
+            // ── Strategy 3: Built-in 'gmail' service definition with forced IPv4 DNS ──
+            try {
+                const transporterService = nodemailer.createTransport({
+                    service: 'gmail',
+                    auth: { user, pass },
+                    lookup: ipv4Lookup,
+                    family: 4,
+                    connectionTimeout: 8000,
+                    greetingTimeout: 8000,
+                    socketTimeout: 8000,
+                } as any)
+
+                const info = await transporterService.sendMail({
+                    from: gmailFrom,
+                    to: opts.to,
+                    subject: opts.subject,
+                    html: opts.html,
+                })
+                console.log(`[MAIL:Gmail-SMTP] Delivered successfully via service definition to ${opts.to}. MessageID: ${info.messageId}`)
+                return { success: true, messageId: info.messageId }
+            } catch (errService: any) {
+                console.error(`[MAIL:Gmail-SMTP] All Gmail strategies failed: ${errService.message}`)
+                return { success: false, error: `Gmail SMTP failed (465: ${err465.message}, 587: ${err587.message}, service: ${errService.message})` }
+            }
         }
     }
 }
@@ -138,8 +179,8 @@ async function sendViaGmailSmtp(opts: MailOptions): Promise<{ success: boolean; 
  * Unified sendMail dispatcher with automatic multi-provider fallback.
  *
  * Execution Logic:
- * - If MAIL_PROVIDER === 'GMAIL': Gmail SMTP (Primary) -> Resend HTTP (Fallback)
- * - If MAIL_PROVIDER === 'RESEND': Resend HTTP (Primary) -> Gmail SMTP (Fallback)
+ * - Default / 'GMAIL': Gmail SMTP (Primary) -> Resend HTTP (Fallback)
+ * - 'RESEND': Resend HTTP (Primary) -> Gmail SMTP (Fallback)
  */
 export async function sendMail(opts: MailOptions): Promise<{ provider: string; messageId?: string }> {
     const provider = (process.env.MAIL_PROVIDER || 'GMAIL').toUpperCase()
@@ -152,30 +193,7 @@ export async function sendMail(opts: MailOptions): Promise<{ provider: string; m
 
     console.log(`[MAIL] Dispatch to ${opts.to}. Configured: Gmail=${hasGmail}, Resend=${hasResend}, Preferred=${provider}`)
 
-    if (provider === 'GMAIL') {
-        let gmailError = ''
-        if (hasGmail) {
-            const gmailRes = await sendViaGmailSmtp(opts)
-            if (gmailRes.success) {
-                return { provider: 'Gmail-SMTP', messageId: gmailRes.messageId }
-            }
-            gmailError = gmailRes.error || 'Gmail dispatch failed'
-            console.warn(`[MAIL] Preferred provider Gmail failed: ${gmailError}. Falling back to Resend...`)
-        } else {
-            gmailError = 'Gmail credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured.'
-        }
-
-        if (hasResend) {
-            const resendRes = await sendViaResendHttpApi(opts, resendApiKey)
-            if (resendRes.success) {
-                return { provider: 'Resend-HTTP', messageId: resendRes.messageId }
-            }
-            console.error(`[MAIL] Fallback Resend also failed: ${resendRes.error}`)
-            throw new Error(`Email dispatch failed. Gmail: ${gmailError}. Resend fallback: ${resendRes.error}`)
-        } else {
-            throw new Error(`Gmail failed (${gmailError}) and Resend API key is not configured as fallback.`)
-        }
-    } else {
+    if (provider === 'RESEND') {
         // Preferred: Resend
         let resendError = ''
         if (hasResend) {
@@ -198,6 +216,30 @@ export async function sendMail(opts: MailOptions): Promise<{ provider: string; m
             throw new Error(`Email dispatch failed on both providers. Resend: ${resendError}. Gmail fallback: ${gmailRes.error}`)
         } else {
             throw new Error(`Resend failed (${resendError}) and Gmail credentials are not configured as a fallback. Please add GMAIL_USER and GMAIL_APP_PASSWORD in your hosting dashboard.`)
+        }
+    } else {
+        // Preferred: GMAIL (Default — supports unlimited recipients on any domain)
+        let gmailError = ''
+        if (hasGmail) {
+            const gmailRes = await sendViaGmailSmtp(opts)
+            if (gmailRes.success) {
+                return { provider: 'Gmail-SMTP', messageId: gmailRes.messageId }
+            }
+            gmailError = gmailRes.error || 'Gmail dispatch failed'
+            console.warn(`[MAIL] Preferred provider Gmail failed: ${gmailError}. Falling back to Resend...`)
+        } else {
+            gmailError = 'Gmail credentials (GMAIL_USER & GMAIL_APP_PASSWORD) not configured.'
+        }
+
+        if (hasResend) {
+            const resendRes = await sendViaResendHttpApi(opts, resendApiKey)
+            if (resendRes.success) {
+                return { provider: 'Resend-HTTP', messageId: resendRes.messageId }
+            }
+            console.error(`[MAIL] Fallback Resend also failed: ${resendRes.error}`)
+            throw new Error(`Email dispatch failed. Gmail: ${gmailError}. Resend fallback: ${resendRes.error}`)
+        } else {
+            throw new Error(`Gmail failed (${gmailError}) and Resend API key is not configured as fallback.`)
         }
     }
 }
