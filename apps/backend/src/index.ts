@@ -120,6 +120,7 @@ async function main() {
     const platformRoutes = await import('./modules/platform/routes.js')
 
     server.register(authRoutes.default, { prefix: '/auth' })
+    server.register(authRoutes.default, { prefix: '/api/v1/auth' })
     server.register(tenantRoutes.default, { prefix: '/tenants' })
     server.register(inventoryRoutes.default, { prefix: '/inventory' })
     server.register(orderRoutes.default, { prefix: '/orders' })
@@ -150,7 +151,7 @@ async function main() {
         if (request.method === 'OPTIONS') {
             return
         }
-        if (request.url.startsWith('/auth') || request.url.startsWith('/platform') || request.url.startsWith('/docs') || request.url.startsWith('/health') || request.url.startsWith('/ws')) {
+        if (request.url.startsWith('/auth') || request.url.startsWith('/api/v1/auth') || request.url.startsWith('/platform') || request.url.startsWith('/docs') || request.url.startsWith('/health') || request.url.startsWith('/ws')) {
             return
         }
         try {
@@ -159,6 +160,7 @@ async function main() {
             reply.send(err)
         }
     })
+
 
     server.get('/health', async () => {
         const resendKey = (process.env.RESEND_API_KEY || process.env.SMTP_PASS || '').trim()

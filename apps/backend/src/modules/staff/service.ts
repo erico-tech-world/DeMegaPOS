@@ -104,9 +104,11 @@ export async function acceptInvitation(token: string, name: string, password: st
 
     let hashedPin: string | undefined
     if (pin) {
-        if (pin.length < 4 || pin.length > 6) throw new Error('PIN must be 4–6 digits')
-        hashedPin = await bcrypt.hash(pin, 10)
+        const cleanPin = pin.trim()
+        if (!/^[0-9]{4,6}$/.test(cleanPin)) throw new Error('PIN must be 4–6 digits')
+        hashedPin = await bcrypt.hash(cleanPin, 10)
     }
+
 
     // Create the user account and mark the invitation as accepted
     const user = await prisma.user.create({

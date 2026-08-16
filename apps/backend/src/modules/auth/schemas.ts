@@ -1,8 +1,15 @@
 import { z } from 'zod'
 
 export const loginSchema = z.object({
-    identifier: z.string().min(1, 'Email or Phone is required'), // Supports Email or Phone
-    password: z.string().min(6),
+    identifier: z.string().min(1, 'Email, Phone or Staff ID is required'), // Supports Email, Phone, or Staff Code
+    password: z.string().min(1, 'Password is required'),
+})
+
+export const staffLoginSchema = z.object({
+    branchOrBusinessCode: z.string().optional(), // e.g. BR-LAG-01, DM-BIZ-9011 or business slug
+    identifier: z.string().min(1, 'Staff Code or Email is required'), // e.g. EMP-2026-004, cashier@demega.com
+    password: z.string().min(1, 'Staff account password is required'),
+    pin: z.string().regex(/^[0-9]{4,6}$/, 'Terminal PIN must be 4–6 digits'),
 })
 
 export const registerSchema = z.object({
@@ -55,7 +62,12 @@ export const authResponseSchema = z.object({
 
 export const errorSchema = z.object({
     message: z.string(),
+    accountType: z.string().optional(),
+    email: z.string().optional(),
+    identifier: z.string().optional(),
 })
 
 export type LoginInput = z.infer<typeof loginSchema>
+export type StaffLoginInput = z.infer<typeof staffLoginSchema>
 export type RegisterInput = z.infer<typeof registerSchema>
+

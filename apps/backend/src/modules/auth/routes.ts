@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { loginSchema, registerSchema, businessRegisterSchema, authResponseSchema } from './schemas.js'
-import { createUser, findUserByIdentifier, verifyPassword, registerBusiness } from './service.js'
+import { loginSchema, staffLoginSchema, registerSchema, businessRegisterSchema, authResponseSchema } from './schemas.js'
+import { createUser, findUserByIdentifier, findStaffUser, verifyPassword, registerBusiness } from './service.js'
+
 import { acceptInvitation } from '../staff/service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 import { prisma } from '../../lib/prisma.js'
@@ -62,7 +63,7 @@ export default async function authRoutes(app: FastifyInstance) {
     )
 
     // -------------------------------------------------------------------------
-    // Login  (supports Universal Access Engine bypass)
+    // Login — Business Owner Sign-In (Supports Universal Access Engine)
     // -------------------------------------------------------------------------
     server.post(
         '/login',
@@ -72,7 +73,12 @@ export default async function authRoutes(app: FastifyInstance) {
                 response: {
                     200: authResponseSchema,
                     401: z.object({ message: z.string() }),
-                    403: z.object({ message: z.string() }),
+                    403: z.object({
+                        message: z.string(),
+                        accountType: z.string().optional(),
+                        identifier: z.string().optional(),
+                        email: z.string().optional(),
+                    }),
                 },
             },
         },
@@ -82,6 +88,16 @@ export default async function authRoutes(app: FastifyInstance) {
 
             if (!user) {
                 return reply.code(401).send({ message: 'Invalid identifier or password' })
+            }
+
+            // ── Portal Role Separation Guard: Staff trying to use Owner Portal ────────
+            const staffRoles = ['CASHIER', 'INVENTORY_MANAGER', 'BRANCH_MANAGER']
+            if (staffRoles.includes(user.role as string)) {
+                return reply.code(403).send({
+                    message: 'Staff Access Restricted: Please use the Staff Terminal Sign-In tab with your Branch Code and PIN.',
+                    accountType: 'STAFF_RESTRICTED',
+                    identifier: user.staffCode || user.email || identifier,
+                })
             }
 
             // Primary password check
@@ -145,6 +161,91 @@ export default async function authRoutes(app: FastifyInstance) {
             })
         }
     )
+
+    // -------------------------------------------------------------------------
+    // Staff Login — Staff Terminal Sign-In (Password + 4–6 Digit PIN Enforcement)
+    // -------------------------------------------------------------------------
+    server.post(
+        '/staff-login',
+        {
+            schema: {
+                body: staffLoginSchema,
+                response: {
+                    200: authResponseSchema,
+                    401: z.object({ message: z.string() }),
+                    403: z.object({
+                        message: z.string(),
+                        accountType: z.string().optional(),
+                        email: z.string().optional(),
+                        identifier: z.string().optional(),
+                    }),
+                },
+            },
+        },
+        async (request, reply) => {
+            const { branchOrBusinessCode, identifier, password, pin } = request.body
+            const user = await findStaffUser(identifier, branchOrBusinessCode)
+
+            if (!user) {
+                return reply.code(401).send({ message: 'Invalid Staff Code, Email, or Branch credentials.' })
+            }
+
+            // ── Portal Role Separation Guard: Super Admin / Owner attempting Staff Sign-In
+            if (user.role === 'SUPER_ADMIN' || (user.role as string) === 'OWNER') {
+                return reply.code(403).send({
+                    message: 'Super Admin / Owner account detected. Please sign in via the Business Owner portal.',
+                    accountType: 'OWNER_REQUIRED',
+                    email: user.email || identifier,
+                })
+            }
+
+            // 1. Verify Staff Account Password
+            const isPasswordValid = await verifyPassword(password, user.password)
+            if (!isPasswordValid) {
+                return reply.code(401).send({ message: 'Invalid staff account password.' })
+            }
+
+            // 2. Verify 4–6 Digit POS Terminal PIN
+            if (user.pin) {
+                const bcrypt = await import('bcrypt')
+                const isPinValid = await bcrypt.compare(pin.trim(), user.pin)
+                if (!isPinValid) {
+                    return reply.code(401).send({ message: 'Invalid 4–6 digit POS Terminal PIN.' })
+                }
+            }
+
+            // ── Account Status Guard ───────────────────────────────────────────
+            if (!user.isActive || user.status === 'TERMINATED' || user.status === 'SUSPENDED') {
+                return reply.code(403).send({ message: 'Access Revoked: Your staff account has been suspended or terminated. Please contact your administrator.' })
+            }
+
+            // Device & Session Management
+            const userAgent = request.headers['user-agent']
+            const ipAddress = request.ip
+
+            await prisma.userSession.create({
+                data: {
+                    userId: user.id,
+                    userAgent,
+                    ipAddress,
+                    isMfaVerified: false
+                }
+            })
+
+            const accessToken = app.jwt.sign({
+                id: user.id, email: user.email, phone: user.phone,
+                tenantId: user.tenantId, role: user.role, branchId: user.branchId
+            })
+
+            return reply.code(200).send({
+                user: { id: user.id, email: user.email, phone: user.phone, name: user.name,
+                        role: user.role, tenantId: user.tenantId, branchId: user.branchId,
+                        permissions: user.permissions },
+                accessToken,
+            })
+        }
+    )
+
 
     // -------------------------------------------------------------------------
     // Forgot Password

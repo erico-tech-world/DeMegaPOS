@@ -144,7 +144,12 @@ const AppLayout: React.FC = () => {
 
                 <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto custom-scrollbar">
                     {menuItems.map((item) => {
-                        const isActive = activeTab === item.id;
+                        const isMultiBranch = location.pathname === '/analytics/multi-branch' || location.pathname === '/multi-branch';
+                        const isActive = item.id === 'multi-branch'
+                            ? isMultiBranch
+                            : (item.id === 'analytics'
+                                ? (location.pathname === '/analytics' && !isMultiBranch)
+                                : activeTab === item.id);
                         return (
                             <button
                                 key={item.id}

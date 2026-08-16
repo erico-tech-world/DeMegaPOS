@@ -124,9 +124,11 @@ const AppRoutes = () => {
                     {/* Super Admin / Owner Only Routes */}
                     <Route element={<ProtectedRoute allowedRoles={['SUPER_ADMIN', 'OWNER']} />}>
                         <Route path="/analytics/multi-branch" element={<MultiBranchComparison />} />
+                        <Route path="/multi-branch" element={<MultiBranchComparison />} />
                     </Route>
                 </Route>
             </Route>
+
 
             {/* Catch-all */}
             <Route path="*" element={<Navigate to="/" replace />} />

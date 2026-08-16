@@ -26,15 +26,70 @@ export async function createUser(data: RegisterInput) {
 }
 
 export async function findUserByIdentifier(identifier: string) {
+    const trimmed = identifier.trim()
     return prisma.user.findFirst({
         where: {
             OR: [
-                { email: identifier },
-                { phone: identifier }
+                { email: { equals: trimmed, mode: 'insensitive' } },
+                { phone: trimmed },
+                { staffCode: { equals: trimmed, mode: 'insensitive' } }
             ]
         },
+        include: {
+            tenant: true,
+            branch: true
+        }
     })
 }
+
+export async function findStaffUser(identifier: string, branchOrBusinessCode?: string) {
+    const trimmedIdentifier = identifier.trim()
+    const trimmedCode = branchOrBusinessCode?.trim()
+
+    // 1. If branch or business code is provided, narrow down user search
+    if (trimmedCode) {
+        // Match either Store branchCode or Tenant businessCode / slug
+        const users = await prisma.user.findMany({
+            where: {
+                OR: [
+                    { email: { equals: trimmedIdentifier, mode: 'insensitive' } },
+                    { phone: trimmedIdentifier },
+                    { staffCode: { equals: trimmedIdentifier, mode: 'insensitive' } }
+                ],
+                AND: [
+                    {
+                        OR: [
+                            { branch: { branchCode: { equals: trimmedCode, mode: 'insensitive' } } },
+                            { tenant: { businessCode: { equals: trimmedCode, mode: 'insensitive' } } },
+                            { tenant: { slug: { equals: trimmedCode, mode: 'insensitive' } } },
+                        ]
+                    }
+                ]
+            },
+            include: {
+                tenant: true,
+                branch: true
+            }
+        })
+        if (users.length > 0) return users[0]
+    }
+
+    // 2. Fallback lookup by identifier directly (email, staffCode, phone)
+    return prisma.user.findFirst({
+        where: {
+            OR: [
+                { email: { equals: trimmedIdentifier, mode: 'insensitive' } },
+                { phone: trimmedIdentifier },
+                { staffCode: { equals: trimmedIdentifier, mode: 'insensitive' } }
+            ]
+        },
+        include: {
+            tenant: true,
+            branch: true
+        }
+    })
+}
+
 
 export async function registerBusiness(data: any) {
     const hashedPassword = await hashPassword(data.password)
