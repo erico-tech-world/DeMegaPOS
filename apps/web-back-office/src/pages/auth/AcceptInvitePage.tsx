@@ -10,7 +10,10 @@ const AcceptInvitePage = () => {
     const [searchParams] = useSearchParams();
     const token = searchParams.get('token') || '';
     const navigate = useNavigate();
-    const { login } = useAuth();
+    const { login, logout, isAuthenticated, user } = useAuth();
+
+    // Session conflict modal state
+    const [showConflictModal, setShowConflictModal] = useState(false);
 
     const [inviteDetails, setInviteDetails] = useState<{
         valid: boolean;
@@ -32,6 +35,13 @@ const AcceptInvitePage = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [validationError, setValidationError] = useState<string | null>(null);
+
+    // Detect active session on mount — show conflict modal instead of blocking
+    useEffect(() => {
+        if (isAuthenticated && user) {
+            setShowConflictModal(true);
+        }
+    }, [isAuthenticated, user]);
 
     // Validate the token on mount
     useEffect(() => {
@@ -91,6 +101,9 @@ const AcceptInvitePage = () => {
                 ...(pin ? { pin } : {}),
             });
 
+            // Ensure any prior session is fully cleared before issuing the new one
+            logout();
+
             // Log in the newly onboarded user
             login(res.data.user, res.data.accessToken);
 
@@ -99,7 +112,7 @@ const AcceptInvitePage = () => {
             if (role === 'CASHIER' || role === 'BRANCH_MANAGER') {
                 navigate('/pos');
             } else {
-                navigate('/inventory');
+                navigate('/dashboard');
             }
         } catch (err: any) {
             setError(err.response?.data?.message || 'Failed to complete onboarding. Please try again.');
@@ -108,6 +121,52 @@ const AcceptInvitePage = () => {
         }
     };
 
+    // --- Session Conflict Modal ---
+    if (showConflictModal) {
+        return (
+            <div className="space-y-6">
+                <div className="text-center space-y-2">
+                    <div className="mx-auto w-16 h-16 bg-amber-50 rounded-3xl flex items-center justify-center text-amber-500 border border-amber-100 shadow-xl shadow-amber-500/10 mb-4">
+                        <AlertCircle size={28} />
+                    </div>
+                    <h1 className="text-2xl font-black text-gray-900 tracking-tight">Active Session Detected</h1>
+                    <p className="text-gray-500 text-sm font-medium leading-relaxed px-2">
+                        You are currently signed in as
+                    </p>
+                    <div className="inline-flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-full border border-gray-200 text-sm font-black">
+                        <User size={14} />
+                        {user?.email || user?.name || 'an existing account'}
+                    </div>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-sm text-amber-700 font-bold leading-relaxed">
+                    To onboard a new staff account with this invitation, you must sign out of the current session first.
+                </div>
+
+                <div className="space-y-3">
+                    <button
+                        onClick={() => {
+                            logout();
+                            setShowConflictModal(false);
+                        }}
+                        className="w-full bg-[#1A1A1A] text-white py-4 rounded-2xl font-black text-sm hover:bg-[#2D7A3E] hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-gray-900/10 flex items-center justify-center space-x-2 cursor-pointer"
+                    >
+                        <ShieldCheck size={18} />
+                        <span>Sign Out &amp; Continue Onboarding</span>
+                    </button>
+
+                    <button
+                        onClick={() => navigate('/dashboard')}
+                        className="w-full bg-gray-100 text-gray-600 py-4 rounded-2xl font-black text-sm hover:bg-gray-200 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+                    >
+                        Go to My Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // --- Loading State ---
     if (isValidating) {
         return (
             <div className="flex flex-col items-center justify-center py-12 space-y-4">
@@ -117,6 +176,7 @@ const AcceptInvitePage = () => {
         );
     }
 
+    // --- Validation Error State ---
     if (validationError) {
         return (
             <div className="space-y-6 text-center">
@@ -139,6 +199,7 @@ const AcceptInvitePage = () => {
         );
     }
 
+    // --- Activation Form ---
     const roleName = inviteDetails?.role.replace(/_/g, ' ') || '';
 
     return (

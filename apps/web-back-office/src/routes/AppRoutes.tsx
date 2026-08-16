@@ -36,15 +36,24 @@ const AppRoutes = () => {
             <Route path="/control-tower" element={<Navigate to="/platform/login" replace />} />
             <Route path="/super-admin" element={<Navigate to="/platform/login" replace />} />
 
-            {/* Auth Routes (Public Only) */}
+            {/* Auth Routes (Public Only — redirects authenticated users to /dashboard) */}
             <Route element={<PublicOnlyRoute />}>
                 <Route path="/auth" element={<AuthLayout />}>
                     <Route path="login" element={<LoginPage />} />
                     <Route path="register" element={<RegisterPage />} />
                     <Route path="forgot-password" element={<ForgotPasswordPage />} />
-                    <Route path="accept-invite" element={<AcceptInvitePage />} />
                     <Route index element={<Navigate to="/auth/login" replace />} />
                 </Route>
+            </Route>
+
+            {/*
+              * Invitation Activation Route — BYPASSES PublicOnlyRoute intentionally.
+              * An authenticated user clicking a staff invitation link must reach this
+              * page, not be silently redirected to /dashboard. The AcceptInvitePage
+              * handles the session conflict internally via a modal.
+              */}
+            <Route path="/auth" element={<AuthLayout />}>
+                <Route path="accept-invite" element={<AcceptInvitePage />} />
             </Route>
 
             {/* Protected Dashboard Routes */}
