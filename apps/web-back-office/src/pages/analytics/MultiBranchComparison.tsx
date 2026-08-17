@@ -49,11 +49,11 @@ const MultiBranchComparison = () => {
             const endDate = new Date().toISOString();
             const startDate = new Date(Date.now() - periodMs[period]).toISOString();
 
-            // Fetch analytics for each branch in parallel
+            // Fetch analytics for each branch in parallel with explicit branch isolation
             const results = await Promise.allSettled(
                 allBranches.map((b: any) =>
                     axios.get(`${API_URL}/orders/analytics`, {
-                        params: { startDate, endDate, branchId: b.id },
+                        params: { startDate, endDate, storeId: b.id, branchId: b.id },
                         headers: { Authorization: `Bearer ${token}` },
                     }).then(r => ({ branchId: b.id, data: r.data }))
                 )
@@ -77,20 +77,22 @@ const MultiBranchComparison = () => {
         fetchData();
     }, [fetchData]);
 
-    // ── Consolidated Totals ────────────────────────────────────────────────────
+    // ── Consolidated Totals (Subtracting refunds across ALL branches) ───────────
     const consolidated = Object.values(branchData).reduce(
         (acc: any, d: any) => ({
+            totalGrossRevenue: acc.totalGrossRevenue + Number(d?.summary?.grossRevenue || 0),
             totalRevenue: acc.totalRevenue + Number(d?.summary?.netRevenue || 0),
             totalOrders: acc.totalOrders + Number(d?.summary?.totalOrders || 0),
             totalProfit: acc.totalProfit + Number(d?.summary?.netProfit || 0),
+            totalRefundedAmount: acc.totalRefundedAmount + Number(d?.refundsSummary?.totalRefundedAmount || d?.summary?.totalRefundedAmount || 0),
             totalRefunds: acc.totalRefunds + Number(d?.summary?.totalRefundVolume || 0),
         }),
-        { totalRevenue: 0, totalOrders: 0, totalProfit: 0, totalRefunds: 0 }
+        { totalGrossRevenue: 0, totalRevenue: 0, totalOrders: 0, totalProfit: 0, totalRefundedAmount: 0, totalRefunds: 0 }
     );
 
     const maxRevenue = Math.max(...branches.map(b => Number(branchData[b.id]?.summary?.netRevenue || 0)), 1);
 
-    // ── Per-branch rows sorted by revenue desc ────────────────────────────────
+    // ── Per-branch rows sorted by net revenue desc ─────────────────────────────
     const rankedBranches = [...branches].sort((a, b) =>
         Number(branchData[b.id]?.summary?.netRevenue || 0) - Number(branchData[a.id]?.summary?.netRevenue || 0)
     );
@@ -106,7 +108,7 @@ const MultiBranchComparison = () => {
                         </div>
                         Multi-Branch Performance
                     </h1>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-bold">Consolidated performance intelligence across all branches</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-bold">Consolidated net revenue & refund intelligence across all branches</p>
                 </div>
                 <div className="flex items-center gap-3">
                     {/* Period selector */}
@@ -152,17 +154,41 @@ const MultiBranchComparison = () => {
                 <>
                     {/* ── Consolidated Overview Cards ── */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <StatCard title="Total Net Revenue" value={`₦${consolidated.totalRevenue.toLocaleString()}`} icon={DollarSign} color="#2D7A3E" sub="All branches combined" />
-                        <StatCard title="Total Net Profit" value={`₦${consolidated.totalProfit.toLocaleString()}`} icon={TrendingUp} color="#7C3AED" sub="Gross minus COGS" />
-                        <StatCard title="Total Transactions" value={consolidated.totalOrders.toLocaleString()} icon={ShoppingBag} color="#2563EB" sub="Across all branches" />
-                        <StatCard title="Total Refund Volume" value={consolidated.totalRefunds.toLocaleString()} icon={TrendingDown} color="#DC2626" sub="All returns combined" />
+                        <StatCard
+                            title="Total Net Revenue"
+                            value={`₦${consolidated.totalRevenue.toLocaleString()}`}
+                            icon={DollarSign}
+                            color="#2D7A3E"
+                            sub="Gross minus all refunds"
+                        />
+                        <StatCard
+                            title="Total Net Profit"
+                            value={`₦${consolidated.totalProfit.toLocaleString()}`}
+                            icon={TrendingUp}
+                            color="#7C3AED"
+                            sub="Net sales minus COGS"
+                        />
+                        <StatCard
+                            title="Total Transactions"
+                            value={consolidated.totalOrders.toLocaleString()}
+                            icon={ShoppingBag}
+                            color="#2563EB"
+                            sub="Completed orders"
+                        />
+                        <StatCard
+                            title="Total Refund Value"
+                            value={`₦${consolidated.totalRefundedAmount.toLocaleString()}`}
+                            icon={TrendingDown}
+                            color="#DC2626"
+                            sub={`${consolidated.totalRefunds} returns processed`}
+                        />
                     </div>
 
                     {/* ── Revenue Comparison Bars ── */}
                     <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm p-8">
                         <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest mb-6 flex items-center gap-2">
                             <div className="w-1.5 h-5 bg-indigo-600 rounded-full" />
-                            Branch Revenue Comparison
+                            Branch Net Revenue Comparison
                         </h3>
                         {rankedBranches.length === 0 ? (
                             <div className="p-12 text-center text-gray-400 dark:text-gray-600 text-xs font-bold uppercase tracking-widest border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-2xl">
@@ -172,10 +198,12 @@ const MultiBranchComparison = () => {
                             <div className="space-y-4">
                                 {rankedBranches.map((b, i) => {
                                     const rev = Number(branchData[b.id]?.summary?.netRevenue || 0);
+                                    const gross = Number(branchData[b.id]?.summary?.grossRevenue || 0);
+                                    const refundedAmt = Number(branchData[b.id]?.refundsSummary?.totalRefundedAmount || 0);
                                     const orders = Number(branchData[b.id]?.summary?.totalOrders || 0);
                                     const profit = Number(branchData[b.id]?.summary?.netProfit || 0);
                                     const aov = orders > 0 ? (rev / orders) : 0;
-                                    const pct = Math.max(2, Math.round((rev / maxRevenue) * 100));
+                                    const pct = maxRevenue > 0 && rev > 0 ? Math.max(2, Math.round((rev / maxRevenue) * 100)) : 0;
                                     const barColor = i === 0 ? '#7C3AED' : i === 1 ? '#2D7A3E' : i === 2 ? '#2563EB' : '#D97706';
 
                                     return (
@@ -203,9 +231,10 @@ const MultiBranchComparison = () => {
                                             </div>
                                             {/* Hover details */}
                                             <div className="hidden group-hover:flex items-center gap-6 mt-2 text-[10px] font-bold text-gray-400 dark:text-gray-500 pl-10">
+                                                <span>Gross: <strong className="text-gray-700 dark:text-gray-300">₦{gross.toLocaleString()}</strong></span>
+                                                <span>Refunded: <strong className="text-red-500">₦{refundedAmt.toLocaleString()}</strong></span>
                                                 <span>Profit: <strong className="text-gray-700 dark:text-gray-300">₦{profit.toLocaleString()}</strong></span>
                                                 <span>AOV: <strong className="text-gray-700 dark:text-gray-300">₦{aov.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong></span>
-                                                <span>Refunds: <strong className="text-red-500">{branchData[b.id]?.summary?.totalRefundVolume || 0}</strong></span>
                                             </div>
                                         </div>
                                     );
@@ -214,35 +243,40 @@ const MultiBranchComparison = () => {
                         )}
                     </div>
 
-                    {/* ── Detailed Per-Branch Table ── */}
+                    {/* ── Detailed Per-Branch Table with Explicit Refund Indicators ── */}
                     <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
-                        <div className="p-8 border-b border-gray-100 dark:border-gray-800">
+                        <div className="p-8 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                             <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
                                 <Building2 size={14} className="text-indigo-500" />
-                                Detailed Performance Breakdown
+                                Branch-Isolated Net Financial Breakdown
                             </h3>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500">Real-Time Database Records</span>
                         </div>
                         <div className="overflow-x-auto custom-scrollbar">
                             <table className="w-full text-left">
                                 <thead>
                                     <tr className="bg-gray-50/50 dark:bg-slate-800/50 text-[10px] uppercase tracking-widest text-gray-400 dark:text-gray-500 font-black border-b border-gray-100 dark:border-gray-800">
                                         <th className="px-8 py-4">Branch</th>
-                                        <th className="px-8 py-4 text-right">Transactions</th>
-                                        <th className="px-8 py-4 text-right">Gross Revenue</th>
-                                        <th className="px-8 py-4 text-right">Net Revenue</th>
-                                        <th className="px-8 py-4 text-right">Net Profit</th>
-                                        <th className="px-8 py-4 text-right">AOV</th>
-                                        <th className="px-8 py-4 text-right">Refund Rate</th>
+                                        <th className="px-6 py-4 text-right">Transactions</th>
+                                        <th className="px-6 py-4 text-right">Gross Sales</th>
+                                        <th className="px-6 py-4 text-right text-red-500">Refunded (₦)</th>
+                                        <th className="px-6 py-4 text-right">Net Revenue</th>
+                                        <th className="px-6 py-4 text-right">Net Profit</th>
+                                        <th className="px-6 py-4 text-right">AOV</th>
+                                        <th className="px-6 py-4 text-right">Refund Rate</th>
                                         <th className="px-8 py-4 text-center">Revenue Share</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                                     {rankedBranches.map((b, i) => {
                                         const d = branchData[b.id]?.summary || {};
+                                        const refD = branchData[b.id]?.refundsSummary || {};
                                         const rev = Number(d.netRevenue || 0);
+                                        const gross = Number(d.grossRevenue || rev);
+                                        const refundedAmt = Number(refD.totalRefundedAmount || d.totalRefundedAmount || 0);
+                                        const refundVol = Number(refD.totalRefundVolume || d.totalRefundVolume || 0);
                                         const orders = Number(d.totalOrders || 0);
                                         const profit = Number(d.netProfit || 0);
-                                        const gross = Number(d.grossRevenue || rev);
                                         const aov = orders > 0 ? Math.round(rev / orders) : 0;
                                         const refundRate = Number(d.refundRate || 0);
                                         const share = consolidated.totalRevenue > 0 ? Math.round((rev / consolidated.totalRevenue) * 100) : 0;
@@ -260,14 +294,18 @@ const MultiBranchComparison = () => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-8 py-5 text-right font-black text-gray-700 dark:text-gray-300">{orders.toLocaleString()}</td>
-                                                <td className="px-8 py-5 text-right font-bold text-gray-500 dark:text-gray-400 text-sm">₦{gross.toLocaleString()}</td>
-                                                <td className="px-8 py-5 text-right font-black text-gray-900 dark:text-white text-sm">₦{rev.toLocaleString()}</td>
-                                                <td className={`px-8 py-5 text-right font-black text-sm ${profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                                                <td className="px-6 py-5 text-right font-black text-gray-700 dark:text-gray-300">{orders.toLocaleString()}</td>
+                                                <td className="px-6 py-5 text-right font-bold text-gray-500 dark:text-gray-400 text-sm">₦{gross.toLocaleString()}</td>
+                                                <td className="px-6 py-5 text-right text-sm">
+                                                    <span className="font-black text-red-500">₦{refundedAmt.toLocaleString()}</span>
+                                                    {refundVol > 0 && <span className="block text-[9px] text-gray-400 font-bold">({refundVol} returns)</span>}
+                                                </td>
+                                                <td className="px-6 py-5 text-right font-black text-gray-900 dark:text-white text-sm">₦{rev.toLocaleString()}</td>
+                                                <td className={`px-6 py-5 text-right font-black text-sm ${profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
                                                     ₦{profit.toLocaleString()}
                                                 </td>
-                                                <td className="px-8 py-5 text-right font-bold text-gray-600 dark:text-gray-400 text-sm">₦{aov.toLocaleString()}</td>
-                                                <td className="px-8 py-5 text-right">
+                                                <td className="px-6 py-5 text-right font-bold text-gray-600 dark:text-gray-400 text-sm">₦{aov.toLocaleString()}</td>
+                                                <td className="px-6 py-5 text-right">
                                                     <span className={`text-xs font-black px-2 py-0.5 rounded-full ${refundRate > 5 ? 'bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400' : 'bg-green-50 dark:bg-green-950/40 text-green-600 dark:text-green-400'}`}>
                                                         {refundRate}%
                                                     </span>

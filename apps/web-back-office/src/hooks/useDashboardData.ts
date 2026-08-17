@@ -7,6 +7,7 @@ import { API_URL, WS_URL } from '../lib/apiConfig';
 export const useDashboardData = () => {
     const [products, setProducts] = useState<any[]>([]);
     const [orders, setOrders] = useState<any[]>([]);
+    const [dashboardSummary, setDashboardSummary] = useState<any>(null);
     const [staff, setStaff] = useState<any[]>([]);
     const [customers, setCustomers] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -148,13 +149,14 @@ export const useDashboardData = () => {
         try {
             // Fetch products independently so a failure in orders/staff/customers
             // does NOT prevent the product list from loading
-            const [pRes, oRes, sRes, cRes, iRes, dRes] = await Promise.allSettled([
+            const [pRes, oRes, sRes, cRes, iRes, dRes, sumRes] = await Promise.allSettled([
                 axios.get(`${API_URL}/inventory/products`),
                 axios.get(`${API_URL}/orders`, { params: { storeId } }),
                 axios.get(`${API_URL}/staff`),
                 axios.get(`${API_URL}/customers`),
                 axios.get(`${API_URL}/integrations`),
                 axios.get(`${API_URL}/orders/drafts`, { params: { storeId } }),
+                axios.get(`${API_URL}/orders/dashboard-summary`, { params: { storeId } }),
             ]);
 
             if (pRes.status === 'fulfilled') setProducts(pRes.value.data);
@@ -177,6 +179,9 @@ export const useDashboardData = () => {
 
             if (dRes.status === 'fulfilled') setDraftOrders(dRes.value.data);
             else console.error('Draft orders fetch failed:', dRes.reason);
+
+            if (sumRes.status === 'fulfilled') setDashboardSummary(sumRes.value.data);
+            else console.error('Dashboard summary fetch failed:', sumRes.reason);
 
         } finally {
             setIsLoading(false);
@@ -232,6 +237,7 @@ export const useDashboardData = () => {
         products,
         orders,
         draftOrders,
+        dashboardSummary,
         staff,
         customers,
         integrations,
@@ -252,3 +258,4 @@ export const useDashboardData = () => {
         resetFinancials
     };
 };
+

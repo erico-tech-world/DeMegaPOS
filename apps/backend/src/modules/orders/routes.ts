@@ -1,7 +1,20 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { createOrderSchema, orderResponseSchema } from './schemas.js'
-import { createOrder, getOrders, updateOrderStatus, updateOrderPaymentStatus, getDraftOrders, lockDraftOrder, cancelDraftOrder, resetFinancialRecords, refundOrder, getAnalyticsData, sendDigitalReceiptEmail } from './service.js'
+import {
+    createOrder,
+    getOrders,
+    updateOrderStatus,
+    updateOrderPaymentStatus,
+    getDraftOrders,
+    lockDraftOrder,
+    cancelDraftOrder,
+    resetFinancialRecords,
+    refundOrder,
+    getAnalyticsData,
+    getDashboardSummary,
+    sendDigitalReceiptEmail
+} from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 
 export default async function orderRoutes(app: FastifyInstance) {
@@ -31,6 +44,7 @@ export default async function orderRoutes(app: FastifyInstance) {
             schema: {
                 querystring: z.object({
                     storeId: z.string().optional(),
+                    branchId: z.string().optional(),
                 }),
                 response: {
                     200: z.array(orderResponseSchema),
@@ -38,9 +52,36 @@ export default async function orderRoutes(app: FastifyInstance) {
             },
         },
         async (request) => {
-            const { storeId } = request.query as { storeId: string }
+            const { storeId, branchId } = request.query as { storeId?: string; branchId?: string }
+            const effectiveStoreId = storeId || branchId
             const { tenantId } = request.user as any
-            return getOrders(storeId, tenantId)
+            return getOrders(effectiveStoreId, tenantId)
+        }
+    )
+
+    // Dashboard Summary endpoint — returns pre-computed net sales & refunds
+    server.get(
+        '/dashboard-summary',
+        {
+            schema: {
+                querystring: z.object({
+                    storeId: z.string().optional(),
+                    branchId: z.string().optional(),
+                    cashierId: z.string().optional(),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { storeId, branchId, cashierId } = request.query as { storeId?: string; branchId?: string; cashierId?: string }
+            const effectiveStoreId = storeId || branchId
+            const { tenantId, role, id: userId } = request.user as any
+            
+            // If cashier role, scope to their own transactions if not elevated
+            const isElevated = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'OWNER', 'ADMIN'].includes(role)
+            const targetCashierId = !isElevated ? userId : cashierId
+
+            const summary = await getDashboardSummary(effectiveStoreId, tenantId, targetCashierId)
+            return reply.send(summary)
         }
     )
 
@@ -100,6 +141,7 @@ export default async function orderRoutes(app: FastifyInstance) {
             schema: {
                 querystring: z.object({
                     storeId: z.string().optional(),
+                    branchId: z.string().optional(),
                     cashierId: z.string().optional(),
                 }),
                 response: {
@@ -108,8 +150,9 @@ export default async function orderRoutes(app: FastifyInstance) {
             },
         },
         async (request) => {
-            const { storeId, cashierId } = request.query as { storeId?: string; cashierId?: string }
-            return getDraftOrders(storeId, cashierId)
+            const { storeId, branchId, cashierId } = request.query as { storeId?: string; branchId?: string; cashierId?: string }
+            const effectiveStoreId = storeId || branchId
+            return getDraftOrders(effectiveStoreId, cashierId)
         }
     )
 
@@ -156,14 +199,16 @@ export default async function orderRoutes(app: FastifyInstance) {
             schema: {
                 body: z.object({
                     storeId: z.string().optional(),
+                    branchId: z.string().optional(),
                     confirm: z.literal(true),
                 }),
             },
         },
         async (request, reply) => {
-            const { storeId } = request.body as { storeId?: string; confirm: true }
-            const result = await resetFinancialRecords(storeId)
-            app.broadcast('FINANCIAL_RESET', { storeId, deleted: result.deleted })
+            const { storeId, branchId } = request.body as { storeId?: string; branchId?: string; confirm: true }
+            const effectiveStoreId = storeId || branchId
+            const result = await resetFinancialRecords(effectiveStoreId)
+            app.broadcast('FINANCIAL_RESET', { storeId: effectiveStoreId, deleted: result.deleted })
             return reply.send(result)
         }
     )
@@ -175,17 +220,19 @@ export default async function orderRoutes(app: FastifyInstance) {
             schema: {
                 querystring: z.object({
                     storeId: z.string().optional(),
+                    branchId: z.string().optional(),
                     startDate: z.string().optional(),
                     endDate: z.string().optional(),
                 }),
             },
         },
         async (request, reply) => {
-            const { storeId, startDate, endDate } = request.query as { storeId?: string; startDate?: string; endDate?: string }
+            const { storeId, branchId, startDate, endDate } = request.query as { storeId?: string; branchId?: string; startDate?: string; endDate?: string }
+            const effectiveStoreId = storeId || branchId
             const { tenantId } = request.user as any
             const start = startDate ? new Date(startDate) : undefined
             const end = endDate ? new Date(endDate) : undefined
-            const data = await getAnalyticsData(storeId, tenantId, start, end)
+            const data = await getAnalyticsData(effectiveStoreId, tenantId, start, end)
             return reply.send(data)
         }
     )

@@ -8,21 +8,22 @@ interface OverviewPageProps {
     products: any[];
     orders: any[];
     staff: any[];
+    dashboardSummary?: any;
     isLoading: boolean;
     resetFinancials: (storeId?: string) => Promise<{ deleted: number; message: string }>;
 }
 
 const ELEVATED_ROLES = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'OWNER', 'ADMIN'];
 
-const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: OverviewPageProps) => {
+const OverviewPage = ({ products, orders, staff, dashboardSummary, isLoading, resetFinancials }: OverviewPageProps) => {
     const navigate = useNavigate();
     const { user } = useAuth();
 
     const isElevated = ELEVATED_ROLES.includes(user?.role || '');
 
-    // ── Today's Sales ────────────────────────────────────────────────────────────
+    // ── Today's Net Sales ────────────────────────────────────────────────────────
     const todayStr = new Date().toDateString();
-    const todaySales = Array.isArray(orders)
+    const fallbackTodaySales = Array.isArray(orders)
         ? orders
               .filter((o: any) => {
                   const isToday = o?.createdAt && new Date(o.createdAt).toDateString() === todayStr;
@@ -33,17 +34,23 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
               })
               .reduce((acc: number, o: any) => acc + Number(o?.totalAmount || 0), 0)
         : 0;
+    const todaySales = dashboardSummary?.today?.netSales !== undefined
+        ? Number(dashboardSummary.today.netSales)
+        : fallbackTodaySales;
 
-    // ── All-Time Sales (Admins/Managers only) ────────────────────────────────────
-    const allTimeSales = Array.isArray(orders)
+    // ── All-Time Net Sales (Admins/Managers only) ────────────────────────────────
+    const fallbackAllTimeSales = Array.isArray(orders)
         ? orders
               .filter((o: any) => o?.paymentStatus === 'SUCCESS' || o?.paymentStatus === 'PAID')
               .reduce((acc: number, o: any) => acc + Number(o?.totalAmount || 0), 0)
         : 0;
+    const allTimeSales = dashboardSummary?.allTime?.netSales !== undefined
+        ? Number(dashboardSummary.allTime.netSales)
+        : fallbackAllTimeSales;
 
-    // ── Monthly Sales (current calendar month, elevated roles only) ──────────────
+    // ── Monthly Net Sales (current calendar month, elevated roles only) ──────────
     const now = new Date();
-    const monthlySales = Array.isArray(orders)
+    const fallbackMonthlySales = Array.isArray(orders)
         ? orders
               .filter((o: any) => {
                   if (!o?.createdAt) return false;
@@ -53,13 +60,19 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
               })
               .reduce((acc: number, o: any) => acc + Number(o?.totalAmount || 0), 0)
         : 0;
+    const monthlySales = dashboardSummary?.monthly?.netSales !== undefined
+        ? Number(dashboardSummary.monthly.netSales)
+        : fallbackMonthlySales;
 
     // ── Cashier's Own Orders (shift-scoped) ──────────────────────────────────────
     const cashierOrders = Array.isArray(orders)
         ? orders.filter((o: any) => !isElevated ? o.cashierId === (user as any)?.id : true)
         : [];
 
-    const activeOrdersCount = Array.isArray(orders) ? orders.length : 0;
+    const activeOrdersCount = dashboardSummary?.activeOrdersCount !== undefined
+        ? Number(dashboardSummary.activeOrdersCount)
+        : (Array.isArray(orders) ? orders.filter((o: any) => o?.paymentStatus !== 'REFUNDED').length : 0);
+
 
 
     const inventoryGlance = Array.isArray(products) ? products.slice(0, 7) : [];
@@ -117,19 +130,19 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
         <div className="space-y-8 animate-in fade-in duration-500">
             {/* ── Stat Cards ── */}
             <div className={`grid grid-cols-1 sm:grid-cols-2 ${isElevated ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-6`}>
-                {/* Today's Sales (all roles) */}
+                {/* Today's Net Sales (all roles) */}
                 <StatCard
-                    title="Today's Sales"
+                    title="Today's Net Sales"
                     value={`₦${todaySales.toLocaleString()}`}
-                    change="+12.5%"
+                    change=""
                     trend="up"
                     icon={TrendingUp}
                 />
 
-                {/* Monthly Sales (elevated roles only) */}
+                {/* Monthly Net Sales (elevated roles only) */}
                 {isElevated && (
                     <StatCard
-                        title={`${MONTH_NAMES[now.getMonth()]} Sales`}
+                        title={`${MONTH_NAMES[now.getMonth()]} Net Sales`}
                         value={`₦${monthlySales.toLocaleString()}`}
                         change=""
                         trend="up"
@@ -137,11 +150,11 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
                     />
                 )}
 
-                {/* Total All-Time Sales (Admins/Managers only) */}
+                {/* Total All-Time Net Sales (Admins/Managers only) */}
                 {isElevated && (
                     <div className="relative">
                         <StatCard
-                            title="Total Sales (All Time)"
+                            title="Total Net Sales (All Time)"
                             value={`₦${allTimeSales.toLocaleString()}`}
                             change=""
                             trend="up"
@@ -162,7 +175,7 @@ const OverviewPage = ({ products, orders, staff, isLoading, resetFinancials }: O
                 <StatCard
                     title="Active Orders"
                     value={activeOrdersCount}
-                    change="+5.2%"
+                    change=""
                     trend="up"
                     icon={ShoppingCart}
                 />

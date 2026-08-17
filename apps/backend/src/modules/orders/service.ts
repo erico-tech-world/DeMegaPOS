@@ -607,3 +607,128 @@ export async function getAnalyticsData(storeId?: string, tenantId?: string, star
         staffLeaderboard,
     }
 }
+
+export async function getDashboardSummary(storeId?: string, tenantId?: string, cashierId?: string) {
+    const now = new Date()
+    
+    // Start of Today (local server date)
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+    
+    // Start of Current Month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+
+    // Base query conditions for completed sales
+    const baseWhere: any = {
+        paymentStatus: { in: ['SUCCESS', 'PAID'] }
+    }
+    if (storeId) {
+        baseWhere.storeId = storeId
+    } else if (tenantId) {
+        baseWhere.store = { tenantId }
+    }
+    if (cashierId) {
+        baseWhere.cashierId = cashierId
+    }
+
+    // 1. Fetch completed orders (All-Time, This Month, Today)
+    const allCompletedOrders = await prisma.order.findMany({
+        where: baseWhere,
+        select: {
+            id: true,
+            totalAmount: true,
+            createdAt: true,
+            cashierId: true
+        }
+    })
+
+    // 2. Base query conditions for refunds
+    const refundWhere: any = {}
+    if (storeId) {
+        refundWhere.order = { storeId }
+    } else if (tenantId) {
+        refundWhere.order = { store: { tenantId } }
+    }
+
+    const allRefunds = await prisma.refund.findMany({
+        where: refundWhere,
+        select: {
+            id: true,
+            amount: true,
+            createdAt: true,
+            orderId: true
+        }
+    }).catch(() => [])
+
+    // 3. Compute Gross & Net metrics
+    // Today
+    const todayOrders = allCompletedOrders.filter(o => o.createdAt >= startOfToday)
+    const todayRefunds = allRefunds.filter(r => r.createdAt >= startOfToday)
+    const todayGrossSales = todayOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0)
+    const todayRefundedAmount = todayRefunds.reduce((sum, r) => sum + Number(r.amount), 0)
+    const todayNetSales = Math.max(0, todayGrossSales - todayRefundedAmount)
+
+    // Monthly
+    const monthlyOrders = allCompletedOrders.filter(o => o.createdAt >= startOfMonth)
+    const monthlyRefunds = allRefunds.filter(r => r.createdAt >= startOfMonth)
+    const monthlyGrossSales = monthlyOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0)
+    const monthlyRefundedAmount = monthlyRefunds.reduce((sum, r) => sum + Number(r.amount), 0)
+    const monthlyNetSales = Math.max(0, monthlyGrossSales - monthlyRefundedAmount)
+
+    // All Time
+    const allTimeGrossSales = allCompletedOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0)
+    const allTimeRefundedAmount = allRefunds.reduce((sum, r) => sum + Number(r.amount), 0)
+    const allTimeNetSales = Math.max(0, allTimeGrossSales - allTimeRefundedAmount)
+
+    // Active (completed + open) non-draft orders count for this branch
+    const activeOrdersWhere: any = {
+        NOT: {
+            paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT', 'REFUNDED'] }
+        }
+    }
+    if (storeId) {
+        activeOrdersWhere.storeId = storeId
+    } else if (tenantId) {
+        activeOrdersWhere.store = { tenantId }
+    }
+    if (cashierId) {
+        activeOrdersWhere.cashierId = cashierId
+    }
+    const activeOrdersCount = await prisma.order.count({ where: activeOrdersWhere })
+
+    const totalOrdersCount = allCompletedOrders.length
+    const totalRefundCount = allRefunds.length
+    const refundRate = (totalOrdersCount + totalRefundCount) > 0
+        ? (totalRefundCount / (totalOrdersCount + totalRefundCount)) * 100
+        : 0
+
+    return {
+        today: {
+            grossSales: todayGrossSales,
+            refundedAmount: todayRefundedAmount,
+            netSales: todayNetSales,
+            orderCount: todayOrders.length,
+            refundCount: todayRefunds.length
+        },
+        monthly: {
+            grossSales: monthlyGrossSales,
+            refundedAmount: monthlyRefundedAmount,
+            netSales: monthlyNetSales,
+            orderCount: monthlyOrders.length,
+            refundCount: monthlyRefunds.length
+        },
+        allTime: {
+            grossSales: allTimeGrossSales,
+            refundedAmount: allTimeRefundedAmount,
+            netSales: allTimeNetSales,
+            orderCount: allCompletedOrders.length,
+            refundCount: allRefunds.length
+        },
+        activeOrdersCount,
+        refundSummary: {
+            totalRefundedAmount: allTimeRefundedAmount,
+            totalRefundCount: totalRefundCount,
+            refundRate: Number(refundRate.toFixed(1))
+        }
+    }
+}
+

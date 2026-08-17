@@ -64,6 +64,7 @@ const AppRoutes = () => {
                             products={dashboardData.products}
                             orders={dashboardData.orders}
                             staff={dashboardData.staff}
+                            dashboardSummary={dashboardData.dashboardSummary}
                             isLoading={dashboardData.isLoading}
                             resetFinancials={dashboardData.resetFinancials}
                         />
