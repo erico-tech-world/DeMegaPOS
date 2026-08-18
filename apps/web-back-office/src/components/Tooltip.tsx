@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 interface TooltipProps {
     content: React.ReactNode | string | number;
@@ -7,6 +7,15 @@ interface TooltipProps {
     className?: string;
     delay?: number;
     disabled?: boolean;
+    /**
+     * When true (default), the tooltip only shows if the wrapped element
+     * is truncated with ellipsis (scrollWidth > clientWidth).
+     */
+    onlyOnOverflow?: boolean;
+    /**
+     * Explicit override to always show the tooltip on hover (e.g. for rich metadata).
+     */
+    forceShow?: boolean;
 }
 
 export const Tooltip: React.FC<TooltipProps> = ({
@@ -16,12 +25,36 @@ export const Tooltip: React.FC<TooltipProps> = ({
     className = '',
     delay = 100,
     disabled = false,
+    onlyOnOverflow = true,
+    forceShow = false,
 }) => {
     const [isVisible, setIsVisible] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
     const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const isElementTruncated = useCallback((): boolean => {
+        if (!containerRef.current) return false;
+        
+        // Find the text-bearing child element or use the container itself
+        const target = (containerRef.current.firstElementChild as HTMLElement) || containerRef.current;
+        
+        // Check horizontal or vertical overflow
+        const isHorizontallyTruncated = target.scrollWidth > target.clientWidth + 1;
+        const isVerticallyTruncated = target.scrollHeight > target.clientHeight + 1;
+        
+        return isHorizontallyTruncated || isVerticallyTruncated;
+    }, []);
 
     const showTooltip = () => {
         if (disabled || !content) return;
+
+        // If onlyOnOverflow is enabled and forceShow is false, verify truncation first
+        if (onlyOnOverflow && !forceShow) {
+            if (!isElementTruncated()) {
+                return;
+            }
+        }
+
         timeoutRef.current = setTimeout(() => {
             setIsVisible(true);
         }, delay);
@@ -61,16 +94,14 @@ export const Tooltip: React.FC<TooltipProps> = ({
         right: 'right-full top-1/2 -translate-y-1/2 border-r-gray-900 dark:border-r-slate-800 border-y-transparent border-l-transparent border-r-4 border-y-4 border-l-0',
     };
 
-    const titleAttr = typeof content === 'string' || typeof content === 'number' ? String(content) : undefined;
-
     return (
         <div
-            className={`relative inline-flex items-center group/tooltip ${className}`}
+            ref={containerRef}
+            className={`relative inline-flex items-center min-w-0 ${className}`}
             onMouseEnter={showTooltip}
             onMouseLeave={hideTooltip}
             onFocus={showTooltip}
             onBlur={hideTooltip}
-            title={titleAttr}
         >
             {children}
 
