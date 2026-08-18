@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { API_URL } from '../../lib/apiConfig';
+import { Tooltip } from '../../components/Tooltip';
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 const StatCard = ({ title, value, icon: Icon, color, sub }: any) => (
@@ -14,10 +15,18 @@ const StatCard = ({ title, value, icon: Icon, color, sub }: any) => (
         <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}18` }}>
             <Icon size={24} style={{ color }} />
         </div>
-        <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400 truncate">{title}</p>
-            <p className="text-2xl font-black text-gray-900 dark:text-white mt-0.5 truncate">{value}</p>
-            {sub && <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 font-bold">{sub}</p>}
+        <div className="min-w-0 flex-1">
+            <Tooltip content={title} position="top" className="w-full block">
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-400 truncate cursor-default">{title}</p>
+            </Tooltip>
+            <Tooltip content={value} position="top" className="w-full block">
+                <p className="text-2xl font-black text-gray-900 dark:text-white mt-0.5 truncate cursor-default">{value}</p>
+            </Tooltip>
+            {sub && (
+                <Tooltip content={sub} position="bottom" className="w-full block">
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 font-bold truncate cursor-default">{sub}</p>
+                </Tooltip>
+            )}
         </div>
     </div>
 );

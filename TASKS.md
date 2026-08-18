@@ -103,3 +103,13 @@
 - `[x]` Identifier Masking: Removed raw DB primary keys (`id`) from public UI; display ONLY human-readable `branch_code` (e.g. `BR-LAG-01`)
 - `[x]` Edit Branch Modal: Built Super Admin Edit Branch configuration modal for Name, Location, Phone, Receipt Header/Footer with immutable code badge
 - `[x]` Independent Branch Data Isolation: Enforced strict `WHERE tenant_id = :tenantId AND branch_id = :activeBranchId` database scoping across `/orders`, `/analytics`, `/inventory`, and `/dashboard`
+
+## Phase 14: Multi-Branch Period Filter Alignment & Accessible Card Tooltips
+- `[x]` Create reusable accessible Tooltip component (`apps/web-back-office/src/components/Tooltip.tsx`)
+- `[x]` Align `/multi-branch` analysis period filter UI with `/analytics` (Presets: `Today`, `This Week`, `This Month`, `1 Year`, `3 Years`, `5 Years` + `DateRangePicker` calendar dropdown)
+- `[x]` Connect dynamic date range filter to multi-branch aggregation API (`/orders/analytics?startDate=...&endDate=...`)
+- `[x]` Wrap all truncated card titles, numerical values, branch names, and table cells in `Tooltip`
+- `[x]` Verify 0 TypeScript errors and push to git remotes
+
+
+

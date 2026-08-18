@@ -90,6 +90,16 @@ The architecture blueprints, system specifications, and design documents are per
 - Register dedicated unique routes `/control-tower` and `/super-admin` pointing to `<PlatformControlTowerPage />`.
 - Add Impersonation Mode banner overlay in `AppLayout.tsx`.
 
+### Component 4: Phase 9 - Multi-Branch Period Filter Alignment & Accessible Card Tooltips
+
+#### [NEW] [Tooltip.tsx](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/components/Tooltip.tsx)
+- Reusable accessible Tooltip component with sleek dark styling, hover/focus support, and arrow indicators.
+
+#### [MODIFY] [MultiBranchComparison.tsx](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/pages/analytics/MultiBranchComparison.tsx)
+- Match `/analytics` period filter UI: Presets (`Today`, `This Week`, `This Month`, `1 Year`, `3 Years`, `5 Years`) + `DateRangePicker` calendar dropdown.
+- Pass dynamic `startDate` and `endDate` query params to `/orders/analytics`.
+- Wrap all truncated card labels, numeric values, branch names, and table cells in `Tooltip`.
+
 ---
 
 ## Verification Plan
@@ -99,7 +109,6 @@ The architecture blueprints, system specifications, and design documents are per
 - Frontend build: `pnpm --filter web-back-office build`
 
 ### Manual Verification
-1. **SMTP Email Test**: Run invitation dispatch via Staff Page or `node test-invite.js` -> confirm email arrives in inbox with `emailSent: true`.
-2. **Tenant Store Dashboard**: Navigate to `/store-dashboard` -> verify KPI cards, payment breakdown, peak hour heatmap, ABC inventory metrics, and cashier performance tables.
-3. **Platform Control Tower**: Navigate to `/control-tower` -> verify SaaS MRR/ARR/GMV stats, API latency gauges, tenant storage quotas, and feature flags.
-4. **Tenant Impersonation Mode**: Click "View as Tenant" on any tenant -> verify banner appears (`⚠️ TENANT IMPERSONATION MODE: {tenantName} (READ-ONLY)`), tenant data loads in read-only state, and clicking "Exit Impersonation" returns to Super Admin view.
+1. **Multi-Branch Period Filters**: Navigate to `/multi-branch` -> verify presets (`Today`, `This Week`, `This Month`, `1 Year`, etc.) and `Custom Range` calendar date picker match `/analytics`. Selecting any filter updates metrics dynamically.
+2. **Accessible Tooltips**: Hover over truncated stat card labels, numerical values (e.g. Net Profit, Revenue), branch names, and table values to verify tooltip reveals full un-truncated text and exact numbers.
+
