@@ -72,6 +72,19 @@ The architecture blueprints, system specifications, and design documents are per
   - Real-time API latency (ms), health gauges, HTTP 4xx/5xx error log stream.
   - Offline sync queue monitor & background worker status.
   - Tenant database & file storage consumption metrics.
+
+## Phase 16: Database Architecture Audit, Background Daemonization & Service Persistence
+
+### 1. Architectural Audit Summary
+- **Direct Database Routing**: Verified that all backend Fastify endpoints connect directly to the PostgreSQL engine via the official `@prisma/client` engine binary using `DATABASE_URL` (and `DIRECT_DATABASE_URL` for migrations/pooling bypass).
+- **Prisma Studio Decoupling**: Confirmed that Prisma Studio (`pnpm studio` on port 5555) is strictly an auxiliary developer GUI client and is completely decoupled from backend API request handling. Backend requests execute directly against PostgreSQL without proxying through Studio.
+- **Multi-Tenant Context Layer**: Multi-tenant isolation is handled cleanly at the application layer via `packages/db/index.ts` using Prisma Client Extensions (`$extends` query middleware) and `AsyncLocalStorage` (`requestContext`).
+
+### 2. Planned Implementation
+- **PM2 Ecosystem Configuration (`ecosystem.config.js`)**: Add process management configuration to run backend services, frontend portals, and Prisma Studio as headless background daemons with automatic restart on crash/reboot (`pm2 startup` & `pm2 save`).
+- **Enhanced Docker Compose (`docker-compose.yml`)**: Add `restart: always`, persistent volume mounts (`postgres_data`), and healthcheck probes for offline local PostgreSQL & Redis instances.
+- **Environment & Hosting Documentation (`.env.example` & Architecture guides)**: Detail production-grade connection strings and connection pooling guidelines for Supabase, Neon, Railway, and local containerized PostgreSQL.
+
 - **Section 3: Tenant Impersonation Engine ("View as Tenant")**:
   - Render tenant management list with single-click "View as Tenant" button.
   - Upon activation: store impersonation state, switch dashboard view to target tenant, display persistent warning banner (`⚠️ TENANT IMPERSONATION MODE: {tenantName} (READ-ONLY)`), and provide an "Exit Impersonation" action button.

@@ -119,6 +119,15 @@
 - `[x]` **Inventory Table** – Add `dark:text-white` to item name cells and `dark:text-slate-200` to stock count cells; add dark variants to Advanced Filters Panel background and selects
 - `[x]` Verify 0 TypeScript errors and push to git remotes
 
+## Phase 16: Database Architecture Audit, Background Daemonization & Service Persistence
+- `[ ]` Audit codebase & Prisma client instantiation to verify direct database routing vs auxiliary GUI tools (Prisma Studio)
+- `[ ]` Create root `ecosystem.config.js` for PM2 headless background daemonization of backend API, web portals, and Prisma Studio
+- `[ ]` Update `docker-compose.yml` with `restart: always`, healthchecks, and volume persistence for local database daemons
+- `[ ]` Update `.env.example` with comprehensive presets for Supabase, Neon, Railway, and Local PostgreSQL
+- `[ ]` Document PM2 startup commands (`pm2 start ecosystem.config.js`, `pm2 startup`, `pm2 save`) and system persistence guidelines
+- `[ ]` Verify 0 TypeScript build errors and sync to git remotes
+
+
 
 
 
