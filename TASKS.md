@@ -111,5 +111,14 @@
 - `[x]` Wrap all truncated card titles, numerical values, branch names, and table cells in `Tooltip`
 - `[x]` Verify 0 TypeScript errors and push to git remotes
 
+## Phase 15: Dark Mode Text Visibility & Contrast Audit
+- `[ ]` **POSView** – Fix "Assign Customer" label contrast (currently invisible `text-blue-900/40` in dark mode → `dark:text-slate-300`)
+- `[ ]` **AddItemModal** – Add `dark:bg-slate-900` to modal container; add `dark:bg-slate-800 dark:border-gray-700 dark:text-white dark:placeholder-slate-400` to all input/select/textarea fields
+- `[ ]` **EditItemModal** – Same dark mode input/container fixes as AddItemModal
+- `[ ]` **StockAdjustmentModal** – Same dark mode input/container fixes
+- `[ ]` **Inventory Table** – Add `dark:text-white` to item name cells and `dark:text-slate-200` to stock count cells; add dark variants to Advanced Filters Panel background and selects
+- `[ ]` Verify 0 TypeScript errors and push to git remotes
+
+
 
 

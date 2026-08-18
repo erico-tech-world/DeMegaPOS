@@ -87,11 +87,11 @@ export const InventoryView = ({ items, isLoading, searchQuery, setSearchQuery, o
 
                 {/* Advanced Filters Panel */}
                 {showFilters && (
-                    <div className="p-6 bg-gray-50/50 border-b border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-6 animate-in slide-in-from-top-4 duration-200">
+                    <div className="p-6 bg-gray-50/50 dark:bg-slate-800/60 border-b border-gray-100 dark:border-gray-800 grid grid-cols-1 sm:grid-cols-3 gap-6 animate-in slide-in-from-top-4 duration-200">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Filter by Category</label>
                             <select
-                                className="w-full p-3 bg-white border border-gray-100 rounded-2xl font-bold text-sm text-gray-700 outline-none focus:ring-4 focus:ring-green-900/5 transition-all"
+                                className="w-full p-3 bg-white dark:bg-slate-900 border border-gray-100 dark:border-gray-700 rounded-2xl font-bold text-sm text-gray-700 dark:text-white outline-none focus:ring-4 focus:ring-green-900/5 transition-all"
                                 value={selectedCategory}
                                 onChange={(e) => setSelectedCategory(e.target.value)}
                             >
@@ -104,7 +104,7 @@ export const InventoryView = ({ items, isLoading, searchQuery, setSearchQuery, o
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Filter by Status</label>
                             <select
-                                className="w-full p-3 bg-white border border-gray-100 rounded-2xl font-bold text-sm text-gray-700 outline-none focus:ring-4 focus:ring-green-900/5 transition-all"
+                                className="w-full p-3 bg-white dark:bg-slate-900 border border-gray-100 dark:border-gray-700 rounded-2xl font-bold text-sm text-gray-700 dark:text-white outline-none focus:ring-4 focus:ring-green-900/5 transition-all"
                                 value={selectedStatus}
                                 onChange={(e) => setSelectedStatus(e.target.value)}
                             >
@@ -116,7 +116,7 @@ export const InventoryView = ({ items, isLoading, searchQuery, setSearchQuery, o
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Filter by Product Type</label>
                             <select
-                                className="w-full p-3 bg-white border border-gray-100 rounded-2xl font-bold text-sm text-gray-700 outline-none focus:ring-4 focus:ring-green-900/5 transition-all"
+                                className="w-full p-3 bg-white dark:bg-slate-900 border border-gray-100 dark:border-gray-700 rounded-2xl font-bold text-sm text-gray-700 dark:text-white outline-none focus:ring-4 focus:ring-green-900/5 transition-all"
                                 value={selectedType}
                                 onChange={(e) => setSelectedType(e.target.value)}
                             >
@@ -165,8 +165,8 @@ export const InventoryView = ({ items, isLoading, searchQuery, setSearchQuery, o
                                                 </div>
                                             )}
                                             <div className="min-w-0">
-                                                <div className="font-black text-gray-900 text-sm leading-tight truncate">{item.name}</div>
-                                                <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">{item.sku || 'N/A'} • {item.unit || 'PCS'}</div>
+                                                <div className="font-black text-gray-900 dark:text-white text-sm leading-tight truncate">{item.name}</div>
+                                                <div className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest mt-1">{item.sku || 'N/A'} • {item.unit || 'PCS'}</div>
                                             </div>
                                         </div>
                                     </td>
@@ -185,7 +185,7 @@ export const InventoryView = ({ items, isLoading, searchQuery, setSearchQuery, o
                                         </span>
                                     </td>
                                     <td className="px-6 py-6">
-                                        <div className="text-sm font-black text-gray-900">{item.stock} {item.unit || 'Units'}</div>
+                                        <div className="text-sm font-black text-gray-900 dark:text-slate-200">{item.stock} {item.unit || 'Units'}</div>
                                     </td>
                                     <td className="px-6 py-6 text-right">
                                         <div className="flex items-center justify-end gap-3">
@@ -322,10 +322,10 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl relative z-[101] overflow-hidden animate-in zoom-in-95">
+            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-xl relative z-[101] overflow-hidden animate-in zoom-in-95">
                 <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                    <h2 className="text-2xl font-black text-gray-900 tracking-tighter">Initialize Product</h2>
-                    <button onClick={onClose} className="p-3 hover:bg-gray-50 rounded-2xl text-gray-400 transition-colors">
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter">Initialize Product</h2>
+                    <button onClick={onClose} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400 transition-colors">
                         <X size={20} />
                     </button>
                 </div>
@@ -336,7 +336,7 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                             <input
                                 required
                                 type="text"
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 transition-all"
                                 placeholder="e.g. Premium Blend Coffee"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -345,7 +345,7 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Category Sector</label>
                             <select
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all appearance-none"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white transition-all appearance-none"
                                 value={formData.categoryId}
                                 onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                             >
@@ -389,7 +389,7 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                         {imageUploadMode === 'url' ? (
                             <input
                                 type="text"
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 transition-all"
                                 placeholder="https://images.unsplash.com/photo-xxx"
                                 value={formData.imageUrl}
                                 onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
@@ -438,7 +438,7 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">SKU ID</label>
                             <input
                                 type="text"
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 transition-all"
                                 placeholder="PROD-XXX"
                                 value={formData.sku}
                                 onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
@@ -448,7 +448,7 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Standard Unit</label>
                             <input
                                 type="text"
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 transition-all"
                                 placeholder="e.g. pcs, kg, carton"
                                 value={formData.unit}
                                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
@@ -460,7 +460,7 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Market Strategy</label>
                             <select
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all appearance-none"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white transition-all appearance-none"
                                 value={formData.type}
                                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                             >
@@ -471,28 +471,28 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                         </div>
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lifespan Endpoint</label>
-                            <input type="date" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-bold" value={formData.expiryDate} onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })} />
+                            <input type="date" className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl outline-none font-bold text-gray-900 dark:text-white" value={formData.expiryDate} onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })} />
                         </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-6">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cost (₦)</label>
-                            <input type="number" className="w-full px-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-black text-sm" value={formData.costPrice ?? ''} onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })} />
+                            <input type="number" className="w-full px-4 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:border-[#2D7A3E] outline-none font-black text-sm text-gray-900 dark:text-white" value={formData.costPrice ?? ''} onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })} />
                         </div>
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-[#2D7A3E] uppercase tracking-widest ml-1">Retail (₦)</label>
-                            <input required type="number" className="w-full px-4 py-4 bg-green-50/30 border border-green-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-black text-sm" value={formData.price} onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })} />
+                            <input required type="number" className="w-full px-4 py-4 bg-green-50/30 dark:bg-green-950/30 border border-green-100 dark:border-green-800 rounded-2xl focus:border-[#2D7A3E] outline-none font-black text-sm text-gray-900 dark:text-white" value={formData.price} onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })} />
                         </div>
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest ml-1">VIP (₦)</label>
-                            <input type="number" className="w-full px-4 py-4 bg-amber-50/30 border border-amber-100 rounded-2xl focus:border-amber-400 outline-none font-black text-sm" value={formData.vipPrice ?? ''} onChange={(e) => setFormData({ ...formData, vipPrice: e.target.value })} />
+                            <input type="number" className="w-full px-4 py-4 bg-amber-50/30 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-800 rounded-2xl focus:border-amber-400 outline-none font-black text-sm text-gray-900 dark:text-white" value={formData.vipPrice ?? ''} onChange={(e) => setFormData({ ...formData, vipPrice: e.target.value })} />
                         </div>
                     </div>
 
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Initial Reserve</label>
-                        <input required type="number" className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-black text-center" value={formData.stock} onChange={(e) => setFormData({ ...formData, stock: Number(e.target.value) })} />
+                        <input required type="number" className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl outline-none font-black text-center text-gray-900 dark:text-white" value={formData.stock} onChange={(e) => setFormData({ ...formData, stock: Number(e.target.value) })} />
                     </div>
 
                     {formData.type === 'VARIANT' && (
@@ -500,7 +500,7 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                             <label className="text-[10px] font-black text-[#2D7A3E] uppercase tracking-widest ml-1">Variants (Comma Separated)</label>
                             <input
                                 type="text"
-                                className="w-full px-6 py-4 bg-green-50/30 border border-green-100 rounded-2xl outline-none font-bold"
+                                className="w-full px-6 py-4 bg-green-50/30 dark:bg-green-950/30 border border-green-100 dark:border-green-800 rounded-2xl outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400"
                                 placeholder="Red, Green, Blue or Small, Medium, Large"
                                 value={formData.variantsInput}
                                 onChange={(e) => setFormData({ ...formData, variantsInput: e.target.value })}
@@ -651,10 +651,10 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl relative z-[101] overflow-hidden animate-in zoom-in-95">
+            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-xl relative z-[101] overflow-hidden animate-in zoom-in-95">
                 <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                    <h2 className="text-2xl font-black text-gray-900 tracking-tighter">Edit Product</h2>
-                    <button onClick={onClose} className="p-3 hover:bg-gray-50 rounded-2xl text-gray-400 transition-colors">
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter">Edit Product</h2>
+                    <button onClick={onClose} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400 transition-colors">
                         <X size={20} />
                     </button>
                 </div>
@@ -665,7 +665,7 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
                             <input
                                 required
                                 type="text"
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 transition-all"
                                 placeholder="e.g. Premium Blend Coffee"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -674,7 +674,7 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Category Sector</label>
                             <select
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all appearance-none"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white transition-all appearance-none"
                                 value={formData.categoryId}
                                 onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
                             >
@@ -718,7 +718,7 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
                         {imageUploadMode === 'url' ? (
                             <input
                                 type="text"
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 transition-all"
                                 placeholder="https://images.unsplash.com/photo-xxx"
                                 value={formData.imageUrl}
                                 onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
@@ -767,7 +767,7 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">SKU ID</label>
                             <input
                                 type="text"
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 transition-all"
                                 placeholder="PROD-XXX"
                                 value={formData.sku}
                                 onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
@@ -777,7 +777,7 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Standard Unit</label>
                             <input
                                 type="text"
-                                className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold transition-all"
+                                className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 transition-all"
                                 placeholder="e.g. pcs, kg, carton"
                                 value={formData.unit}
                                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
@@ -788,15 +788,15 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
                     <div className="grid grid-cols-3 gap-6">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Cost (₦)</label>
-                            <input type="number" className="w-full px-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-black text-sm" value={formData.costPrice ?? ''} onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })} />
+                            <input type="number" className="w-full px-4 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:border-[#2D7A3E] outline-none font-black text-sm text-gray-900 dark:text-white" value={formData.costPrice ?? ''} onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })} />
                         </div>
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-[#2D7A3E] uppercase tracking-widest ml-1">Retail (₦)</label>
-                            <input required type="number" className="w-full px-4 py-4 bg-green-50/30 border border-green-100 rounded-2xl focus:border-[#2D7A3E] outline-none font-black text-sm" value={formData.price} onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })} />
+                            <input required type="number" className="w-full px-4 py-4 bg-green-50/30 dark:bg-green-950/30 border border-green-100 dark:border-green-800 rounded-2xl focus:border-[#2D7A3E] outline-none font-black text-sm text-gray-900 dark:text-white" value={formData.price} onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })} />
                         </div>
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-amber-600 uppercase tracking-widest ml-1">VIP (₦)</label>
-                            <input type="number" className="w-full px-4 py-4 bg-amber-50/30 border border-amber-100 rounded-2xl focus:border-amber-400 outline-none font-black text-sm" value={formData.vipPrice ?? ''} onChange={(e) => setFormData({ ...formData, vipPrice: e.target.value })} />
+                            <input type="number" className="w-full px-4 py-4 bg-amber-50/30 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-800 rounded-2xl focus:border-amber-400 outline-none font-black text-sm text-gray-900 dark:text-white" value={formData.vipPrice ?? ''} onChange={(e) => setFormData({ ...formData, vipPrice: e.target.value })} />
                         </div>
                     </div>
                     {error && (
@@ -859,24 +859,24 @@ export const StockAdjustmentModal = ({ isOpen, onClose, product, onSuccess }: an
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95">
+            <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95">
                 <div className="p-8 border-b border-gray-100 flex items-center justify-between">
-                    <h2 className="text-2xl font-black text-gray-900 tracking-tighter">Update Stock</h2>
-                    <button onClick={onClose} className="p-3 hover:bg-gray-50 rounded-2xl text-gray-400">
+                    <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter">Update Stock</h2>
+                    <button onClick={onClose} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400">
                         <X size={20} />
                     </button>
                 </div>
                 <form onSubmit={handleSubmit} className="p-8 space-y-6">
-                    <div className="p-4 bg-green-50/50 rounded-2xl border border-green-100">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[#2D7A3E]/60 mb-1">Product</p>
-                        <p className="font-black text-gray-900">{product.name} <span className="text-[#2D7A3E]">({product.sku || 'N/A'})</span></p>
+                    <div className="p-4 bg-green-50/50 dark:bg-green-950/30 rounded-2xl border border-green-100 dark:border-green-800">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-[#2D7A3E]/60 dark:text-green-400 mb-1">Product</p>
+                        <p className="font-black text-gray-900 dark:text-white">{product.name} <span className="text-[#2D7A3E]">({product.sku || 'N/A'})</span></p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Action</label>
                             <select
-                                className="w-full px-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-black text-xs appearance-none"
+                                className="w-full px-4 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl outline-none font-black text-xs text-gray-900 dark:text-white appearance-none"
                                 value={formData.type}
                                 onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                             >
@@ -890,7 +890,7 @@ export const StockAdjustmentModal = ({ isOpen, onClose, product, onSuccess }: an
                             <input
                                 required
                                 type="number"
-                                className="w-full px-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-black text-center"
+                                className="w-full px-4 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl outline-none font-black text-center text-gray-900 dark:text-white"
                                 value={formData.quantity}
                                 onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
                             />
@@ -900,7 +900,7 @@ export const StockAdjustmentModal = ({ isOpen, onClose, product, onSuccess }: an
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Reason (Optional)</label>
                         <textarea
-                            className="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none min-h-[100px] font-bold text-sm"
+                            className="w-full px-6 py-4 bg-gray-50 dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl outline-none min-h-[100px] font-bold text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400"
                             placeholder="e.g. Reconciliation after audit"
                             value={formData.reason}
                             onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
@@ -931,9 +931,9 @@ export const CustomAlertModal = ({ title = "Notification Alert", message, onClos
     return (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
             <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
-            <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-4">
-                <h3 className="text-lg font-black text-gray-900 tracking-tight">{title}</h3>
-                <p className="text-sm text-gray-500 font-bold leading-relaxed">{message}</p>
+            <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-sm relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-4 border border-gray-100 dark:border-gray-800">
+                <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight">{title}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-bold leading-relaxed">{message}</p>
                 <button
                     onClick={onClose}
                     className="w-full bg-[#2D7A3E] text-white py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all"

@@ -831,7 +831,7 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                     <div className="p-6 bg-blue-50/30 border-b border-blue-50">
                         <div className="flex flex-col space-y-3">
                             <div className="flex justify-between items-center">
-                                <label className="text-[10px] font-black text-blue-900/40 uppercase tracking-widest ml-1">Assign Customer</label>
+                                <label className="text-[10px] font-black text-blue-900/40 dark:text-slate-300 uppercase tracking-widest ml-1">Assign Customer</label>
                                 <button
                                     onClick={() => setIsAddCustomerModalOpen(true)}
                                     className="p-1 px-2 bg-blue-100 text-blue-600 rounded-lg text-[10px] font-black hover:bg-blue-200 transition-colors flex items-center gap-1"
