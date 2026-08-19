@@ -16,7 +16,10 @@
     "studio": "pnpm --filter @demegapos/db studio",
     "db:generate": "pnpm --filter @demegapos/db db:generate",
     "db:push": "pnpm --filter @demegapos/db db:push --skip-generate",
-    "db:seed": "pnpm --filter @demegapos/db db:seed"
+    "db:seed": "pnpm --filter @demegapos/db db:seed",
+    "build:admin": "pnpm --filter web-back-office build",
+    "deploy:netlify": "pnpm --filter web-back-office build && npx netlify-cli deploy --prod --dir=apps/web-back-office/dist",
+    "deploy:vercel": "pnpm --filter web-back-office build && npx vercel --prod"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

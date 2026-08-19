@@ -127,6 +127,14 @@
 - `[x]` Document PM2 startup commands (`pm2 start ecosystem.config.cjs`, `pm2 startup`, `pm2 save`) and system persistence guidelines
 - `[x]` Verify 0 TypeScript build errors and sync to git remotes
 
+## Phase 17: Production Frontend Deployment Optimization (Vercel & Netlify)
+- `[x]` Audit monorepo structure, build output directories, and routing rewrites
+- `[x]` Fix root `vercel.json` and create `apps/web-back-office/vercel.json` resolving missing entrypoint errors
+- `[x]` Optimize `netlify.toml` with base directory, SPA redirects, and security headers
+- `[x]` Add zero-credit local CLI deployment scripts to `package.json` (`deploy:netlify`, `deploy:vercel`)
+- `[x]` Verify clean local build of `apps/web-back-office` and sync to git remotes
+
+
 
 
 

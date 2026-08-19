@@ -85,6 +85,22 @@ The architecture blueprints, system specifications, and design documents are per
 - **Enhanced Docker Compose (`docker-compose.yml`)**: Add `restart: always`, persistent volume mounts (`postgres_data`), and healthcheck probes for offline local PostgreSQL & Redis instances.
 - **Environment & Hosting Documentation (`.env.example` & Architecture guides)**: Detail production-grade connection strings and connection pooling guidelines for Supabase, Neon, Railway, and local containerized PostgreSQL.
 
+## Phase 17: Production Frontend Deployment Strategy Evaluation & Multi-Platform Automation
+
+### 1. Architectural Audit of Deployment Options
+- **Option 1 (Vercel Monorepo Deployment)**: **SELECTED (Primary CI/CD)**.
+  - Root Cause of Prior Failure: `vercel.json` specified `installCommand: "npm install --prefix ../web-back-office"` and `outputDirectory: "../web-back-office/dist"`, which referenced invalid relative paths outside the build root and bypassed pnpm workspace resolution.
+  - Remedy: Configure root `vercel.json` with `buildCommand: "pnpm --filter web-back-office build"`, `outputDirectory: "apps/web-back-office/dist"`, and SPA rewrites. Also create `apps/web-back-office/vercel.json` with `outputDirectory: "dist"` for root-directory scoped deployments.
+- **Option 2 (Netlify Account Re-link)**: Evaluated as a temporary workaround. Bypasses credit limits by linking a new team, but does not solve recurring credit consumption on frequent git pushes.
+- **Option 3 (Local Zero-Credit CLI Deployment)**: **SELECTED (Complementary / Emergency Deploy)**.
+  - Provides a 0-credit fallback mechanism. Compiles artifacts locally (`apps/web-back-office/dist`) and deploys directly via Netlify CLI / Vercel CLI without consuming server build minutes.
+
+### 2. Execution Blueprint
+1. Fix root `vercel.json` and add `apps/web-back-office/vercel.json`.
+2. Optimize `netlify.toml` with clean base path and SPA redirect rules.
+3. Add root convenience deploy scripts: `build:admin`, `deploy:netlify`, `deploy:vercel`.
+4. Document production deployment steps and environment variable requirements (`VITE_API_URL`).
+
 - **Section 3: Tenant Impersonation Engine ("View as Tenant")**:
   - Render tenant management list with single-click "View as Tenant" button.
   - Upon activation: store impersonation state, switch dashboard view to target tenant, display persistent warning banner (`⚠️ TENANT IMPERSONATION MODE: {tenantName} (READ-ONLY)`), and provide an "Exit Impersonation" action button.

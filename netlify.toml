@@ -1,13 +1,12 @@
 [build]
   base      = "apps/web-back-office"
-  command   = "npm install && npm run build"
+  command   = "npm run build"
   publish   = "dist"
 
 [build.environment]
   NODE_VERSION = "20"
-  PNPM_FLAGS = "--no-frozen-lockfile"
 
-# SPA fallback — all routes served by index.html
+# SPA fallback — all routes served by index.html for React Router
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
