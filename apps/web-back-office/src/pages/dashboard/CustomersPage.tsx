@@ -1,12 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CustomersView, EditCustomerModal } from '../../components/PeopleComponents';
 import { AddCustomerModal } from '../../components/POSView';
 import { CustomConfirmModal, CustomAlertModal } from '../../components/InventoryComponents';
 import axios from 'axios';
 import { API_URL } from '../../lib/apiConfig';
-
-
-
 
 interface CustomersPageProps {
     customers: any[];
@@ -20,6 +17,12 @@ const CustomersPage: React.FC<CustomersPageProps> = ({ customers, isLoading, ref
     const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
     const [customConfirm, setCustomConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [customAlert, setCustomAlert] = useState<{ title?: string; message: string } | null>(null);
+
+    useEffect(() => {
+        if (refresh) {
+            refresh();
+        }
+    }, []);
 
     const handleEdit = (customer: any) => {
         setSelectedCustomer(customer);

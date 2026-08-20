@@ -67,6 +67,7 @@ const AppRoutes = () => {
                             dashboardSummary={dashboardData.dashboardSummary}
                             isLoading={dashboardData.isLoading}
                             resetFinancials={dashboardData.resetFinancials}
+                            refresh={dashboardData.refresh}
                         />
                     } />
 

@@ -47,6 +47,13 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         }
     }, [location.search]);
 
+    // Fetch fresh orders immediately on page mount
+    useEffect(() => {
+        if (refresh) {
+            refresh();
+        }
+    }, []);
+
     // Auto-scroll to highlighted order
     useEffect(() => {
         if (highlightId) {

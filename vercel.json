@@ -4,12 +4,13 @@
   "installCommand": "cd apps/web-back-office && npm install",
   "buildCommand": "cd apps/web-back-office && npm run build",
   "outputDirectory": "apps/web-back-office/dist",
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "rewrites": [
+  "routes": [
     {
-      "source": "/((?!.*\\..*|_next).*)",
-      "destination": "/index.html"
+      "handle": "filesystem"
+    },
+    {
+      "src": "/.*",
+      "dest": "/index.html"
     }
   ],
   "headers": [

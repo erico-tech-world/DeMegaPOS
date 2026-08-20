@@ -23,7 +23,14 @@ export async function createOrder(data: CreateOrderInput) {
         }
         const checkStore = finalStoreId ? await prisma.store.findUnique({ where: { id: finalStoreId } }) : null
         if (!checkStore) {
-            const firstStore = await prisma.store.findFirst()
+            let tenantId: string | undefined;
+            if (data.cashierId) {
+                const user = await prisma.user.findUnique({ where: { id: data.cashierId }, select: { tenantId: true } });
+                tenantId = user?.tenantId;
+            }
+            const firstStore = await prisma.store.findFirst({
+                where: tenantId ? { tenantId } : undefined
+            })
             if (firstStore) {
                 finalStoreId = firstStore.id
             } else {

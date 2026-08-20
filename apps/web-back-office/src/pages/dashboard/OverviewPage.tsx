@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { TrendingUp, ShoppingCart, AlertTriangle, Users, Package, RotateCcw, X, Loader2, CalendarRange, Monitor, Archive, UserCircle, BarChart2, Settings as SettingsIcon } from 'lucide-react';
 import { StatCard, OrdersView } from '../../components/DashboardComponents';
@@ -11,13 +11,20 @@ interface OverviewPageProps {
     dashboardSummary?: any;
     isLoading: boolean;
     resetFinancials: (storeId?: string) => Promise<{ deleted: number; message: string }>;
+    refresh?: () => Promise<void> | void;
 }
 
 const ELEVATED_ROLES = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'OWNER', 'ADMIN'];
 
-const OverviewPage = ({ products, orders, staff, dashboardSummary, isLoading, resetFinancials }: OverviewPageProps) => {
+const OverviewPage = ({ products, orders, staff, dashboardSummary, isLoading, resetFinancials, refresh }: OverviewPageProps) => {
     const navigate = useNavigate();
     const { user } = useAuth();
+
+    useEffect(() => {
+        if (refresh) {
+            refresh();
+        }
+    }, []);
 
     const isElevated = ELEVATED_ROLES.includes(user?.role || '');
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { InventoryView, AddItemModal, EditItemModal, StockAdjustmentModal, CustomAlertModal, CustomConfirmModal, CategoriesView } from '../../components/InventoryComponents';
 import axios from 'axios';
@@ -20,6 +20,12 @@ const InventoryPage = ({ products, isLoading, refresh }: InventoryPageProps) => 
     const [customConfirm, setCustomConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [customAlert, setCustomAlert] = useState<{ title?: string; message: string } | null>(null);
     const location = useLocation();
+
+    useEffect(() => {
+        if (refresh) {
+            refresh();
+        }
+    }, []);
 
     const queryParams = new URLSearchParams(location.search);
     const highlightId = queryParams.get('productId');

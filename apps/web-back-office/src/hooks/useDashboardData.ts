@@ -193,24 +193,95 @@ export const useDashboardData = () => {
 
         fetchData();
 
-        const ws = new WebSocket(WS_URL);
-        ws.onmessage = (event) => {
+        let ws: WebSocket | null = null;
+        let reconnectTimeout: any = null;
+        let isMounted = true;
+
+        const connectWs = () => {
+            if (!isMounted || !token) return;
             try {
-                const data = JSON.parse(event.data);
-                if (data.event === 'ORDER_CREATED' || data.event === 'STOCK_UPDATED' || data.event === 'PRODUCT_CREATED' || data.event === 'ORDER_UPDATED' || data.event === 'PAYMENT_SUCCESS') {
-                    fetchData();
+                ws = new WebSocket(WS_URL);
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (
+                            data.event === 'ORDER_CREATED' ||
+                            data.event === 'STOCK_UPDATED' ||
+                            data.event === 'PRODUCT_CREATED' ||
+                            data.event === 'ORDER_UPDATED' ||
+                            data.event === 'PAYMENT_SUCCESS' ||
+                            data.event === 'REFUND_PROCESSED'
+                        ) {
+                            fetchData();
+                        }
+                    } catch (e) {
+                        console.error('[WS] Message parse error:', e);
+                    }
+                };
+
+                ws.onclose = () => {
+                    if (isMounted) {
+                        reconnectTimeout = setTimeout(connectWs, 3000);
+                    }
+                };
+
+                ws.onerror = () => {
+                    try { ws?.close(); } catch {}
+                };
+            } catch (err) {
+                if (isMounted) {
+                    reconnectTimeout = setTimeout(connectWs, 5000);
                 }
-            } catch (e) {
-                console.error('WS Error:', e);
             }
         };
 
-        return () => ws.close();
+        connectWs();
+
+        // ── Smart Periodic Background Polling (every 10s) ───────────────────────
+        const pollInterval = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                fetchData();
+            }
+        }, 10000);
+
+        // ── Refresh immediately when user returns to the tab ─────────────────────
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                fetchData();
+            }
+        };
+        const handleFocus = () => {
+            fetchData();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            isMounted = false;
+            if (ws) {
+                ws.onclose = null;
+                ws.close();
+            }
+            if (reconnectTimeout) clearTimeout(reconnectTimeout);
+            clearInterval(pollInterval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+        };
     }, [token, fetchData]);
 
     const handleCreateOrder = async (orderData: any) => {
         try {
             const res = await axios.post(`${API_URL}/orders`, orderData);
+            // Optimistically prepend new order into local state for instant 0ms UI update
+            if (res.data && res.data.id) {
+                setOrders(prev => {
+                    const exists = prev.some(o => o.id === res.data.id);
+                    if (exists) return prev;
+                    return [res.data, ...prev];
+                });
+            }
             await fetchData();
             return res.data;
         } catch (err) {

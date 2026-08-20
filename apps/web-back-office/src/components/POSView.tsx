@@ -97,7 +97,7 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
             amountTransfer: paymentMethod === 'TRANSFER' ? total : (paymentMethod === 'SPLIT' ? amountTransfer : 0),
             amountCard: paymentMethod === 'CARD' ? total : (paymentMethod === 'SPLIT' ? amountCard : 0),
             splitPayments: splitPayments.length > 0 ? splitPayments : undefined,
-            storeId: 'test-store-1'
+            storeId: localStorage.getItem('selectedBranchId') || (user as any)?.branchId || undefined
         };
 
         const res = await onSubmitOrder(orderData);
@@ -371,7 +371,7 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                 amountTransfer: paymentMethod === 'TRANSFER' ? total : (paymentMethod === 'SPLIT' ? amountTransfer : 0),
                 amountCard: paymentMethod === 'CARD' ? total : (paymentMethod === 'SPLIT' ? amountCard : 0),
                 splitPayments: splitPayments.length > 0 ? splitPayments : undefined,
-                storeId: 'test-store-1' // Default store ID
+                storeId: localStorage.getItem('selectedBranchId') || (user as any)?.branchId || undefined
             };
 
             try {
@@ -447,7 +447,7 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                 paymentStatus: 'DRAFT',
                 customerId: selectedCustomer?.id,
                 cashierId: user?.id,
-                storeId: 'test-store-1'
+                storeId: localStorage.getItem('selectedBranchId') || (user as any)?.branchId || undefined
             };
 
             if (createDraftOrder) {
