@@ -39,7 +39,8 @@ async function main() {
             'http://localhost:5174',
             'http://localhost:4173',
             'http://localhost:3000',
-            // Netlify production deployment
+            // Vercel & Netlify production deployments
+            'https://demegapos.vercel.app',
             'https://demegapos.netlify.app',
         ]);
 
@@ -64,8 +65,8 @@ async function main() {
             // Allow requests with no Origin (server-to-server, Postman, mobile apps)
             if (!requestOrigin) return cb(null, true);
             if (allowedOrigins.includes(requestOrigin)) return cb(null, true);
-            // Allow any *.netlify.app preview deploy URLs (branch deploys)
-            if (requestOrigin.endsWith('.netlify.app')) return cb(null, true);
+            // Allow any *.vercel.app or *.netlify.app preview deploy URLs (branch deploys)
+            if (requestOrigin.endsWith('.vercel.app') || requestOrigin.endsWith('.netlify.app')) return cb(null, true);
             // Allow any localhost port for development
             if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin)) return cb(null, true);
             console.warn(`[CORS] Blocked origin: ${requestOrigin}`);

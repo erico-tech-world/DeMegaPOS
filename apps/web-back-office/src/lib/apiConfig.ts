@@ -47,19 +47,8 @@ export const getApiUrl = (): string => {
                 const windowOverride = (window as any).DEMEGA_BACKEND_URL;
                 if (windowOverride) return windowOverride;
 
-                // No env var + no override = misconfiguration.
-                // Log a clear error so the developer knows exactly what to fix.
-                console.error(
-                    '[DeMegaPOS] VITE_API_URL is not configured!\n' +
-                    'Option A: Set in apps/web-back-office/.env.production:\n' +
-                    '          VITE_API_URL=https://demegapos.onrender.com\n' +
-                    'Option B: Go to Vercel Dashboard → Project → Settings → Environment Variables\n' +
-                    '          Add: VITE_API_URL = https://demegapos.onrender.com\n' +
-                    'Then trigger a new Vercel deploy.'
-                );
-                // Return empty string so axios requests fail with a clear network error
-                // instead of silently hitting the wrong server.
-                return '';
+                // Fallback directly to the production Render backend API
+                return 'https://demegapos.onrender.com';
             }
 
             // 4. Custom domain subdomains (e.g., app.demegapos.com → api.demegapos.com)
@@ -98,10 +87,7 @@ export const getWsUrl = (): string => {
             if (isStaticHost) {
                 const windowOverride = (window as any).DEMEGA_WS_BACKEND_URL;
                 if (windowOverride) return windowOverride;
-                // Derive WS URL from the API URL
-                const apiBase = getApiUrl();
-                if (apiBase) return apiBase.replace(/^http/, 'ws') + '/ws';
-                return '';
+                return 'wss://demegapos.onrender.com';
             }
 
             if (hostname.startsWith('app.') || hostname.startsWith('pos.')) {
