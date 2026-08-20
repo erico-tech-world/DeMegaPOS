@@ -3,21 +3,21 @@ import axios from 'axios';
 /**
  * Dynamic API and WebSocket URL Configurator
  *
- * Backend is a Fastify/Node.js Docker container (image: demegakitchen/demegapos-backend).
- * It runs via docker-compose.prod.yml on a VPS/server — NOT on Render or any PaaS.
+ * Backend is a Fastify/Node.js service hosted on Render (https://demegapos.onrender.com).
  *
  * Resolution priority:
- * 1. VITE_API_URL  env var  — set this in Netlify dashboard for production
+ * 1. VITE_API_URL  env var  — set in apps/web-back-office/.env.production or Vercel dashboard
  * 2. Runtime override       — localStorage 'demega_api_url' or window.DEMEGA_API_URL
  * 3. Custom subdomain       — app.domain.com → api.domain.com (future custom domain use)
  * 4. Localhost fallback     — http://localhost:3000 (local dev only)
  *
- * ⚠️  IMPORTANT FOR PRODUCTION (NETLIFY):
- *     Netlify hosts static files only — it cannot run the Node.js Fastify backend.
- *     You MUST set VITE_API_URL in your Netlify dashboard → Site → Environment variables,
- *     pointing to the public URL of your Docker backend server.
- *     Example: VITE_API_URL=http://<your-vps-ip>:3000
- *     After adding the variable, trigger a new Netlify deploy.
+ * ⚠️  IMPORTANT FOR PRODUCTION (VERCEL):
+ *     Vercel hosts static files only — it cannot run the Node.js Fastify backend.
+ *     VITE_API_URL is set in apps/web-back-office/.env.production and is baked
+ *     into the build at compile time. You can also override it in:
+ *     Vercel Dashboard → Project → Settings → Environment Variables
+ *     Example: VITE_API_URL=https://demegapos.onrender.com
+ *     After adding the variable, trigger a new Vercel deploy.
  */
 
 export const getApiUrl = (): string => {
@@ -51,10 +51,11 @@ export const getApiUrl = (): string => {
                 // Log a clear error so the developer knows exactly what to fix.
                 console.error(
                     '[DeMegaPOS] VITE_API_URL is not configured!\n' +
-                    'Go to:  Netlify dashboard → Your site → Site configuration → Environment variables\n' +
-                    'Add:    VITE_API_URL = http://<your-docker-server-ip>:3000\n' +
-                    'Then:   Trigger a new deploy (Deploys → Trigger deploy → Deploy site).\n' +
-                    'Refer to .env.example in the repository root for all required variables.'
+                    'Option A: Set in apps/web-back-office/.env.production:\n' +
+                    '          VITE_API_URL=https://demegapos.onrender.com\n' +
+                    'Option B: Go to Vercel Dashboard → Project → Settings → Environment Variables\n' +
+                    '          Add: VITE_API_URL = https://demegapos.onrender.com\n' +
+                    'Then trigger a new Vercel deploy.'
                 );
                 // Return empty string so axios requests fail with a clear network error
                 // instead of silently hitting the wrong server.
