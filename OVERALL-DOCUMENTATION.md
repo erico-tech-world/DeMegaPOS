@@ -42,3 +42,10 @@ DeMega POS is built as a multi-tenant, micro-service ready monolith (Fastify + V
 
 ---
 *Last Updated: 2026-08-14*
+
+# 1. Build the frontend locally (takes ~5 seconds)
+pnpm run build:admin
+
+# 2. Deploy directly to your live Netlify production site (0 build credits used)
+npx netlify-cli deploy --prod --dir=apps/web-back-office/dist
+    
