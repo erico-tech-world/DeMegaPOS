@@ -242,9 +242,10 @@ const AppLayout: React.FC = () => {
                                 <select
                                     value={selectedBranch}
                                     onChange={(e) => {
-                                        setSelectedBranch(e.target.value);
-                                        localStorage.setItem('selectedBranchId', e.target.value);
-                                        window.location.reload();
+                                        const newBranchId = e.target.value;
+                                        setSelectedBranch(newBranchId);
+                                        localStorage.setItem('selectedBranchId', newBranchId);
+                                        window.dispatchEvent(new CustomEvent('demega:branch-changed', { detail: { branchId: newBranchId } }));
                                     }}
                                     className="bg-transparent text-xs font-black text-gray-800 dark:text-white outline-none cursor-pointer"
                                 >

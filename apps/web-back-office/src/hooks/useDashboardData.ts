@@ -238,25 +238,11 @@ export const useDashboardData = () => {
 
         connectWs();
 
-        // ── Smart Periodic Background Polling (every 10s) ───────────────────────
-        const pollInterval = setInterval(() => {
-            if (document.visibilityState === 'visible') {
-                fetchData();
-            }
-        }, 10000);
-
-        // ── Refresh immediately when user returns to the tab ─────────────────────
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                fetchData();
-            }
-        };
-        const handleFocus = () => {
+        // ── Clean Branch Change Listener ─────────────────────────────────────────
+        const handleBranchChange = () => {
             fetchData();
         };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        window.addEventListener('focus', handleFocus);
+        window.addEventListener('demega:branch-changed', handleBranchChange);
 
         return () => {
             isMounted = false;
@@ -265,9 +251,7 @@ export const useDashboardData = () => {
                 ws.close();
             }
             if (reconnectTimeout) clearTimeout(reconnectTimeout);
-            clearInterval(pollInterval);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            window.removeEventListener('focus', handleFocus);
+            window.removeEventListener('demega:branch-changed', handleBranchChange);
         };
     }, [token, fetchData]);
 

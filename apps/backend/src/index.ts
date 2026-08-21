@@ -161,7 +161,15 @@ async function main() {
         if (request.method === 'OPTIONS') {
             return
         }
-        if (request.url.startsWith('/auth') || request.url.startsWith('/api/v1/auth') || request.url.startsWith('/platform') || request.url.startsWith('/docs') || request.url.startsWith('/health') || request.url.startsWith('/ws')) {
+        if (
+            request.url.startsWith('/auth') ||
+            request.url.startsWith('/api/v1/auth') ||
+            request.url.startsWith('/platform') ||
+            request.url.startsWith('/docs') ||
+            request.url.startsWith('/health') ||
+            request.url.startsWith('/api/v1/health') ||
+            request.url.startsWith('/ws')
+        ) {
             return
         }
         try {
@@ -171,8 +179,12 @@ async function main() {
         }
     })
 
+    // ── Ultra-lightweight keep-alive health check endpoints (0ms response, zero database queries) ──
+    server.get('/health', async () => ({ status: 'ok', timestamp: Date.now() }))
+    server.get('/api/v1/health', async () => ({ status: 'ok', timestamp: Date.now() }))
 
-    server.get('/health', async () => {
+    // ── Diagnostic Health check endpoint (for manual inspection of system config) ──
+    server.get('/health/diagnostic', async () => {
         const resendKey = (process.env.RESEND_API_KEY || process.env.SMTP_PASS || '').trim()
         const brevoKey = (process.env.BREVO_API_KEY || '').trim()
         const gmailUser = (process.env.FALLBACK_SMTP_USER || process.env.GMAIL_USER || '').trim()
@@ -180,6 +192,7 @@ async function main() {
 
         return {
             status: 'OK',
+            timestamp: Date.now(),
             mail: {
                 preferredProvider: (process.env.MAIL_PROVIDER || 'GMAIL').toUpperCase(),
                 resend: {

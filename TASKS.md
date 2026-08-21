@@ -127,12 +127,24 @@
 - `[x]` Document PM2 startup commands (`pm2 start ecosystem.config.cjs`, `pm2 startup`, `pm2 save`) and system persistence guidelines
 - `[x]` Verify 0 TypeScript build errors and sync to git remotes
 
-## Phase 17: Production Frontend Deployment Optimization (Vercel & Netlify)
-- `[x]` Audit monorepo structure, build output directories, and routing rewrites
-- `[x]` Fix root `vercel.json` and create `apps/web-back-office/vercel.json` resolving missing entrypoint errors
-- `[x]` Optimize `netlify.toml` with base directory, SPA redirects, and security headers
-- `[x]` Add zero-credit local CLI deployment scripts to `package.json` (`deploy:netlify`, `deploy:vercel`)
-- `[x]` Verify clean local build of `apps/web-back-office` and sync to git remotes
+## Phase 18: Vercel SPA Routing Fix & API Environment Configuration
+- `[x]` Create committed `apps/web-back-office/.env.production` with `VITE_API_URL` and `VITE_WS_URL`
+- `[x]` Add `.gitignore` exception for `.env.production`
+- `[x]` Add resilient fallback in `apiConfig.ts` to `https://demegapos.onrender.com`
+- `[x]` Expand Fastify CORS to allow `https://demegapos.vercel.app` and `*.vercel.app`
+
+## Phase 19: Vercel Canonical SPA Routing & POS Branch Isolation Fix
+- `[x]` Configure canonical Vercel SPA routing with `routes: [{ handle: "filesystem" }, { src: "/.*", dest: "/index.html" }]` in `vercel.json` and `apps/web-back-office/vercel.json`
+- `[x]` Fix hardcoded `storeId: 'test-store-1'` in `POSView.tsx` to dynamically resolve from active branch
+- `[x]` Scope database store fallback in backend `createOrder` to active tenant
+
+## Phase 20: Frontend Refresh Trigger Removal & Lightweight Render Keep-Alive Endpoint
+- `[x]` Remove `window.location.reload()` from branch switcher in `AppLayout.tsx` and replace with `'demega:branch-changed'` custom event
+- `[x]` Remove `setInterval` 10s background polling, `visibilitychange`, and `window.onfocus` refresh triggers from `useDashboardData.ts`
+- `[x]` Implement ultra-lightweight `GET /health` and `GET /api/v1/health` returning `{ status: "ok", timestamp: number }` without database overhead
+- `[x]` Exclude `/health` and `/api/v1/health` from Fastify JWT auth hook
+- `[x]` Document keep-alive setup instructions for external cron ping services (Cron-Job.org / UptimeRobot)
+- `[x]` Verify clean build and push to git remotes
 
 
 

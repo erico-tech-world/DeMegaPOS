@@ -131,13 +131,35 @@ The architecture blueprints, system specifications, and design documents are per
 
 ---
 
-## Verification Plan
+## Phase 20: Frontend Refresh Trigger Removal & Lightweight Render Keep-Alive Endpoint
 
-### Automated Compilation & Build Tests
-- Backend build: `pnpm --filter demegapos-backend build`
-- Frontend build: `pnpm --filter web-back-office build`
+### 1. Objectives & Executive Summary
+- Eliminate all forced page reloads (`window.location.reload()`), aggressive interval polling (`setInterval`), and tab visibility/focus refresh triggers across the frontend (`apps/web-back-office`).
+- Preserve seamless reactive UI state management: data updates flow strictly through API responses, component mount lifecycle, and WebSocket broadcast listeners.
+- Add an ultra-lightweight, zero-DB `GET /health` (and `GET /api/v1/health`) endpoint in `apps/backend` returning `{ status: "ok", timestamp: number }` with sub-millisecond response time.
+- Provide documentation for external keep-alive cron services (Cron-Job.org / UptimeRobot) to ping the Render backend every 10 minutes to prevent cold starts without needing local terminal daemons.
 
-### Manual Verification
-1. **Multi-Branch Period Filters**: Navigate to `/multi-branch` -> verify presets (`Today`, `This Week`, `This Month`, `1 Year`, etc.) and `Custom Range` calendar date picker match `/analytics`. Selecting any filter updates metrics dynamically.
-2. **Accessible Tooltips**: Hover over truncated stat card labels, numerical values (e.g. Net Profit, Revenue), branch names, and table values to verify tooltip reveals full un-truncated text and exact numbers.
+### 2. Architectural Blueprint & Changes
+
+#### A. Frontend Refresh Mechanism Removals (`apps/web-back-office`)
+- **[MODIFY] [`AppLayout.tsx`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/layouts/AppLayout.tsx)**:
+  - Remove `window.location.reload()` in the branch selector.
+  - Dispatch custom event `'demega:branch-changed'` and update local state seamlessly without a full browser reload.
+- **[MODIFY] [`useDashboardData.ts`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/hooks/useDashboardData.ts)**:
+  - Remove 10-second `setInterval` background polling.
+  - Remove `visibilitychange` and `window.onfocus` event listeners that forced aggressive data re-fetches.
+  - Listen for `'demega:branch-changed'` to fetch data on branch switch cleanly.
+  - Retain action-driven updates (`handleCreateOrder` optimistic prepend) and WebSocket push notifications.
+
+#### B. Backend Lightweight Health Check (`apps/backend`)
+- **[MODIFY] [`index.ts`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/backend/src/index.ts)**:
+  - Add `server.get('/health', async () => ({ status: 'ok', timestamp: Date.now() }))`
+  - Add `server.get('/api/v1/health', async () => ({ status: 'ok', timestamp: Date.now() }))`
+  - Move full diagnostic/mail info to `GET /health/diagnostic` and `GET /health/mail`.
+  - Exclude `/health` and `/api/v1/health` from JWT authentication hooks.
+
+### 3. Verification Plan
+- Build frontend (`npm run build` in `apps/web-back-office`) to verify clean compilation.
+- Test that changing branches in the header does not reload the page (`window.location.reload()` is absent).
+- Test that `/health` returns `{ status: "ok", timestamp: ... }` with HTTP 200 and zero database load.
 
