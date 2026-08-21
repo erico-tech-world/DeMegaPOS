@@ -366,6 +366,13 @@ export default async function authRoutes(app: FastifyInstance) {
     server.patch(
         '/theme',
         {
+            onRequest: [async (request, reply) => {
+                try {
+                    await request.jwtVerify()
+                } catch {
+                    return reply.code(401).send({ message: 'Authentication required.' })
+                }
+            }],
             schema: {
                 body: z.object({
                     themePreference: z.enum(['light', 'dark']),
@@ -400,6 +407,13 @@ export default async function authRoutes(app: FastifyInstance) {
     server.patch(
         '/change-password',
         {
+            onRequest: [async (request, reply) => {
+                try {
+                    await request.jwtVerify()
+                } catch {
+                    return reply.code(401).send({ message: 'Authentication required. Please sign in again.' })
+                }
+            }],
             schema: {
                 body: changePasswordSchema,
                 response: {
@@ -413,7 +427,7 @@ export default async function authRoutes(app: FastifyInstance) {
         async (request, reply) => {
             const userId = (request.user as any)?.id
             if (!userId) {
-                return reply.code(401).send({ message: 'Authentication required.' })
+                return reply.code(401).send({ message: 'Authentication required. Please sign in again.' })
             }
 
             const { currentPassword, newPassword } = request.body

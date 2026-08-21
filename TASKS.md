@@ -156,6 +156,16 @@
 - `[x]` Harmonize `.gitignore` rules for `.env*.local` and annotate public frontend configs
 - `[x]` Verify clean TypeScript/Vite builds across workspace and sync with remote repositories
 
+## Phase 22: WebSocket Routing, Change Password Auth, & POS Grand Total Fixes
+- `[x]` Update `apps/web-back-office/.env.production` with `VITE_WS_URL=wss://demegapos.onrender.com/ws`
+- `[x]` Enhance `getWsUrl()` in `apps/web-back-office/src/lib/apiConfig.ts` to automatically enforce `/ws` route namespace across all environments
+- `[x]` Implement exponential backoff WebSocket reconnection (1s–30s) capped at 5 retries in `useDashboardData.ts` and `POSView.tsx`
+- `[x]` Add explicit `onRequest` JWT verification guard to `PATCH /change-password` and `PATCH /theme` in `apps/backend/src/modules/auth/routes.ts`
+- `[x]` Enhance frontend token check and 401 session expiration messaging in `SettingsPage.tsx`
+- `[x]` Fix POS cart Grand Total layout truncation: remove `truncate`, add `min-w-max flex-shrink-0`, and add native hover tooltip `title={`Grand Total: ₦${total.toLocaleString()}`}`
+- `[x]` Verify full workspace build (`demegapos-backend` and `web-back-office`) and sync to git remotes
+
+
 
 
 

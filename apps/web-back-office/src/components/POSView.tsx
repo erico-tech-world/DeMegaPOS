@@ -225,50 +225,84 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
 
     // WebSocket listener for live stock updates and payment resolution
     useEffect(() => {
-        console.log('POS Connecting to WebSocket at:', WS_URL);
-        const socket = new WebSocket(WS_URL);
+        let socket: WebSocket | null = null;
+        let reconnectTimeout: any = null;
+        let isMounted = true;
+        let retryCount = 0;
+        const MAX_RETRIES = 5;
 
-        socket.onopen = () => {
-            console.log('POS Connected to WebSocket Sync Engine');
-        };
-
-        socket.onmessage = (event) => {
+        const connect = () => {
+            if (!isMounted) return;
             try {
-                const message = JSON.parse(event.data);
-                console.log('POS received WS message:', message);
+                console.log('POS Connecting to WebSocket at:', WS_URL);
+                socket = new WebSocket(WS_URL);
 
-                if (message.event === 'ORDER_CREATED') {
-                    if (refresh) {
-                        console.log('Order created by other terminal. Refreshing local stock...');
-                        refresh();
+                socket.onopen = () => {
+                    retryCount = 0; // Reset retry counter on successful handshake
+                    console.log('POS Connected to WebSocket Sync Engine');
+                };
+
+                socket.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        console.log('POS received WS message:', message);
+
+                        if (message.event === 'ORDER_CREATED') {
+                            if (refresh) {
+                                console.log('Order created by other terminal. Refreshing local stock...');
+                                refresh();
+                            }
+                        } else if (message.event === 'PAYMENT_SUCCESS') {
+                            const currentPendingId = pendingTerminalOrderIdRef.current;
+                            if (currentPendingId && message.payload.id === currentPendingId) {
+                                console.log('PAYMENT_SUCCESS match found! Resolving terminal standby.');
+                                setIsWaitingForTerminal(false);
+                                setCompletedOrder(message.payload);
+                                setCart([]);
+                                setSelectedCustomer(null);
+                                setPaymentMethod('CASH');
+                                setAmountCash(0);
+                                setAmountCard(0);
+                                setAmountTransfer(0);
+                                setPendingTerminalOrderId(null);
+                                if (refresh) refresh();
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error parsing WS message in POS:', err);
                     }
-                } else if (message.event === 'PAYMENT_SUCCESS') {
-                    const currentPendingId = pendingTerminalOrderIdRef.current;
-                    if (currentPendingId && message.payload.id === currentPendingId) {
-                        console.log('PAYMENT_SUCCESS match found! Resolving terminal standby.');
-                        setIsWaitingForTerminal(false);
-                        setCompletedOrder(message.payload);
-                        setCart([]);
-                        setSelectedCustomer(null);
-                        setPaymentMethod('CASH');
-                        setAmountCash(0);
-                        setAmountCard(0);
-                        setAmountTransfer(0);
-                        setPendingTerminalOrderId(null);
-                        if (refresh) refresh();
+                };
+
+                socket.onclose = () => {
+                    console.log('POS WebSocket closed');
+                    if (isMounted && retryCount < MAX_RETRIES) {
+                        retryCount++;
+                        const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
+                        reconnectTimeout = setTimeout(connect, delay);
                     }
-                }
+                };
+
+                socket.onerror = () => {
+                    try { socket?.close(); } catch {}
+                };
             } catch (err) {
-                console.error('Error parsing WS message in POS:', err);
+                if (isMounted && retryCount < MAX_RETRIES) {
+                    retryCount++;
+                    const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
+                    reconnectTimeout = setTimeout(connect, delay);
+                }
             }
         };
 
-        socket.onclose = () => {
-            console.log('POS WebSocket closed');
-        };
+        connect();
 
         return () => {
-            socket.close();
+            isMounted = false;
+            if (socket) {
+                socket.onclose = null;
+                socket.close();
+            }
+            if (reconnectTimeout) clearTimeout(reconnectTimeout);
         };
     }, [refresh]);
 
@@ -941,16 +975,21 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                         </div>
                     )}
 
-                    <div className="flex justify-between items-end gap-3">
-                        <div className="flex flex-col min-w-0">
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-3 pt-1">
+                        <div className="flex flex-col flex-shrink-0 min-w-max">
                             <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Grand Total</span>
-                            <span className="text-2xl md:text-3xl font-black text-gray-900 tracking-tighter truncate">₦{total.toLocaleString()}</span>
+                            <span
+                                title={`Grand Total: ₦${total.toLocaleString()}`}
+                                className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight whitespace-nowrap cursor-default select-all"
+                            >
+                                ₦{total.toLocaleString()}
+                            </span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                             <button
                                 onClick={handleSaveDraft}
                                 disabled={cart.length === 0 || isSavingDraft}
-                                className="bg-amber-500 text-white px-4 py-3.5 rounded-2xl font-black uppercase text-xs tracking-wider hover:bg-amber-600 disabled:bg-gray-200 disabled:text-gray-400 transition-all active:scale-95 flex items-center gap-1.5 shadow-md"
+                                className="bg-amber-500 text-white px-4 py-3.5 rounded-2xl font-black uppercase text-xs tracking-wider hover:bg-amber-600 disabled:bg-gray-200 disabled:text-gray-400 transition-all active:scale-95 flex items-center gap-1.5 shadow-md flex-shrink-0"
                                 title="Draft/Hold order for payment later"
                             >
                                 <Clock size={16} />
@@ -960,6 +999,7 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                                 onClick={handleCheckout}
                                 disabled={cart.length === 0}
                                 className="bg-[#2D7A3E] text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest hover:bg-[#235E30] disabled:bg-gray-200 disabled:text-gray-400 transition-all shadow-2xl shadow-green-900/10 active:scale-95 flex items-center space-x-2 flex-shrink-0"
+                                title={`Proceed to checkout: ₦${total.toLocaleString()}`}
                             >
                                 <span>Checkout</span>
                             </button>

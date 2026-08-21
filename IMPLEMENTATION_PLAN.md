@@ -198,4 +198,36 @@ The architecture blueprints, system specifications, and design documents are per
 - **[MODIFY] [`.gitignore`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/.gitignore)**:
   - Include `.env*.local` and annotate allowed public frontend configs.
 
+---
+
+## Phase 22: WebSocket Routing, Change Password Auth, & POS Grand Total Fixes
+
+### 1. Objectives & Executive Summary
+- Eliminate the continuous WebSocket handshake connection failure loop on `wss://demegapos.onrender.com/`.
+- Ensure all WebSocket clients target the explicit `/ws` route namespace registered in `@fastify/websocket`.
+- Add exponential backoff reconnection logic (1s, 2s, 4s, 8s, 16s, max 30s) capped at 5 retries to prevent console spam.
+- Fix the 401 Unauthorized response on `PATCH /auth/change-password` by adding a dedicated `onRequest` JWT verification guard.
+- Eliminate POS cart Grand Total text truncation by removing `truncate` classes, adding `flex-shrink-0 min-w-max`, and adding a native hover tooltip.
+
+### 2. Architectural Blueprint & Changes
+
+#### A. WebSocket URL Normalization & Reconnect Logic
+- **[MODIFY] [`apps/web-back-office/.env.production`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/.env.production)**:
+  - Set `VITE_WS_URL=wss://demegapos.onrender.com/ws`.
+- **[MODIFY] [`apps/web-back-office/src/lib/apiConfig.ts`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/lib/apiConfig.ts)**:
+  - Add `ensureWsPath` helper to guarantee any URL (custom or fallback) automatically resolves to `/ws`.
+- **[MODIFY] [`apps/web-back-office/src/hooks/useDashboardData.ts`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/hooks/useDashboardData.ts)** & **[`apps/web-back-office/src/components/POSView.tsx`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/components/POSView.tsx)**:
+  - Add retry counter reset on `onopen`, exponential delay computation on `onclose`/`onerror`, and 5-retry cutoff.
+
+#### B. Auth Route Guard & Session Expiration
+- **[MODIFY] [`apps/backend/src/modules/auth/routes.ts`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/backend/src/modules/auth/routes.ts)**:
+  - Add `onRequest: [async (req, reply) => { try { await req.jwtVerify(); } catch { return reply.code(401).send({ message: 'Authentication required. Please sign in again.' }); } }]` to `PATCH /change-password` and `PATCH /theme`.
+- **[MODIFY] [`apps/web-back-office/src/pages/SettingsPage.tsx`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/pages/SettingsPage.tsx)**:
+  - Check local token existence before dispatching, and provide clear session expiration feedback on 401.
+
+#### C. POS Cart Grand Total Layout & Tooltip
+- **[MODIFY] [`apps/web-back-office/src/components/POSView.tsx`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/components/POSView.tsx)**:
+  - Wrap total container in `flex-shrink-0 min-w-max`, remove `truncate`, and add `title={`Grand Total: ₦${total.toLocaleString()}`}`.
+
+
 

@@ -67,12 +67,17 @@ export const getApiUrl = (): string => {
 };
 
 export const getWsUrl = (): string => {
+    const ensureWsPath = (url: string): string => {
+        const clean = url.trim().replace(/\/+$/, '');
+        return clean.endsWith('/ws') ? clean : `${clean}/ws`;
+    };
+
     if (import.meta.env.VITE_WS_URL) {
-        return import.meta.env.VITE_WS_URL;
+        return ensureWsPath(import.meta.env.VITE_WS_URL);
     }
     if (typeof window !== 'undefined') {
         const customWs = localStorage.getItem('demega_ws_url') || (window as any).DEMEGA_WS_URL;
-        if (customWs) return customWs;
+        if (customWs) return ensureWsPath(customWs);
 
         const { protocol, hostname, port } = window.location;
         const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
@@ -86,8 +91,8 @@ export const getWsUrl = (): string => {
 
             if (isStaticHost) {
                 const windowOverride = (window as any).DEMEGA_WS_BACKEND_URL;
-                if (windowOverride) return windowOverride;
-                return 'wss://demegapos.onrender.com';
+                if (windowOverride) return ensureWsPath(windowOverride);
+                return 'wss://demegapos.onrender.com/ws';
             }
 
             if (hostname.startsWith('app.') || hostname.startsWith('pos.')) {

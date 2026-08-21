@@ -261,9 +261,14 @@ const SettingsPage = () => {
             return;
         }
 
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setChangePwMsg({ type: 'error', text: 'Authentication session not found. Please log in again.' });
+            return;
+        }
+
         setChangePwLoading(true);
         try {
-            const token = localStorage.getItem('token');
             const res = await axios.patch(`${API_URL}/auth/change-password`, {
                 currentPassword,
                 newPassword,
@@ -275,10 +280,18 @@ const SettingsPage = () => {
             setNewPassword('');
             setConfirmPassword('');
         } catch (err: any) {
-            setChangePwMsg({
-                type: 'error',
-                text: err?.response?.data?.message || 'Failed to update account password. Please check your credentials.'
-            });
+            const errorMsg = err?.response?.data?.message;
+            if (err?.response?.status === 401 && errorMsg?.toLowerCase().includes('authentication required')) {
+                setChangePwMsg({
+                    type: 'error',
+                    text: 'Your session has expired. Please log out and sign in again to change your password.'
+                });
+            } else {
+                setChangePwMsg({
+                    type: 'error',
+                    text: errorMsg || 'Failed to update account password. Please verify your current password.'
+                });
+            }
         } finally {
             setChangePwLoading(false);
         }

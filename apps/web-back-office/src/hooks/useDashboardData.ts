@@ -196,11 +196,17 @@ export const useDashboardData = () => {
         let ws: WebSocket | null = null;
         let reconnectTimeout: any = null;
         let isMounted = true;
+        let retryCount = 0;
+        const MAX_RETRIES = 5;
 
         const connectWs = () => {
             if (!isMounted || !token) return;
             try {
                 ws = new WebSocket(WS_URL);
+
+                ws.onopen = () => {
+                    retryCount = 0; // Reset retry counter on successful handshake
+                };
 
                 ws.onmessage = (event) => {
                     try {
@@ -221,8 +227,10 @@ export const useDashboardData = () => {
                 };
 
                 ws.onclose = () => {
-                    if (isMounted) {
-                        reconnectTimeout = setTimeout(connectWs, 3000);
+                    if (isMounted && retryCount < MAX_RETRIES) {
+                        retryCount++;
+                        const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
+                        reconnectTimeout = setTimeout(connectWs, delay);
                     }
                 };
 
@@ -230,8 +238,10 @@ export const useDashboardData = () => {
                     try { ws?.close(); } catch {}
                 };
             } catch (err) {
-                if (isMounted) {
-                    reconnectTimeout = setTimeout(connectWs, 5000);
+                if (isMounted && retryCount < MAX_RETRIES) {
+                    retryCount++;
+                    const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
+                    reconnectTimeout = setTimeout(connectWs, delay);
                 }
             }
         };
