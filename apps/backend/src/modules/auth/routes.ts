@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { loginSchema, staffLoginSchema, registerSchema, businessRegisterSchema, authResponseSchema } from './schemas.js'
+import { loginSchema, staffLoginSchema, registerSchema, businessRegisterSchema, authResponseSchema, changePasswordSchema } from './schemas.js'
 import { createUser, findUserByIdentifier, findStaffUser, verifyPassword, registerBusiness } from './service.js'
 
 import { acceptInvitation } from '../staff/service.js'
@@ -393,4 +393,61 @@ export default async function authRoutes(app: FastifyInstance) {
             return reply.send({ message: 'Theme updated successfully', themePreference })
         }
     )
+
+    // -------------------------------------------------------------------------
+    // Change User Password (PATCH /auth/change-password)
+    // -------------------------------------------------------------------------
+    server.patch(
+        '/change-password',
+        {
+            schema: {
+                body: changePasswordSchema,
+                response: {
+                    200: z.object({ message: z.string() }),
+                    400: z.object({ message: z.string() }),
+                    401: z.object({ message: z.string() }),
+                    404: z.object({ message: z.string() }),
+                },
+            },
+        },
+        async (request, reply) => {
+            const userId = (request.user as any)?.id
+            if (!userId) {
+                return reply.code(401).send({ message: 'Authentication required.' })
+            }
+
+            const { currentPassword, newPassword } = request.body
+
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
+            })
+
+            if (!user) {
+                return reply.code(404).send({ message: 'User account not found.' })
+            }
+
+            // Verify current password
+            const isPasswordValid = await verifyPassword(currentPassword, user.password)
+            if (!isPasswordValid) {
+                return reply.code(401).send({ message: 'Current password is incorrect.' })
+            }
+
+            if (currentPassword === newPassword) {
+                return reply.code(400).send({ message: 'New password must be different from your current password.' })
+            }
+
+            // Hash and update password
+            const bcrypt = await import('bcrypt')
+            const hashedPassword = await bcrypt.hash(newPassword, 12)
+
+            await prisma.user.update({
+                where: { id: userId },
+                data: { password: hashedPassword },
+            })
+
+            console.log(`[SECURITY] User ${user.id} (${user.email || user.phone}) successfully changed account password.`)
+            return reply.code(200).send({ message: 'Account password changed successfully.' })
+        }
+    )
 }
+

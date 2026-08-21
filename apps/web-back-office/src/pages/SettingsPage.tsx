@@ -29,6 +29,16 @@ const SettingsPage = () => {
     const [universalMsg, setUniversalMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const [universalLoading, setUniversalLoading] = useState(false);
 
+    // Account Password Change State
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showCurrentPw, setShowCurrentPw] = useState(false);
+    const [showNewPw, setShowNewPw] = useState(false);
+    const [showConfirmPw, setShowConfirmPw] = useState(false);
+    const [changePwLoading, setChangePwLoading] = useState(false);
+    const [changePwMsg, setChangePwMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
     // Receipt Settings State
     const [promptEmailReceipt, setPromptEmailReceipt] = useState<boolean>(() => {
         return localStorage.getItem('demega_prompt_email_receipt') !== 'false';
@@ -223,6 +233,54 @@ const SettingsPage = () => {
             setUniversalMsg({ type: 'error', text: err?.response?.data?.message || 'Failed to update universal password.' });
         } finally {
             setUniversalLoading(false);
+        }
+    };
+
+    // Change User Account Password Handler
+    const handleChangeAccountPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setChangePwMsg(null);
+
+        if (!currentPassword) {
+            setChangePwMsg({ type: 'error', text: 'Current password is required.' });
+            return;
+        }
+
+        if (newPassword.length < 8) {
+            setChangePwMsg({ type: 'error', text: 'New password must be at least 8 characters long.' });
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            setChangePwMsg({ type: 'error', text: 'New passwords do not match. Please verify and retry.' });
+            return;
+        }
+
+        if (currentPassword === newPassword) {
+            setChangePwMsg({ type: 'error', text: 'New password must be different from your current password.' });
+            return;
+        }
+
+        setChangePwLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.patch(`${API_URL}/auth/change-password`, {
+                currentPassword,
+                newPassword,
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setChangePwMsg({ type: 'success', text: res.data.message || 'Account password updated successfully.' });
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+        } catch (err: any) {
+            setChangePwMsg({
+                type: 'error',
+                text: err?.response?.data?.message || 'Failed to update account password. Please check your credentials.'
+            });
+        } finally {
+            setChangePwLoading(false);
         }
     };
 
@@ -548,6 +606,123 @@ const SettingsPage = () => {
                                 className="px-6 py-3.5 bg-[#2D7A3E] hover:bg-[#20502E] disabled:bg-gray-200 disabled:text-gray-400 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-md"
                             >
                                 {universalLoading ? 'Saving...' : 'Set Universal Password'}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Change Account Password */}
+                    <div className="bg-white dark:bg-gray-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 p-8 space-y-6 shadow-sm">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-950/40 rounded-2xl flex items-center justify-center text-blue-600 dark:text-blue-400">
+                                <Lock size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">Change Account Password</h2>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Update your personal account sign-in password</p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleChangeAccountPassword} className="space-y-4 max-w-md">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Current Password</label>
+                                <div className="relative">
+                                    <input
+                                        type={showCurrentPw ? 'text' : 'password'}
+                                        required
+                                        value={currentPassword}
+                                        onChange={(e) => setCurrentPassword(e.target.value)}
+                                        placeholder="Enter current password"
+                                        className="w-full px-5 py-3.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:text-white rounded-2xl text-sm font-bold outline-none focus:border-[#2D7A3E] pr-12"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowCurrentPw(!showCurrentPw)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                                    >
+                                        {showCurrentPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">New Password (Min 8 characters)</label>
+                                <div className="relative">
+                                    <input
+                                        type={showNewPw ? 'text' : 'password'}
+                                        required
+                                        minLength={8}
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        placeholder="Enter new password"
+                                        className="w-full px-5 py-3.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:text-white rounded-2xl text-sm font-bold outline-none focus:border-[#2D7A3E] pr-12"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNewPw(!showNewPw)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                                    >
+                                        {showNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                                {newPassword.length > 0 && (
+                                    <div className="flex items-center gap-2 pt-1">
+                                        <div className="flex-1 h-1.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+                                            <div
+                                                className={`h-full transition-all duration-300 ${
+                                                    newPassword.length >= 12
+                                                        ? 'w-full bg-green-500'
+                                                        : newPassword.length >= 8
+                                                        ? 'w-2/3 bg-amber-500'
+                                                        : 'w-1/3 bg-red-500'
+                                                }`}
+                                            />
+                                        </div>
+                                        <span className="text-[10px] font-black uppercase text-gray-400">
+                                            {newPassword.length >= 12 ? 'Strong' : newPassword.length >= 8 ? 'Fair' : 'Weak'}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Confirm New Password</label>
+                                <div className="relative">
+                                    <input
+                                        type={showConfirmPw ? 'text' : 'password'}
+                                        required
+                                        minLength={8}
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        placeholder="Confirm new password"
+                                        className="w-full px-5 py-3.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:text-white rounded-2xl text-sm font-bold outline-none focus:border-[#2D7A3E] pr-12"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowConfirmPw(!showConfirmPw)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 cursor-pointer"
+                                    >
+                                        {showConfirmPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {changePwMsg && (
+                                <div className={`p-4 rounded-2xl text-xs font-black flex items-center gap-2 ${
+                                    changePwMsg.type === 'success'
+                                        ? 'bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
+                                        : 'bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+                                }`}>
+                                    {changePwMsg.type === 'success' ? <CheckCircle2 size={16} /> : <Lock size={16} />}
+                                    <span>{changePwMsg.text}</span>
+                                </div>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={changePwLoading || newPassword.length < 8 || !currentPassword || newPassword !== confirmPassword}
+                                className="px-6 py-3.5 bg-[#2D7A3E] hover:bg-[#20502E] disabled:bg-gray-200 dark:disabled:bg-gray-800 disabled:text-gray-400 text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-md cursor-pointer"
+                            >
+                                {changePwLoading ? 'Updating Password...' : 'Change Password'}
                             </button>
                         </form>
                     </div>

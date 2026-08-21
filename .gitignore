@@ -5,8 +5,10 @@ node_modules/
 # Environment files and secrets
 .env
 .env.*
+.env*.local
 !.env.example
 !.env.sample
+# Only public Vite frontend bundle configurations allowed (e.g. VITE_API_URL) - NO SECRETS
 !.env.production
 *.pem
 *.key

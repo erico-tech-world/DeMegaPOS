@@ -163,3 +163,39 @@ The architecture blueprints, system specifications, and design documents are per
 - Test that changing branches in the header does not reload the page (`window.location.reload()` is absent).
 - Test that `/health` returns `{ status: "ok", timestamp: ... }` with HTTP 200 and zero database load.
 
+---
+
+## Phase 21: Security Credential Hardening & Change Account Password
+
+### 1. Objectives & Executive Summary
+- Eliminate all hardcoded plain-text credentials, API keys, and test JWT secrets across the repository.
+- Refactor seeding script (`apps/backend/src/seed_admin.ts`) and test utilities to strictly require environment variables with fail-fast validation.
+- Implement secure, authenticated `PATCH /auth/change-password` endpoint in `apps/backend` using `bcrypt` comparison and 12-round hashing.
+- Add an interactive, accessible "Change Account Password" card in `SettingsPage.tsx` under the Security & PINs tab with real-time password strength indicator and show/hide toggles.
+- Update `.env.example` templates and harmonize `.gitignore` to prevent future secret leakages.
+
+### 2. Architectural Blueprint & Changes
+
+#### A. Backend Credential Extraction & Endpoint Implementation (`apps/backend`)
+- **[MODIFY] [`seed_admin.ts`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/backend/src/seed_admin.ts)**:
+  - Replace hardcoded `email` and `password` with `process.env.INITIAL_ADMIN_EMAIL` and `process.env.INITIAL_ADMIN_PASSWORD`.
+  - Throw immediate descriptive error if variables are missing or shorter than 8 characters.
+- **[MODIFY] [`test_inventory.ts`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/backend/test_inventory.ts)**:
+  - Extract JWT secret and tenantId to `process.env.JWT_SECRET` and `process.env.TEST_TENANT_ID`.
+- **[MODIFY] [`schemas.ts`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/backend/src/modules/auth/schemas.ts)**:
+  - Add `changePasswordSchema` requiring `currentPassword` and `newPassword` (min 8 chars).
+- **[MODIFY] [`routes.ts`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/backend/src/modules/auth/routes.ts)**:
+  - Add `PATCH /auth/change-password` requiring JWT authentication, verifying current password with `bcrypt`, hashing new password, and saving to database.
+
+#### B. Frontend Security UI (`apps/web-back-office`)
+- **[MODIFY] [`SettingsPage.tsx`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/pages/SettingsPage.tsx)**:
+  - Add "Change Account Password" card in Security & PINs tab with Current Password, New Password, and Confirm Password fields.
+  - Add show/hide visibility toggles, dynamic password strength meter (Weak/Fair/Strong), client-side mismatch validation, and inline status feedback.
+
+#### C. Configuration & Security Documentation
+- **[MODIFY] [`.env.example`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/.env.example) & [`apps/backend/.env.example`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/backend/.env.example)**:
+  - Document `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` placeholders.
+- **[MODIFY] [`.gitignore`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/.gitignore)**:
+  - Include `.env*.local` and annotate allowed public frontend configs.
+
+

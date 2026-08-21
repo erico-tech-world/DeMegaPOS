@@ -146,6 +146,17 @@
 - `[x]` Document keep-alive setup instructions for external cron ping services (Cron-Job.org / UptimeRobot)
 - `[x]` Verify clean build and push to git remotes
 
+## Phase 21: Security Credential Hardening & Change Account Password
+- `[x]` Audit repository for hardcoded plain-text credentials and API keys
+- `[x]` Refactor `apps/backend/src/seed_admin.ts` to require `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` from `process.env` with fail-fast validation
+- `[x]` Refactor `apps/backend/test_inventory.ts` to use `process.env.JWT_SECRET` and `process.env.TEST_TENANT_ID`
+- `[x]` Implement `PATCH /auth/change-password` endpoint in `apps/backend/src/modules/auth/routes.ts` with bcrypt verification and minimum length validation
+- `[x]` Add "Change Account Password" UI panel in Security & PINs tab of `SettingsPage.tsx` with strength indicators, show/hide password toggles, and inline status badges
+- `[x]` Add `INITIAL_ADMIN_EMAIL` and `INITIAL_ADMIN_PASSWORD` placeholders to `apps/backend/.env.example` and root `.env.example`
+- `[x]` Harmonize `.gitignore` rules for `.env*.local` and annotate public frontend configs
+- `[x]` Verify clean TypeScript/Vite builds across workspace and sync with remote repositories
+
+
 
 
 
