@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History, Plus, X, Minus, Package, Clock } from 'lucide-react';
+import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History, Plus, X, Minus, Package, Clock, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { API_URL, WS_URL } from '../lib/apiConfig';
@@ -23,6 +23,9 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
     const [activeTab, setActiveTab] = useState<'products' | 'cart'>('products');
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isDraftGuardOpen, setIsDraftGuardOpen] = useState(false);
+    // Checkout idempotency: ref guards against re-entrant async calls; state drives button UI
+    const isCheckingOutRef = useRef(false);
+    const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
 
     // Pre-populate cart if a draft order was resumed
     useEffect(() => {
@@ -366,6 +369,10 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
     };
 
     const handleCheckout = async () => {
+        if (isCheckingOutRef.current || cart.length === 0) return;
+        isCheckingOutRef.current = true;
+        setIsCheckoutLoading(true);
+
         const proceedCheckout = async (initialPaymentStatus = 'SUCCESS') => {
             const splitPayments = [];
             if (paymentMethod === 'SPLIT') {
@@ -459,10 +466,15 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
             }
         };
 
-        if (paymentMethod === 'CARD' || paymentMethod === 'TRANSFER') {
-            setIsCardTransferSelectorOpen(true);
-        } else {
-            await proceedCheckout('SUCCESS');
+        try {
+            if (paymentMethod === 'CARD' || paymentMethod === 'TRANSFER') {
+                setIsCardTransferSelectorOpen(true);
+            } else {
+                await proceedCheckout('SUCCESS');
+            }
+        } finally {
+            isCheckingOutRef.current = false;
+            setIsCheckoutLoading(false);
         }
     };
 
@@ -997,11 +1009,22 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                             </button>
                             <button
                                 onClick={handleCheckout}
-                                disabled={cart.length === 0}
-                                className="bg-[#2D7A3E] text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest hover:bg-[#235E30] disabled:bg-gray-200 disabled:text-gray-400 transition-all shadow-2xl shadow-green-900/10 active:scale-95 flex items-center space-x-2 flex-shrink-0"
-                                title={`Proceed to checkout: ₦${total.toLocaleString()}`}
+                                disabled={cart.length === 0 || isCheckoutLoading}
+                                className={`text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest transition-all shadow-2xl shadow-green-900/10 active:scale-95 flex items-center space-x-2 flex-shrink-0 ${
+                                    isCheckoutLoading
+                                        ? 'bg-gray-400 cursor-not-allowed opacity-80'
+                                        : 'bg-[#2D7A3E] hover:bg-[#235E30] disabled:bg-gray-200 disabled:text-gray-400'
+                                }`}
+                                title={isCheckoutLoading ? "Processing order..." : `Proceed to checkout: ₦${total.toLocaleString()}`}
                             >
-                                <span>Checkout</span>
+                                {isCheckoutLoading ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        <span>Processing...</span>
+                                    </>
+                                ) : (
+                                    <span>Checkout</span>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -1135,7 +1158,11 @@ export const ReceiptModal = ({ order, onClose }: any) => {
     const [emailSuccessMsg, setEmailSuccessMsg] = useState<string | null>(null);
 
     const handlePrint = () => {
-        window.print();
+        // Defer print to allow the browser to fully render the receipt DOM
+        // before opening the print dialog (prevents blank/incomplete receipts).
+        requestAnimationFrame(() => {
+            setTimeout(() => window.print(), 150);
+        });
     };
 
     const handleSendDigitalReceipt = async () => {

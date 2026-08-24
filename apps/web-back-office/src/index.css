@@ -191,23 +191,64 @@ body {
   animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Print Styles */
+/* ─── Thermal POS Receipt Print Styles (80mm Roll) ────────────────────────── */
 @media print {
+  /* Instruct browser/OS to use 80mm × auto (continuous) thermal paper */
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  /* Hide everything on the page — only #print-area will be revealed */
   body * {
-    visibility: hidden;
+    visibility: hidden !important;
   }
-  #print-area, #print-area * {
-    visibility: visible;
+
+  /* Reveal only the receipt area */
+  #print-area,
+  #print-area * {
+    visibility: visible !important;
   }
+
+  /* Position receipt area to fill the thermal paper width */
   #print-area {
-    position: absolute;
+    position: fixed;
     left: 0;
     top: 0;
-    width: 100%;
+    width: 80mm;
+    min-height: 0;
     background: white !important;
-    padding: 0 !important;
+    padding: 4mm 3mm !important;
     margin: 0 !important;
     box-shadow: none !important;
     border: none !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Remove modal chrome (backdrop, rounded card, scrollbars, action buttons, digital dispatch) */
+  #print-area .no-print,
+  #print-area .print\:hidden,
+  #print-area button,
+  #print-area input,
+  #print-area textarea,
+  #print-area label {
+    display: none !important;
+  }
+
+  /* Ensure tables render full-width in 80mm */
+  #print-area table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  #print-area td,
+  #print-area th {
+    padding: 1mm 0 !important;
+    font-size: 10px !important;
   }
 }
