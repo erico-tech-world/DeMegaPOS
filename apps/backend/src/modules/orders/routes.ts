@@ -46,10 +46,24 @@ export default async function orderRoutes(app: FastifyInstance) {
                     storeId: z.string().optional(),
                     branchId: z.string().optional(),
                     search: z.string().optional(),
+                    status: z.string().optional(),
+                    orderStatuses: z.string().optional(),
                     paymentStatus: z.string().optional(),
+                    paymentStatuses: z.string().optional(),
                     paymentMethod: z.string().optional(),
+                    paymentMethods: z.string().optional(),
                     cashierId: z.string().optional(),
                     customerId: z.string().optional(),
+                    dateFrom: z.string().optional(),
+                    dateTo: z.string().optional(),
+                    itemName: z.string().optional(),
+                    categoryId: z.string().optional(),
+                    minUnitPrice: z.string().optional(),
+                    maxUnitPrice: z.string().optional(),
+                    minItemQty: z.string().optional(),
+                    maxItemQty: z.string().optional(),
+                    minTotal: z.string().optional(),
+                    maxTotal: z.string().optional(),
                 }),
                 response: {
                     200: z.array(orderResponseSchema),
@@ -57,18 +71,35 @@ export default async function orderRoutes(app: FastifyInstance) {
             },
         },
         async (request) => {
-            const { storeId, branchId, search, paymentStatus, paymentMethod, cashierId, customerId } = request.query as {
-                storeId?: string
-                branchId?: string
-                search?: string
-                paymentStatus?: string
-                paymentMethod?: string
-                cashierId?: string
-                customerId?: string
-            }
-            const effectiveStoreId = storeId || branchId
+            const query = request.query as any
+            const effectiveStoreId = query.storeId || query.branchId
             const { tenantId } = request.user as any
-            return getOrders(effectiveStoreId, tenantId, { search, paymentStatus, paymentMethod, cashierId, customerId })
+
+            const orderStatuses = query.orderStatuses ? query.orderStatuses.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
+            const paymentStatuses = query.paymentStatuses ? query.paymentStatuses.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
+            const paymentMethods = query.paymentMethods ? query.paymentMethods.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
+
+            return getOrders(effectiveStoreId, tenantId, {
+                search: query.search,
+                status: query.status,
+                orderStatuses,
+                paymentStatus: query.paymentStatus,
+                paymentStatuses,
+                paymentMethod: query.paymentMethod,
+                paymentMethods,
+                cashierId: query.cashierId,
+                customerId: query.customerId,
+                dateFrom: query.dateFrom,
+                dateTo: query.dateTo,
+                itemName: query.itemName,
+                categoryId: query.categoryId,
+                minUnitPrice: query.minUnitPrice !== undefined && query.minUnitPrice !== '' ? Number(query.minUnitPrice) : undefined,
+                maxUnitPrice: query.maxUnitPrice !== undefined && query.maxUnitPrice !== '' ? Number(query.maxUnitPrice) : undefined,
+                minItemQty: query.minItemQty !== undefined && query.minItemQty !== '' ? Number(query.minItemQty) : undefined,
+                maxItemQty: query.maxItemQty !== undefined && query.maxItemQty !== '' ? Number(query.maxItemQty) : undefined,
+                minTotal: query.minTotal !== undefined && query.minTotal !== '' ? Number(query.minTotal) : undefined,
+                maxTotal: query.maxTotal !== undefined && query.maxTotal !== '' ? Number(query.maxTotal) : undefined,
+            })
         }
     )
 

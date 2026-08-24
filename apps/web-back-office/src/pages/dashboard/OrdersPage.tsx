@@ -1,5 +1,9 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Search, Download, Calendar, ArrowRight, User as UserIcon, Tag, CreditCard, ChevronDown, X, Package, Clock, Play, Trash2, RotateCcw, AlertTriangle, CheckCircle } from 'lucide-react';
+import {
+    Search, Download, Calendar, ArrowRight, User as UserIcon, Tag, CreditCard,
+    ChevronDown, ChevronUp, X, Package, Clock, Play, Trash2, RotateCcw,
+    AlertTriangle, CheckCircle, SlidersHorizontal, Check
+} from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../../lib/apiConfig';
@@ -14,17 +18,54 @@ interface OrdersPageProps {
     lockDraftOrder?: (id: string) => Promise<any>;
 }
 
+type DateMode = 'preset' | 'single' | 'range';
+type SingleTimeMode = 'fullday' | 'exact' | 'custom';
+
 const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftOrder, lockDraftOrder }: OrdersPageProps) => {
     const [searchQuery, setSearchQuery] = useState('');
-    const [dateFilter, setDateFilter] = useState('all'); // all, today, week, month
-    const [paymentMethodFilter, setPaymentMethodFilter] = useState('ALL');
-    const [paymentStatusFilter, setPaymentStatusFilter] = useState('ALL');
     const [mainTab, setMainTab] = useState<'all' | 'drafts'>('all'); // 'all' or 'drafts'
     const location = useLocation();
     const navigate = useNavigate();
     const queryParams = new URLSearchParams(location.search);
     const highlightId = queryParams.get('id');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
+
+    // ── Filter Panel Collapsible State ─────────────────────────────────────────
+    const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+
+    // ── Granular Date & Time Selection ─────────────────────────────────────────
+    const [dateMode, setDateMode] = useState<DateMode>('preset');
+    const [datePreset, setDatePreset] = useState<string>('all'); // all, today, yesterday, week, month, last30
+    const [singleDate, setSingleDate] = useState<string>(''); // YYYY-MM-DD
+    const [singleTimeMode, setSingleTimeMode] = useState<SingleTimeMode>('fullday');
+    const [exactTime, setExactTime] = useState<string>(''); // HH:mm
+    const [exactTolerance, setExactTolerance] = useState<number>(15); // +/- 15 min tolerance
+    const [customStartTime, setCustomStartTime] = useState<string>(''); // HH:mm
+    const [customEndTime, setCustomEndTime] = useState<string>(''); // HH:mm
+    const [rangeStartDate, setRangeStartDate] = useState<string>(''); // YYYY-MM-DD
+    const [rangeEndDate, setRangeEndDate] = useState<string>(''); // YYYY-MM-DD
+
+    // ── Order & Payment Statuses (Multi-select) ────────────────────────────────
+    const [selectedOrderStatuses, setSelectedOrderStatuses] = useState<string[]>([]);
+    const [selectedPaymentStatuses, setSelectedPaymentStatuses] = useState<string[]>([]);
+
+    // ── Itemized Bill & Product Attributes ────────────────────────────────────
+    const [filterItemName, setFilterItemName] = useState<string>('');
+    const [filterCategoryId, setFilterCategoryId] = useState<string>('');
+    const [filterMinUnitPrice, setFilterMinUnitPrice] = useState<string>('');
+    const [filterMaxUnitPrice, setFilterMaxUnitPrice] = useState<string>('');
+    const [filterMinItemQty, setFilterMinItemQty] = useState<string>('');
+    const [filterMaxItemQty, setFilterMaxItemQty] = useState<string>('');
+
+    // ── Channels, Personnel & Financials ──────────────────────────────────────
+    const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<string[]>([]);
+    const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+    const [selectedCashierId, setSelectedCashierId] = useState<string>('');
+    const [filterMinTotal, setFilterMinTotal] = useState<string>('');
+    const [filterMaxTotal, setFilterMaxTotal] = useState<string>('');
+    const [filterOrderType, setFilterOrderType] = useState<string>('ALL');
+    const [filterFulfillmentStatus, setFilterFulfillmentStatus] = useState<string>('ALL');
+    const [filterDiscountApplied, setFilterDiscountApplied] = useState<string>('ALL');
 
     // ── Confirmation Modal for Draft Deletion ──────────────────────────────────
     const [draftToDelete, setDraftToDelete] = useState<any>(null);
@@ -119,29 +160,329 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         return idMatches || customerMatches || cashierMatches || storeMatches || paymentMatches || terminalMatches || itemMatches;
     }, []);
 
+    // ── Dynamic Options Extraction from Orders ─────────────────────────────────
+    const availableCategories = useMemo(() => {
+        const cats = new Set<string>();
+        (orders || []).forEach(o => {
+            (o.items || []).forEach((i: any) => {
+                if (i.product?.category?.name) cats.add(i.product.category.name);
+                else if (i.product?.categoryId) cats.add(i.product.categoryId);
+            });
+        });
+        return Array.from(cats).sort();
+    }, [orders]);
+
+    const availableBranches = useMemo(() => {
+        const map = new Map<string, string>();
+        (orders || []).forEach(o => {
+            if (o.store?.id) {
+                map.set(o.store.id, o.store.name || o.store.branchCode || o.store.id);
+            } else if (o.storeId) {
+                map.set(o.storeId, `Branch ${o.storeId.slice(0, 8)}`);
+            }
+        });
+        return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+    }, [orders]);
+
+    const availableCashiers = useMemo(() => {
+        const map = new Map<string, string>();
+        (orders || []).forEach(o => {
+            if (o.cashier?.id) {
+                map.set(o.cashier.id, o.cashier.name || o.cashier.email || o.cashier.staffCode || o.cashier.id);
+            } else if (o.cashierId) {
+                map.set(o.cashierId, `Staff ${o.cashierId.slice(0, 8)}`);
+            }
+        });
+        return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+    }, [orders]);
+
+    // ── Reset all filters ──────────────────────────────────────────────────────
+    const clearAllFilters = useCallback(() => {
+        setDateMode('preset');
+        setDatePreset('all');
+        setSingleDate('');
+        setSingleTimeMode('fullday');
+        setExactTime('');
+        setCustomStartTime('');
+        setCustomEndTime('');
+        setRangeStartDate('');
+        setRangeEndDate('');
+        setSelectedOrderStatuses([]);
+        setSelectedPaymentStatuses([]);
+        setFilterItemName('');
+        setFilterCategoryId('');
+        setFilterMinUnitPrice('');
+        setFilterMaxUnitPrice('');
+        setFilterMinItemQty('');
+        setFilterMaxItemQty('');
+        setSelectedPaymentMethods([]);
+        setSelectedBranchId('');
+        setSelectedCashierId('');
+        setFilterMinTotal('');
+        setFilterMaxTotal('');
+        setFilterOrderType('ALL');
+        setFilterFulfillmentStatus('ALL');
+        setFilterDiscountApplied('ALL');
+    }, []);
+
+    // ── Active Filters Chips ───────────────────────────────────────────────────
+    const activeFilterChips = useMemo(() => {
+        const chips: { id: string; label: string; onRemove: () => void }[] = [];
+
+        // Date chip
+        if (dateMode === 'preset' && datePreset !== 'all') {
+            const labels: Record<string, string> = {
+                today: 'Date: Today',
+                yesterday: 'Date: Yesterday',
+                week: 'Date: Last 7 Days',
+                month: 'Date: This Month',
+                last30: 'Date: Last 30 Days'
+            };
+            chips.push({ id: 'date-preset', label: labels[datePreset] || `Date: ${datePreset}`, onRemove: () => setDatePreset('all') });
+        } else if (dateMode === 'single' && singleDate) {
+            if (singleTimeMode === 'fullday') {
+                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => setSingleDate('') });
+            } else if (singleTimeMode === 'exact' && exactTime) {
+                chips.push({ id: 'date-exact', label: `Exact: ${singleDate} ${exactTime} (±${exactTolerance}m)`, onRemove: () => { setSingleDate(''); setExactTime(''); } });
+            } else if (singleTimeMode === 'custom' && (customStartTime || customEndTime)) {
+                chips.push({ id: 'date-custom', label: `Time: ${singleDate} ${customStartTime || '00:00'}-${customEndTime || '23:59'}`, onRemove: () => { setSingleDate(''); setCustomStartTime(''); setCustomEndTime(''); } });
+            } else {
+                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => setSingleDate('') });
+            }
+        } else if (dateMode === 'range' && (rangeStartDate || rangeEndDate)) {
+            chips.push({ id: 'date-range', label: `Range: ${rangeStartDate || '...'} to ${rangeEndDate || '...'}`, onRemove: () => { setRangeStartDate(''); setRangeEndDate(''); } });
+        }
+
+        // Order status chips
+        if (selectedOrderStatuses.length > 0) {
+            chips.push({ id: 'order-status', label: `Status: ${selectedOrderStatuses.join(', ')}`, onRemove: () => setSelectedOrderStatuses([]) });
+        }
+
+        // Payment status chips
+        if (selectedPaymentStatuses.length > 0) {
+            chips.push({ id: 'pay-status', label: `Payment: ${selectedPaymentStatuses.join(', ')}`, onRemove: () => setSelectedPaymentStatuses([]) });
+        }
+
+        // Payment method chips
+        if (selectedPaymentMethods.length > 0) {
+            chips.push({ id: 'pay-method', label: `Method: ${selectedPaymentMethods.join(', ')}`, onRemove: () => setSelectedPaymentMethods([]) });
+        }
+
+        // Item name
+        if (filterItemName.trim()) {
+            chips.push({ id: 'item-name', label: `Item: "${filterItemName.trim()}"`, onRemove: () => setFilterItemName('') });
+        }
+
+        // Category
+        if (filterCategoryId) {
+            chips.push({ id: 'category', label: `Category: ${filterCategoryId}`, onRemove: () => setFilterCategoryId('') });
+        }
+
+        // Item Unit Price
+        if (filterMinUnitPrice || filterMaxUnitPrice) {
+            chips.push({ id: 'item-price', label: `Item Price: ₦${filterMinUnitPrice || '0'} - ₦${filterMaxUnitPrice || '∞'}`, onRemove: () => { setFilterMinUnitPrice(''); setFilterMaxUnitPrice(''); } });
+        }
+
+        // Item Qty
+        if (filterMinItemQty || filterMaxItemQty) {
+            chips.push({ id: 'item-qty', label: `Qty: ${filterMinItemQty || '0'} - ${filterMaxItemQty || '∞'}`, onRemove: () => { setFilterMinItemQty(''); setFilterMaxItemQty(''); } });
+        }
+
+        // Order Total
+        if (filterMinTotal || filterMaxTotal) {
+            chips.push({ id: 'order-total', label: `Total: ₦${filterMinTotal || '0'} - ₦${filterMaxTotal || '∞'}`, onRemove: () => { setFilterMinTotal(''); setFilterMaxTotal(''); } });
+        }
+
+        // Branch
+        if (selectedBranchId) {
+            const branchObj = availableBranches.find(b => b.id === selectedBranchId);
+            chips.push({ id: 'branch', label: `Branch: ${branchObj?.name || selectedBranchId}`, onRemove: () => setSelectedBranchId('') });
+        }
+
+        // Cashier
+        if (selectedCashierId) {
+            const cashierObj = availableCashiers.find(c => c.id === selectedCashierId);
+            chips.push({ id: 'cashier', label: `Staff: ${cashierObj?.name || selectedCashierId}`, onRemove: () => setSelectedCashierId('') });
+        }
+
+        // Client-side placeholders (orderType, fulfillmentStatus, discountApplied)
+        if (filterOrderType && filterOrderType !== 'ALL') {
+            chips.push({ id: 'order-type', label: `Type: ${filterOrderType}`, onRemove: () => setFilterOrderType('ALL') });
+        }
+        if (filterFulfillmentStatus && filterFulfillmentStatus !== 'ALL') {
+            chips.push({ id: 'fulfillment', label: `Fulfillment: ${filterFulfillmentStatus}`, onRemove: () => setFilterFulfillmentStatus('ALL') });
+        }
+        if (filterDiscountApplied && filterDiscountApplied !== 'ALL') {
+            chips.push({ id: 'discount', label: `Discount: ${filterDiscountApplied}`, onRemove: () => setFilterDiscountApplied('ALL') });
+        }
+
+        return chips;
+    }, [
+        dateMode, datePreset, singleDate, singleTimeMode, exactTime, exactTolerance, customStartTime, customEndTime,
+        rangeStartDate, rangeEndDate, selectedOrderStatuses, selectedPaymentStatuses, selectedPaymentMethods,
+        filterItemName, filterCategoryId, filterMinUnitPrice, filterMaxUnitPrice, filterMinItemQty, filterMaxItemQty,
+        filterMinTotal, filterMaxTotal, selectedBranchId, selectedCashierId, availableBranches, availableCashiers,
+        filterOrderType, filterFulfillmentStatus, filterDiscountApplied
+    ]);
+
+    const activeFilterCount = activeFilterChips.length;
+
+    // ── Helper to toggle multi-select pill values ──────────────────────────────
+    const toggleStatusPill = (list: string[], setList: (v: string[]) => void, item: string) => {
+        if (list.includes(item)) {
+            setList(list.filter(x => x !== item));
+        } else {
+            setList([...list, item]);
+        }
+    };
+
+    // ── Filtered Orders Memo ───────────────────────────────────────────────────
     const filteredOrders = useMemo(() => {
         return (orders || []).filter(order => {
-            const matchesSearch = matchesOrderSearch(order, searchQuery);
+            // 1. Text search
+            if (!matchesOrderSearch(order, searchQuery)) return false;
 
+            // 2. Date filtering
             const orderDate = new Date(order.createdAt);
             const now = new Date();
-            let matchesDate = true;
 
-            if (dateFilter === 'today') {
-                matchesDate = orderDate.toDateString() === now.toDateString();
-            } else if (dateFilter === 'week') {
-                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                matchesDate = orderDate >= weekAgo;
-            } else if (dateFilter === 'month') {
-                matchesDate = orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
+            if (dateMode === 'preset') {
+                if (datePreset === 'today') {
+                    if (orderDate.toDateString() !== now.toDateString()) return false;
+                } else if (datePreset === 'yesterday') {
+                    const y = new Date(now);
+                    y.setDate(y.getDate() - 1);
+                    if (orderDate.toDateString() !== y.toDateString()) return false;
+                } else if (datePreset === 'week') {
+                    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    if (orderDate < weekAgo) return false;
+                } else if (datePreset === 'last30') {
+                    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    if (orderDate < thirtyDaysAgo) return false;
+                } else if (datePreset === 'month') {
+                    if (orderDate.getMonth() !== now.getMonth() || orderDate.getFullYear() !== now.getFullYear()) return false;
+                }
+            } else if (dateMode === 'single') {
+                if (singleDate) {
+                    const orderLocalYear = orderDate.getFullYear();
+                    const orderLocalMonth = String(orderDate.getMonth() + 1).padStart(2, '0');
+                    const orderLocalDate = String(orderDate.getDate()).padStart(2, '0');
+                    const orderDateStr = `${orderLocalYear}-${orderLocalMonth}-${orderLocalDate}`;
+
+                    if (orderDateStr !== singleDate) return false;
+
+                    if (singleTimeMode === 'exact' && exactTime) {
+                        const [targetH, targetM] = exactTime.split(':').map(Number);
+                        const targetMinutes = targetH * 60 + targetM;
+                        const orderMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+                        if (Math.abs(orderMinutes - targetMinutes) > exactTolerance) return false;
+                    } else if (singleTimeMode === 'custom') {
+                        const orderMinutes = orderDate.getHours() * 60 + orderDate.getMinutes();
+                        if (customStartTime) {
+                            const [startH, startM] = customStartTime.split(':').map(Number);
+                            if (orderMinutes < startH * 60 + startM) return false;
+                        }
+                        if (customEndTime) {
+                            const [endH, endM] = customEndTime.split(':').map(Number);
+                            if (orderMinutes > endH * 60 + endM) return false;
+                        }
+                    }
+                }
+            } else if (dateMode === 'range') {
+                if (rangeStartDate) {
+                    const start = new Date(rangeStartDate + 'T00:00:00');
+                    if (orderDate < start) return false;
+                }
+                if (rangeEndDate) {
+                    const end = new Date(rangeEndDate + 'T23:59:59.999');
+                    if (orderDate > end) return false;
+                }
             }
 
-            const matchesMethod = paymentMethodFilter === 'ALL' || order.paymentMethod === paymentMethodFilter;
-            const matchesStatus = paymentStatusFilter === 'ALL' || order.paymentStatus === paymentStatusFilter || order.status === paymentStatusFilter;
+            // 3. Status filter
+            if (selectedOrderStatuses.length > 0) {
+                if (!selectedOrderStatuses.includes(order.status)) return false;
+            }
 
-            return matchesSearch && matchesDate && matchesMethod && matchesStatus;
+            // 4. Payment status filter
+            if (selectedPaymentStatuses.length > 0) {
+                if (!selectedPaymentStatuses.includes(order.paymentStatus)) return false;
+            }
+
+            // 5. Payment method filter
+            if (selectedPaymentMethods.length > 0) {
+                if (!selectedPaymentMethods.includes(order.paymentMethod)) return false;
+            }
+
+            // 6. Branch / Cashier filter
+            if (selectedBranchId && order.storeId !== selectedBranchId && order.store?.id !== selectedBranchId) {
+                return false;
+            }
+            if (selectedCashierId && order.cashierId !== selectedCashierId && order.cashier?.id !== selectedCashierId) {
+                return false;
+            }
+
+            // 7. Total Order Amount
+            if (filterMinTotal && Number(order.totalAmount) < Number(filterMinTotal)) return false;
+            if (filterMaxTotal && Number(order.totalAmount) > Number(filterMaxTotal)) return false;
+
+            // 8. Itemized Bill & Product Attributes
+            if (filterItemName.trim()) {
+                const term = filterItemName.trim().toLowerCase();
+                const hasItem = Array.isArray(order.items) && order.items.some((i: any) =>
+                    i.product?.name?.toLowerCase().includes(term) ||
+                    i.product?.sku?.toLowerCase().includes(term) ||
+                    i.product?.barcode?.toLowerCase().includes(term)
+                );
+                if (!hasItem) return false;
+            }
+
+            if (filterCategoryId) {
+                const hasCat = Array.isArray(order.items) && order.items.some((i: any) =>
+                    i.product?.categoryId === filterCategoryId ||
+                    i.product?.category?.name === filterCategoryId
+                );
+                if (!hasCat) return false;
+            }
+
+            if (filterMinUnitPrice || filterMaxUnitPrice) {
+                const minP = filterMinUnitPrice ? Number(filterMinUnitPrice) : -Infinity;
+                const maxP = filterMaxUnitPrice ? Number(filterMaxUnitPrice) : Infinity;
+                const hasP = Array.isArray(order.items) && order.items.some((i: any) => {
+                    const p = Number(i.price);
+                    return p >= minP && p <= maxP;
+                });
+                if (!hasP) return false;
+            }
+
+            if (filterMinItemQty || filterMaxItemQty) {
+                const minQ = filterMinItemQty ? Number(filterMinItemQty) : -Infinity;
+                const maxQ = filterMaxItemQty ? Number(filterMaxItemQty) : Infinity;
+                const hasQ = Array.isArray(order.items) && order.items.some((i: any) => {
+                    const q = Number(i.quantity);
+                    return q >= minQ && q <= maxQ;
+                });
+                if (!hasQ) return false;
+            }
+
+            // 9. Client-side placeholders (orderType, fulfillmentStatus, discountApplied)
+            if (filterOrderType && filterOrderType !== 'ALL') {
+                if (order.orderType && order.orderType !== filterOrderType) return false;
+            }
+            if (filterFulfillmentStatus && filterFulfillmentStatus !== 'ALL') {
+                if (order.fulfillmentStatus && order.fulfillmentStatus !== filterFulfillmentStatus) return false;
+            }
+
+            return true;
         });
-    }, [orders, searchQuery, dateFilter, paymentMethodFilter, paymentStatusFilter, matchesOrderSearch]);
+    }, [
+        orders, searchQuery, dateMode, datePreset, singleDate, singleTimeMode, exactTime, exactTolerance,
+        customStartTime, customEndTime, rangeStartDate, rangeEndDate, selectedOrderStatuses,
+        selectedPaymentStatuses, selectedPaymentMethods, selectedBranchId, selectedCashierId,
+        filterMinTotal, filterMaxTotal, filterItemName, filterCategoryId, filterMinUnitPrice,
+        filterMaxUnitPrice, filterMinItemQty, filterMaxItemQty, filterOrderType, filterFulfillmentStatus,
+        matchesOrderSearch
+    ]);
 
     const downloadCSV = () => {
         const headers = ['Order ID', 'Date', 'Customer', 'Cashier', 'Amount', 'Method', 'Status'];
@@ -269,48 +610,28 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                     </div>
 
                     {mainTab === 'all' && (
-                        <>
-                            {/* Payment Method Filter */}
-                            <select
-                                value={paymentMethodFilter}
-                                onChange={(e) => setPaymentMethodFilter(e.target.value)}
-                                className="px-3 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl font-bold text-xs text-gray-700 dark:text-gray-200 outline-none shadow-sm focus:border-gray-900"
-                            >
-                                <option value="ALL">All Methods</option>
-                                <option value="CASH">Cash</option>
-                                <option value="CARD">Card (POS)</option>
-                                <option value="TRANSFER">Transfer</option>
-                                <option value="SPLIT">Split</option>
-                                <option value="CREDIT">Credit</option>
-                                <option value="WALLET">Wallet</option>
-                            </select>
-
-                            {/* Payment Status Filter */}
-                            <select
-                                value={paymentStatusFilter}
-                                onChange={(e) => setPaymentStatusFilter(e.target.value)}
-                                className="px-3 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl font-bold text-xs text-gray-700 dark:text-gray-200 outline-none shadow-sm focus:border-gray-900"
-                            >
-                                <option value="ALL">All Statuses</option>
-                                <option value="SUCCESS">Success / Paid</option>
-                                <option value="PENDING">Pending</option>
-                                <option value="REFUNDED">Refunded</option>
-                            </select>
-
-                            {/* Date Filter */}
-                            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm">
-                                {['all', 'today', 'week', 'month'].map((f) => (
-                                    <button
-                                        key={f}
-                                        onClick={() => setDateFilter(f)}
-                                        className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dateFilter === f ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-md' : 'text-gray-400 hover:text-gray-900 dark:hover:text-white'
-                                            }`}
-                                    >
-                                        {f}
-                                    </button>
-                                ))}
-                            </div>
-                        </>
+                        /* Advanced Filters Accordion Trigger Button */
+                        <button
+                            onClick={() => setFilterPanelOpen(prev => !prev)}
+                            className={`px-4 py-3 rounded-2xl border transition-all flex items-center gap-2.5 font-black text-xs uppercase tracking-wider shadow-sm ${
+                                filterPanelOpen || activeFilterCount > 0
+                                    ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-gray-900 dark:border-white shadow-md ring-2 ring-gray-900/10'
+                                    : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+                            }`}
+                        >
+                            <SlidersHorizontal size={16} />
+                            <span>Filters</span>
+                            {activeFilterCount > 0 && (
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                                    filterPanelOpen || activeFilterCount > 0
+                                        ? 'bg-emerald-500 text-white'
+                                        : 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
+                                }`}>
+                                    {activeFilterCount}
+                                </span>
+                            )}
+                            {filterPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
                     )}
 
                     <button
@@ -322,6 +643,544 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                     </button>
                 </div>
             </div>
+
+            {/* ── Active Filter Chips Bar ── */}
+            {activeFilterChips.length > 0 && mainTab === 'all' && (
+                <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 dark:bg-slate-800/60 border border-gray-100 dark:border-gray-800 rounded-2xl">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-500 pl-1">
+                        Active Filters ({activeFilterChips.length}):
+                    </span>
+                    {activeFilterChips.map(chip => (
+                        <span
+                            key={chip.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 text-xs font-bold rounded-xl border border-gray-200 dark:border-gray-600 shadow-sm"
+                        >
+                            <span>{chip.label}</span>
+                            <button
+                                onClick={chip.onRemove}
+                                className="p-0.5 hover:bg-gray-100 dark:hover:bg-slate-600 text-gray-400 hover:text-red-500 rounded-md transition-colors"
+                                title="Remove filter"
+                            >
+                                <X size={12} />
+                            </button>
+                        </span>
+                    ))}
+                    <button
+                        onClick={clearAllFilters}
+                        className="text-xs font-black text-red-500 hover:text-red-600 dark:hover:text-red-400 px-2 py-1 transition-colors uppercase tracking-wider underline underline-offset-2"
+                    >
+                        Clear All
+                    </button>
+                </div>
+            )}
+
+            {/* ── Inline Expandable Advanced Filter Panel (Accordion) ── */}
+            {mainTab === 'all' && (
+                <div
+                    className={`transition-all duration-300 ease-in-out ${
+                        filterPanelOpen ? 'max-h-[1400px] opacity-100 mb-6' : 'max-h-0 opacity-0 overflow-hidden m-0 p-0 pointer-events-none'
+                    }`}
+                >
+                    <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-gray-800 rounded-[2rem] p-6 xl:p-8 shadow-xl space-y-6">
+                        {/* Panel Header */}
+                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 flex items-center justify-center font-black">
+                                    <SlidersHorizontal size={16} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black text-gray-900 dark:text-white leading-tight">Advanced Filter Funnel</h3>
+                                    <p className="text-xs font-medium text-gray-400">Filter transactions across date/time, order/payment status, line items, and channels</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={clearAllFilters}
+                                    className="px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
+                                >
+                                    Reset All
+                                </button>
+                                <button
+                                    onClick={() => setFilterPanelOpen(false)}
+                                    className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                                    title="Close panel"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 4-Column Responsive Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                            {/* ── COLUMN 1: Date & Time Picker ── */}
+                            <div className="space-y-4 p-4 bg-gray-50/70 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                                        <Calendar size={14} className="text-[#8B1538]" /> Date & Time Range
+                                    </h4>
+                                </div>
+
+                                {/* Mode Switcher */}
+                                <div className="grid grid-cols-3 gap-1 bg-gray-200/70 dark:bg-slate-700/70 p-1 rounded-xl text-[10px] font-black uppercase tracking-wider">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDateMode('preset')}
+                                        className={`py-1.5 rounded-lg transition-all ${dateMode === 'preset' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                                    >
+                                        Presets
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDateMode('single')}
+                                        className={`py-1.5 rounded-lg transition-all ${dateMode === 'single' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                                    >
+                                        Single Day
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDateMode('range')}
+                                        className={`py-1.5 rounded-lg transition-all ${dateMode === 'range' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
+                                    >
+                                        Multi-Day
+                                    </button>
+                                </div>
+
+                                {/* MODE A: Quick Presets */}
+                                {dateMode === 'preset' && (
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Quick Presets</label>
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                            {[
+                                                { id: 'all', label: 'All Time' },
+                                                { id: 'today', label: 'Today' },
+                                                { id: 'yesterday', label: 'Yesterday' },
+                                                { id: 'week', label: 'Last 7 Days' },
+                                                { id: 'last30', label: 'Last 30 Days' },
+                                                { id: 'month', label: 'This Month' }
+                                            ].map(p => (
+                                                <button
+                                                    key={p.id}
+                                                    type="button"
+                                                    onClick={() => setDatePreset(p.id)}
+                                                    className={`px-3 py-2 rounded-xl text-xs font-bold text-left transition-all border ${
+                                                        datePreset === p.id
+                                                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-gray-900 dark:border-white shadow-sm'
+                                                            : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200/80 dark:border-gray-700 hover:border-gray-400'
+                                                    }`}
+                                                >
+                                                    {p.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* MODE B: Single Day with Time Scope */}
+                                {dateMode === 'single' && (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Target Date</label>
+                                            <input
+                                                type="date"
+                                                value={singleDate}
+                                                onChange={(e) => setSingleDate(e.target.value)}
+                                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Time Granularity</label>
+                                            <div className="grid grid-cols-3 gap-1 bg-gray-200/60 dark:bg-slate-700/60 p-1 rounded-xl text-[9px] font-black uppercase">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSingleTimeMode('fullday')}
+                                                    className={`py-1 rounded-lg transition-all ${singleTimeMode === 'fullday' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
+                                                >
+                                                    Full Day (24h)
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSingleTimeMode('exact')}
+                                                    className={`py-1 rounded-lg transition-all ${singleTimeMode === 'exact' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
+                                                >
+                                                    Exact Time
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSingleTimeMode('custom')}
+                                                    className={`py-1 rounded-lg transition-all ${singleTimeMode === 'custom' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
+                                                >
+                                                    Time Range
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {singleTimeMode === 'exact' && (
+                                            <div className="space-y-2 pt-1">
+                                                <div>
+                                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Target Time (HH:mm)</label>
+                                                    <input
+                                                        type="time"
+                                                        value={exactTime}
+                                                        onChange={(e) => setExactTime(e.target.value)}
+                                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
+                                                    />
+                                                </div>
+                                                <div className="flex items-center justify-between text-[10px] font-bold text-gray-500">
+                                                    <span>Window Tolerance:</span>
+                                                    <select
+                                                        value={exactTolerance}
+                                                        onChange={(e) => setExactTolerance(Number(e.target.value))}
+                                                        className="px-2 py-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-lg text-[10px] font-bold text-gray-900 dark:text-white"
+                                                    >
+                                                        <option value={5}>± 5 mins</option>
+                                                        <option value={15}>± 15 mins</option>
+                                                        <option value={30}>± 30 mins</option>
+                                                        <option value={60}>± 1 hour</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {singleTimeMode === 'custom' && (
+                                            <div className="grid grid-cols-2 gap-2 pt-1">
+                                                <div>
+                                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">From Time</label>
+                                                    <input
+                                                        type="time"
+                                                        value={customStartTime}
+                                                        onChange={(e) => setCustomStartTime(e.target.value)}
+                                                        className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">To Time</label>
+                                                    <input
+                                                        type="time"
+                                                        value={customEndTime}
+                                                        onChange={(e) => setCustomEndTime(e.target.value)}
+                                                        className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* MODE C: Multi-Day Date Range */}
+                                {dateMode === 'range' && (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Start Date</label>
+                                            <input
+                                                type="date"
+                                                value={rangeStartDate}
+                                                onChange={(e) => setRangeStartDate(e.target.value)}
+                                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">End Date</label>
+                                            <input
+                                                type="date"
+                                                value={rangeEndDate}
+                                                onChange={(e) => setRangeEndDate(e.target.value)}
+                                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* ── COLUMN 2: Order & Payment Statuses ── */}
+                            <div className="space-y-4 p-4 bg-gray-50/70 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                                <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                                    <Tag size={14} className="text-amber-500" /> Order & Payment Statuses
+                                </h4>
+
+                                {/* Order Status Multi-Select Pills */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Order Status</label>
+                                        {selectedOrderStatuses.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedOrderStatuses([])}
+                                                className="text-[10px] font-bold text-red-500 hover:underline"
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {['COMPLETED', 'PENDING', 'READY', 'CANCELLED', 'REFUNDED'].map(st => {
+                                            const active = selectedOrderStatuses.includes(st);
+                                            return (
+                                                <button
+                                                    key={st}
+                                                    type="button"
+                                                    onClick={() => toggleStatusPill(selectedOrderStatuses, setSelectedOrderStatuses, st)}
+                                                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center gap-1 ${
+                                                        active
+                                                            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                                                            : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400'
+                                                    }`}
+                                                >
+                                                    {active && <Check size={12} />}
+                                                    <span>{st}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Payment Status Multi-Select Pills */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Payment Status</label>
+                                        {selectedPaymentStatuses.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedPaymentStatuses([])}
+                                                className="text-[10px] font-bold text-red-500 hover:underline"
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {['SUCCESS', 'PENDING', 'IN_CHECKOUT', 'FAILED', 'REFUNDED'].map(ps => {
+                                            const active = selectedPaymentStatuses.includes(ps);
+                                            return (
+                                                <button
+                                                    key={ps}
+                                                    type="button"
+                                                    onClick={() => toggleStatusPill(selectedPaymentStatuses, setSelectedPaymentStatuses, ps)}
+                                                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center gap-1 ${
+                                                        active
+                                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                                            : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400'
+                                                    }`}
+                                                >
+                                                    {active && <Check size={12} />}
+                                                    <span>{ps === 'SUCCESS' ? 'PAID / SUCCESS' : ps}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Fulfillment Status (Client Placeholder) */}
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Fulfillment Track</label>
+                                    <select
+                                        value={filterFulfillmentStatus}
+                                        onChange={(e) => setFilterFulfillmentStatus(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none"
+                                    >
+                                        <option value="ALL">All Fulfillment Tracks</option>
+                                        <option value="DELIVERED">Delivered</option>
+                                        <option value="IN_PREPARATION">In Preparation</option>
+                                        <option value="READY_FOR_PICKUP">Ready for Pickup</option>
+                                        <option value="SHIPPED">Shipped</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* ── COLUMN 3: Itemized Bill & Product Attributes ── */}
+                            <div className="space-y-4 p-4 bg-gray-50/70 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                                <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                                    <Package size={14} className="text-blue-500" /> Line Items & Attributes
+                                </h4>
+
+                                {/* Item Name / SKU Search */}
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Line Item Name or SKU</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Milk, DM-SKU-001..."
+                                        value={filterItemName}
+                                        onChange={(e) => setFilterItemName(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:border-gray-900"
+                                    />
+                                </div>
+
+                                {/* Category Selector */}
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Product Category</label>
+                                    <select
+                                        value={filterCategoryId}
+                                        onChange={(e) => setFilterCategoryId(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none"
+                                    >
+                                        <option value="">All Categories</option>
+                                        {availableCategories.map(cat => (
+                                            <option key={cat} value={cat}>{cat}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Min / Max Unit Price */}
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Item Unit Price (₦)</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input
+                                            type="number"
+                                            placeholder="Min ₦"
+                                            value={filterMinUnitPrice}
+                                            onChange={(e) => setFilterMinUnitPrice(e.target.value)}
+                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                        />
+                                        <input
+                                            type="number"
+                                            placeholder="Max ₦"
+                                            value={filterMaxUnitPrice}
+                                            onChange={(e) => setFilterMaxUnitPrice(e.target.value)}
+                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Min / Max Item Quantity */}
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Line Quantity Range</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input
+                                            type="number"
+                                            placeholder="Min Qty"
+                                            value={filterMinItemQty}
+                                            onChange={(e) => setFilterMinItemQty(e.target.value)}
+                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                        />
+                                        <input
+                                            type="number"
+                                            placeholder="Max Qty"
+                                            value={filterMaxItemQty}
+                                            onChange={(e) => setFilterMaxItemQty(e.target.value)}
+                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ── COLUMN 4: Channels, Personnel & Financials ── */}
+                            <div className="space-y-4 p-4 bg-gray-50/70 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                                <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                                    <CreditCard size={14} className="text-purple-500" /> Channels & Personnel
+                                </h4>
+
+                                {/* Payment Method Multi-Select */}
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Payment Methods</label>
+                                        {selectedPaymentMethods.length > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedPaymentMethods([])}
+                                                className="text-[10px] font-bold text-red-500 hover:underline"
+                                            >
+                                                Clear
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {['CASH', 'CARD', 'TRANSFER', 'WALLET', 'SPLIT', 'CREDIT'].map(m => {
+                                            const active = selectedPaymentMethods.includes(m);
+                                            return (
+                                                <button
+                                                    key={m}
+                                                    type="button"
+                                                    onClick={() => toggleStatusPill(selectedPaymentMethods, setSelectedPaymentMethods, m)}
+                                                    className={`px-2 py-1 rounded-xl text-[10px] font-bold transition-all border flex items-center gap-1 ${
+                                                        active
+                                                            ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                                                            : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400'
+                                                    }`}
+                                                >
+                                                    {active && <Check size={10} />}
+                                                    <span>{m}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Branch Selector */}
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Store / Branch</label>
+                                    <select
+                                        value={selectedBranchId}
+                                        onChange={(e) => setSelectedBranchId(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none"
+                                    >
+                                        <option value="">All Branches</option>
+                                        {availableBranches.map(b => (
+                                            <option key={b.id} value={b.id}>{b.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Staff / Cashier Selector */}
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Cashier / Staff</label>
+                                    <select
+                                        value={selectedCashierId}
+                                        onChange={(e) => setSelectedCashierId(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none"
+                                    >
+                                        <option value="">All Staff</option>
+                                        {availableCashiers.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* Min / Max Order Total */}
+                                <div>
+                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Order Total Amount (₦)</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input
+                                            type="number"
+                                            placeholder="Min ₦"
+                                            value={filterMinTotal}
+                                            onChange={(e) => setFilterMinTotal(e.target.value)}
+                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                        />
+                                        <input
+                                            type="number"
+                                            placeholder="Max ₦"
+                                            value={filterMaxTotal}
+                                            onChange={(e) => setFilterMaxTotal(e.target.value)}
+                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Panel Footer */}
+                        <div className="flex flex-wrap items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800 text-xs">
+                            <div className="text-gray-400 font-bold">
+                                Matching <span className="text-gray-900 dark:text-white font-black">{filteredOrders.length}</span> of {orders.length} total sales records
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={clearAllFilters}
+                                    className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-gray-500 hover:text-red-600 transition-colors"
+                                >
+                                    Clear Filters
+                                </button>
+                                <button
+                                    onClick={() => setFilterPanelOpen(false)}
+                                    className="px-5 py-2.5 bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-md hover:opacity-90 transition-all"
+                                >
+                                    Apply & View Results ({filteredOrders.length})
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Table Container */}
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">

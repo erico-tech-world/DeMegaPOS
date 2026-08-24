@@ -178,3 +178,12 @@
 - `[x]` Staff Management Search: Backend `GET /staff?search=...&role=...&status=...&branchId=...` support + frontend `StaffView` search bar, role dropdown, branch indicator, and archive search
 - `[x]` Verified zero TypeScript / Vite build errors across workspace
 - `[x]` Synchronize all commits to `origin/main` and `megakash/main`
+
+## Phase 25: Advanced Inline Filter Panel & Granular Date/Time Picker on Order History
+- `[x]` Enterprise Inline Collapsible Filter Bar: Integrated smooth accordion animation (no popup modal) directly on `OrdersPage.tsx` with active filter counter badge
+- `[x]` Multi-Scope Date & Time Picker: Single-Day (Full 24h, Exact Time with configurable ±tolerance window, Custom Time Range) and Multi-Day Date Range modes + 6 quick presets
+- `[x]` 4-Column SaaS Filter Grid: Columns for Date/Time, Order/Payment Statuses (multi-select pills), Itemized Attributes (Item name/SKU, Category, Min/Max Unit Price, Min/Max Qty), Channels & Personnel (Payment Methods, Branch, Staff, Min/Max Order Total)
+- `[x]` Active Filter Chips: Removable filter chips bar below search bar with individual 'X' dismiss controls and one-click 'Clear All' reset
+- `[x]` Backend Prisma Query Engine: Updated `getOrders` and `GET /orders` route in `apps/backend/src/modules/orders/` with ISO date boundaries, item-level attributes, multi-statuses, and price/amount boundaries
+- `[x]` Verified zero TypeScript/Vite build errors on both `web-back-office` and `demegapos-backend`
+- `[x]` Synchronize all commits to `origin/main` and `megakash/main`

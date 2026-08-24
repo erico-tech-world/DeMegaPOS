@@ -49,3 +49,6 @@ pnpm run build:admin
 # 2. Deploy directly to your live Netlify production site (0 build credits used)
 npx netlify-cli deploy --prod --dir=apps/web-back-office/dist
     
+
+# remeber to check and implement these when these features are added
+# orderType, fulfillmentStatus, and discountApplied are not in schema.prisma. The filter controls for these will be rendered but will filter client-side (no backend param) until a schema migration adds them. This keeps the plan non-breaking.

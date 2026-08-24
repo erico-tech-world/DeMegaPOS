@@ -138,9 +138,23 @@ export async function createOrder(data: CreateOrderInput) {
 export interface GetOrdersFilters {
     search?: string
     paymentStatus?: string
+    paymentStatuses?: string[]
     paymentMethod?: string
+    paymentMethods?: string[]
+    orderStatuses?: string[]
+    status?: string
     cashierId?: string
     customerId?: string
+    dateFrom?: string
+    dateTo?: string
+    itemName?: string
+    categoryId?: string
+    minUnitPrice?: number
+    maxUnitPrice?: number
+    minItemQty?: number
+    maxItemQty?: number
+    minTotal?: number
+    maxTotal?: number
 }
 
 export async function getOrders(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
@@ -155,20 +169,80 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
         whereClause.store = { tenantId }
     }
 
-    if (filters?.paymentStatus && filters.paymentStatus !== 'ALL') {
+    // Status Filters
+    if (filters?.orderStatuses && filters.orderStatuses.length > 0) {
+        whereClause.status = { in: filters.orderStatuses }
+    } else if (filters?.status && filters.status !== 'ALL') {
+        whereClause.status = filters.status
+    }
+
+    // Payment Status Filters
+    if (filters?.paymentStatuses && filters.paymentStatuses.length > 0) {
+        whereClause.paymentStatus = { in: filters.paymentStatuses }
+    } else if (filters?.paymentStatus && filters.paymentStatus !== 'ALL') {
         whereClause.paymentStatus = filters.paymentStatus
     }
 
-    if (filters?.paymentMethod && filters.paymentMethod !== 'ALL') {
-        whereClause.paymentMethod = filters.paymentMethod
+    // Payment Method Filters
+    if (filters?.paymentMethods && filters.paymentMethods.length > 0) {
+        whereClause.paymentMethod = { in: filters.paymentMethods as any }
+    } else if (filters?.paymentMethod && filters.paymentMethod !== 'ALL') {
+        whereClause.paymentMethod = filters.paymentMethod as any
     }
 
+    // Personnel & Customer
     if (filters?.cashierId) {
         whereClause.cashierId = filters.cashierId
     }
 
     if (filters?.customerId) {
         whereClause.customerId = filters.customerId
+    }
+
+    // Date/Time ISO Boundaries
+    if (filters?.dateFrom || filters?.dateTo) {
+        whereClause.createdAt = {
+            ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
+            ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {})
+        }
+    }
+
+    // Itemized Bill & Product Attribute Filters
+    const itemConditions: any = {}
+    if (filters?.itemName && filters.itemName.trim()) {
+        itemConditions.product = {
+            ...itemConditions.product,
+            name: { contains: filters.itemName.trim(), mode: 'insensitive' }
+        }
+    }
+    if (filters?.categoryId && filters.categoryId.trim()) {
+        itemConditions.product = {
+            ...itemConditions.product,
+            categoryId: filters.categoryId.trim()
+        }
+    }
+    if (filters?.minItemQty !== undefined) {
+        itemConditions.quantity = { ...itemConditions.quantity, gte: Number(filters.minItemQty) }
+    }
+    if (filters?.maxItemQty !== undefined) {
+        itemConditions.quantity = { ...itemConditions.quantity, lte: Number(filters.maxItemQty) }
+    }
+    if (filters?.minUnitPrice !== undefined) {
+        itemConditions.price = { ...itemConditions.price, gte: filters.minUnitPrice }
+    }
+    if (filters?.maxUnitPrice !== undefined) {
+        itemConditions.price = { ...itemConditions.price, lte: filters.maxUnitPrice }
+    }
+    if (Object.keys(itemConditions).length > 0) {
+        whereClause.items = { some: itemConditions }
+    }
+
+    // Financial Bounds
+    if (filters?.minTotal !== undefined || filters?.maxTotal !== undefined) {
+        whereClause.totalAmount = {
+            ...(filters.minTotal !== undefined ? { gte: filters.minTotal } : {}),
+            ...(filters.maxTotal !== undefined ? { lte: filters.maxTotal } : {})
+        }
     }
 
     if (filters?.search && filters.search.trim()) {
