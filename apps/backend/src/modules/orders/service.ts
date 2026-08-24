@@ -271,7 +271,11 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
             store: true,
             items: {
                 include: {
-                    product: true
+                    product: {
+                        include: {
+                            category: true
+                        }
+                    }
                 }
             },
             customer: true,

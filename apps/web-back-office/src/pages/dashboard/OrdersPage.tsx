@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
     Search, Download, Calendar, ArrowRight, User as UserIcon, Tag, CreditCard,
-    ChevronDown, ChevronUp, X, Package, Clock, Play, Trash2, RotateCcw,
-    AlertTriangle, CheckCircle, SlidersHorizontal, Check
+    ChevronDown, X, Package, Clock, Play, Trash2, RotateCcw,
+    AlertTriangle, CheckCircle, Filter
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -13,7 +13,7 @@ interface OrdersPageProps {
     draftOrders?: any[];
     isLoading: boolean;
     refresh?: () => void;
-    fetchDraftOrders?: () => Promise<void>;
+    fetchDraftOrders?: () => Promise<any>;
     cancelDraftOrder?: (id: string) => Promise<void>;
     lockDraftOrder?: (id: string) => Promise<any>;
 }
@@ -23,49 +23,43 @@ type SingleTimeMode = 'fullday' | 'exact' | 'custom';
 
 const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftOrder, lockDraftOrder }: OrdersPageProps) => {
     const [searchQuery, setSearchQuery] = useState('');
-    const [mainTab, setMainTab] = useState<'all' | 'drafts'>('all'); // 'all' or 'drafts'
+    const [mainTab, setMainTab] = useState<'all' | 'drafts'>('all');
     const location = useLocation();
     const navigate = useNavigate();
     const queryParams = new URLSearchParams(location.search);
     const highlightId = queryParams.get('id');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
-    // ── Filter Panel Collapsible State ─────────────────────────────────────────
-    const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+    // ── Horizontal Filter Row Visibility (Default Visible) ─────────────────────
+    const [showFilters, setShowFilters] = useState(true);
 
-    // ── Granular Date & Time Selection ─────────────────────────────────────────
+    // ── Date & Time Filter State ───────────────────────────────────────────────
     const [dateMode, setDateMode] = useState<DateMode>('preset');
-    const [datePreset, setDatePreset] = useState<string>('all'); // all, today, yesterday, week, month, last30
+    const [datePreset, setDatePreset] = useState<string>('all'); // all, today, yesterday, week, month, last30, single_day, custom_range
     const [singleDate, setSingleDate] = useState<string>(''); // YYYY-MM-DD
     const [singleTimeMode, setSingleTimeMode] = useState<SingleTimeMode>('fullday');
     const [exactTime, setExactTime] = useState<string>(''); // HH:mm
-    const [exactTolerance, setExactTolerance] = useState<number>(15); // +/- 15 min tolerance
+    const [exactTolerance] = useState<number>(15); // +/- 15 min tolerance
     const [customStartTime, setCustomStartTime] = useState<string>(''); // HH:mm
     const [customEndTime, setCustomEndTime] = useState<string>(''); // HH:mm
     const [rangeStartDate, setRangeStartDate] = useState<string>(''); // YYYY-MM-DD
     const [rangeEndDate, setRangeEndDate] = useState<string>(''); // YYYY-MM-DD
 
-    // ── Order & Payment Statuses (Multi-select) ────────────────────────────────
-    const [selectedOrderStatuses, setSelectedOrderStatuses] = useState<string[]>([]);
-    const [selectedPaymentStatuses, setSelectedPaymentStatuses] = useState<string[]>([]);
-
-    // ── Itemized Bill & Product Attributes ────────────────────────────────────
-    const [filterItemName, setFilterItemName] = useState<string>('');
+    // ── Statuses & Dropdown Filters ───────────────────────────────────────────
+    const [selectedOrderStatus, setSelectedOrderStatus] = useState<string>('ALL');
+    const [selectedPaymentStatus, setSelectedPaymentStatus] = useState<string>('ALL');
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('ALL');
     const [filterCategoryId, setFilterCategoryId] = useState<string>('');
-    const [filterMinUnitPrice, setFilterMinUnitPrice] = useState<string>('');
-    const [filterMaxUnitPrice, setFilterMaxUnitPrice] = useState<string>('');
-    const [filterMinItemQty, setFilterMinItemQty] = useState<string>('');
-    const [filterMaxItemQty, setFilterMaxItemQty] = useState<string>('');
-
-    // ── Channels, Personnel & Financials ──────────────────────────────────────
-    const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<string[]>([]);
     const [selectedBranchId, setSelectedBranchId] = useState<string>('');
     const [selectedCashierId, setSelectedCashierId] = useState<string>('');
+
+    // ── Additional Item & Financial Filters ───────────────────────────────────
+    const [filterItemName, setFilterItemName] = useState<string>('');
     const [filterMinTotal, setFilterMinTotal] = useState<string>('');
     const [filterMaxTotal, setFilterMaxTotal] = useState<string>('');
-    const [filterOrderType, setFilterOrderType] = useState<string>('ALL');
-    const [filterFulfillmentStatus, setFilterFulfillmentStatus] = useState<string>('ALL');
-    const [filterDiscountApplied, setFilterDiscountApplied] = useState<string>('ALL');
+
+    // ── Categories State (Fetched from Backend API + Extracted from Orders) ────
+    const [fetchedCategories, setFetchedCategories] = useState<{ id: string; name: string }[]>([]);
 
     // ── Confirmation Modal for Draft Deletion ──────────────────────────────────
     const [draftToDelete, setDraftToDelete] = useState<any>(null);
@@ -85,25 +79,40 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
 
     // Auto-switch to drafts tab if query param tab=drafts
     useEffect(() => {
-        if (queryParams.get('tab') === 'drafts') {
-            setMainTab('drafts');
-        }
+        if (queryParams.get('tab') === 'drafts') setMainTab('drafts');
     }, [location.search]);
 
     // Fetch fresh orders immediately on page mount
     useEffect(() => {
-        if (refresh) {
-            refresh();
-        }
+        if (refresh) refresh();
+    }, []);
+
+    // Fetch categories from backend API
+    useEffect(() => {
+        const loadCategories = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const res = await axios.get(`${API_URL}/inventory/categories`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (Array.isArray(res.data)) {
+                    setFetchedCategories(res.data.map((c: any) => ({
+                        id: c.id,
+                        name: c.name || c.title || 'Unnamed Category'
+                    })));
+                }
+            } catch {
+                // Fallback silently if offline
+            }
+        };
+        loadCategories();
     }, []);
 
     // Auto-scroll to highlighted order
     useEffect(() => {
         if (highlightId) {
             const el = document.getElementById(`order-${highlightId}`);
-            if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }, [highlightId, orders, isLoading]);
 
@@ -160,17 +169,27 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         return idMatches || customerMatches || cashierMatches || storeMatches || paymentMatches || terminalMatches || itemMatches;
     }, []);
 
-    // ── Dynamic Options Extraction from Orders ─────────────────────────────────
+    // ── Dynamic Categories List (Displays category.name holding category.id) ────
     const availableCategories = useMemo(() => {
-        const cats = new Set<string>();
+        const map = new Map<string, string>();
+        // Add fetched categories first
+        fetchedCategories.forEach(c => {
+            if (c.id) {
+                map.set(c.id, c.name || 'Unnamed Category');
+            }
+        });
+        // Also extract from loaded orders
         (orders || []).forEach(o => {
             (o.items || []).forEach((i: any) => {
-                if (i.product?.category?.name) cats.add(i.product.category.name);
-                else if (i.product?.categoryId) cats.add(i.product.categoryId);
+                const catId = i.product?.category?.id || i.product?.categoryId;
+                const catName = i.product?.category?.name;
+                if (catId && catName) {
+                    map.set(catId, catName);
+                }
             });
         });
-        return Array.from(cats).sort();
-    }, [orders]);
+        return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+    }, [fetchedCategories, orders]);
 
     const availableBranches = useMemo(() => {
         const map = new Map<string, string>();
@@ -196,7 +215,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
     }, [orders]);
 
-    // ── Reset all filters ──────────────────────────────────────────────────────
+    // ── Reset All Filters ──────────────────────────────────────────────────────
     const clearAllFilters = useCallback(() => {
         setDateMode('preset');
         setDatePreset('all');
@@ -207,22 +226,15 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         setCustomEndTime('');
         setRangeStartDate('');
         setRangeEndDate('');
-        setSelectedOrderStatuses([]);
-        setSelectedPaymentStatuses([]);
-        setFilterItemName('');
+        setSelectedOrderStatus('ALL');
+        setSelectedPaymentStatus('ALL');
+        setSelectedPaymentMethod('ALL');
         setFilterCategoryId('');
-        setFilterMinUnitPrice('');
-        setFilterMaxUnitPrice('');
-        setFilterMinItemQty('');
-        setFilterMaxItemQty('');
-        setSelectedPaymentMethods([]);
         setSelectedBranchId('');
         setSelectedCashierId('');
+        setFilterItemName('');
         setFilterMinTotal('');
         setFilterMaxTotal('');
-        setFilterOrderType('ALL');
-        setFilterFulfillmentStatus('ALL');
-        setFilterDiscountApplied('ALL');
     }, []);
 
     // ── Active Filters Chips ───────────────────────────────────────────────────
@@ -241,56 +253,37 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             chips.push({ id: 'date-preset', label: labels[datePreset] || `Date: ${datePreset}`, onRemove: () => setDatePreset('all') });
         } else if (dateMode === 'single' && singleDate) {
             if (singleTimeMode === 'fullday') {
-                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => setSingleDate('') });
+                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => { setSingleDate(''); setDateMode('preset'); setDatePreset('all'); } });
             } else if (singleTimeMode === 'exact' && exactTime) {
-                chips.push({ id: 'date-exact', label: `Exact: ${singleDate} ${exactTime} (±${exactTolerance}m)`, onRemove: () => { setSingleDate(''); setExactTime(''); } });
+                chips.push({ id: 'date-exact', label: `Exact: ${singleDate} ${exactTime} (±${exactTolerance}m)`, onRemove: () => { setSingleDate(''); setExactTime(''); setDateMode('preset'); setDatePreset('all'); } });
             } else if (singleTimeMode === 'custom' && (customStartTime || customEndTime)) {
-                chips.push({ id: 'date-custom', label: `Time: ${singleDate} ${customStartTime || '00:00'}-${customEndTime || '23:59'}`, onRemove: () => { setSingleDate(''); setCustomStartTime(''); setCustomEndTime(''); } });
+                chips.push({ id: 'date-custom', label: `Time: ${singleDate} ${customStartTime || '00:00'}-${customEndTime || '23:59'}`, onRemove: () => { setSingleDate(''); setCustomStartTime(''); setCustomEndTime(''); setDateMode('preset'); setDatePreset('all'); } });
             } else {
-                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => setSingleDate('') });
+                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => { setSingleDate(''); setDateMode('preset'); setDatePreset('all'); } });
             }
         } else if (dateMode === 'range' && (rangeStartDate || rangeEndDate)) {
-            chips.push({ id: 'date-range', label: `Range: ${rangeStartDate || '...'} to ${rangeEndDate || '...'}`, onRemove: () => { setRangeStartDate(''); setRangeEndDate(''); } });
+            chips.push({ id: 'date-range', label: `Range: ${rangeStartDate || '...'} to ${rangeEndDate || '...'}`, onRemove: () => { setRangeStartDate(''); setRangeEndDate(''); setDateMode('preset'); setDatePreset('all'); } });
         }
 
-        // Order status chips
-        if (selectedOrderStatuses.length > 0) {
-            chips.push({ id: 'order-status', label: `Status: ${selectedOrderStatuses.join(', ')}`, onRemove: () => setSelectedOrderStatuses([]) });
+        // Order Status
+        if (selectedOrderStatus && selectedOrderStatus !== 'ALL') {
+            chips.push({ id: 'order-status', label: `Status: ${selectedOrderStatus}`, onRemove: () => setSelectedOrderStatus('ALL') });
         }
 
-        // Payment status chips
-        if (selectedPaymentStatuses.length > 0) {
-            chips.push({ id: 'pay-status', label: `Payment: ${selectedPaymentStatuses.join(', ')}`, onRemove: () => setSelectedPaymentStatuses([]) });
+        // Payment Status
+        if (selectedPaymentStatus && selectedPaymentStatus !== 'ALL') {
+            chips.push({ id: 'pay-status', label: `Payment: ${selectedPaymentStatus === 'SUCCESS' ? 'PAID' : selectedPaymentStatus}`, onRemove: () => setSelectedPaymentStatus('ALL') });
         }
 
-        // Payment method chips
-        if (selectedPaymentMethods.length > 0) {
-            chips.push({ id: 'pay-method', label: `Method: ${selectedPaymentMethods.join(', ')}`, onRemove: () => setSelectedPaymentMethods([]) });
-        }
-
-        // Item name
-        if (filterItemName.trim()) {
-            chips.push({ id: 'item-name', label: `Item: "${filterItemName.trim()}"`, onRemove: () => setFilterItemName('') });
+        // Payment Method
+        if (selectedPaymentMethod && selectedPaymentMethod !== 'ALL') {
+            chips.push({ id: 'pay-method', label: `Method: ${selectedPaymentMethod}`, onRemove: () => setSelectedPaymentMethod('ALL') });
         }
 
         // Category
         if (filterCategoryId) {
-            chips.push({ id: 'category', label: `Category: ${filterCategoryId}`, onRemove: () => setFilterCategoryId('') });
-        }
-
-        // Item Unit Price
-        if (filterMinUnitPrice || filterMaxUnitPrice) {
-            chips.push({ id: 'item-price', label: `Item Price: ₦${filterMinUnitPrice || '0'} - ₦${filterMaxUnitPrice || '∞'}`, onRemove: () => { setFilterMinUnitPrice(''); setFilterMaxUnitPrice(''); } });
-        }
-
-        // Item Qty
-        if (filterMinItemQty || filterMaxItemQty) {
-            chips.push({ id: 'item-qty', label: `Qty: ${filterMinItemQty || '0'} - ${filterMaxItemQty || '∞'}`, onRemove: () => { setFilterMinItemQty(''); setFilterMaxItemQty(''); } });
-        }
-
-        // Order Total
-        if (filterMinTotal || filterMaxTotal) {
-            chips.push({ id: 'order-total', label: `Total: ₦${filterMinTotal || '0'} - ₦${filterMaxTotal || '∞'}`, onRemove: () => { setFilterMinTotal(''); setFilterMaxTotal(''); } });
+            const catObj = availableCategories.find(c => c.id === filterCategoryId);
+            chips.push({ id: 'category', label: `Category: ${catObj?.name || filterCategoryId}`, onRemove: () => setFilterCategoryId('') });
         }
 
         // Branch
@@ -305,34 +298,42 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             chips.push({ id: 'cashier', label: `Staff: ${cashierObj?.name || selectedCashierId}`, onRemove: () => setSelectedCashierId('') });
         }
 
-        // Client-side placeholders (orderType, fulfillmentStatus, discountApplied)
-        if (filterOrderType && filterOrderType !== 'ALL') {
-            chips.push({ id: 'order-type', label: `Type: ${filterOrderType}`, onRemove: () => setFilterOrderType('ALL') });
+        // Item Name
+        if (filterItemName.trim()) {
+            chips.push({ id: 'item-name', label: `Item: "${filterItemName.trim()}"`, onRemove: () => setFilterItemName('') });
         }
-        if (filterFulfillmentStatus && filterFulfillmentStatus !== 'ALL') {
-            chips.push({ id: 'fulfillment', label: `Fulfillment: ${filterFulfillmentStatus}`, onRemove: () => setFilterFulfillmentStatus('ALL') });
-        }
-        if (filterDiscountApplied && filterDiscountApplied !== 'ALL') {
-            chips.push({ id: 'discount', label: `Discount: ${filterDiscountApplied}`, onRemove: () => setFilterDiscountApplied('ALL') });
+
+        // Total Amount
+        if (filterMinTotal || filterMaxTotal) {
+            chips.push({ id: 'order-total', label: `Total: ₦${filterMinTotal || '0'} - ₦${filterMaxTotal || '∞'}`, onRemove: () => { setFilterMinTotal(''); setFilterMaxTotal(''); } });
         }
 
         return chips;
     }, [
         dateMode, datePreset, singleDate, singleTimeMode, exactTime, exactTolerance, customStartTime, customEndTime,
-        rangeStartDate, rangeEndDate, selectedOrderStatuses, selectedPaymentStatuses, selectedPaymentMethods,
-        filterItemName, filterCategoryId, filterMinUnitPrice, filterMaxUnitPrice, filterMinItemQty, filterMaxItemQty,
-        filterMinTotal, filterMaxTotal, selectedBranchId, selectedCashierId, availableBranches, availableCashiers,
-        filterOrderType, filterFulfillmentStatus, filterDiscountApplied
+        rangeStartDate, rangeEndDate, selectedOrderStatus, selectedPaymentStatus, selectedPaymentMethod,
+        filterCategoryId, selectedBranchId, selectedCashierId, filterItemName, filterMinTotal, filterMaxTotal,
+        availableCategories, availableBranches, availableCashiers
     ]);
 
     const activeFilterCount = activeFilterChips.length;
 
-    // ── Helper to toggle multi-select pill values ──────────────────────────────
-    const toggleStatusPill = (list: string[], setList: (v: string[]) => void, item: string) => {
-        if (list.includes(item)) {
-            setList(list.filter(x => x !== item));
+    // Handle Date Preset Select Change
+    const handleDateSelectChange = (val: string) => {
+        if (val === 'single_day') {
+            setDateMode('single');
+            setDatePreset('single_day');
+            if (!singleDate) {
+                const now = new Date();
+                const dStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                setSingleDate(dStr);
+            }
+        } else if (val === 'custom_range') {
+            setDateMode('range');
+            setDatePreset('custom_range');
         } else {
-            setList([...list, item]);
+            setDateMode('preset');
+            setDatePreset(val);
         }
     };
 
@@ -399,34 +400,42 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 }
             }
 
-            // 3. Status filter
-            if (selectedOrderStatuses.length > 0) {
-                if (!selectedOrderStatuses.includes(order.status)) return false;
+            // 3. Order Status filter
+            if (selectedOrderStatus && selectedOrderStatus !== 'ALL') {
+                if (order.status !== selectedOrderStatus) return false;
             }
 
-            // 4. Payment status filter
-            if (selectedPaymentStatuses.length > 0) {
-                if (!selectedPaymentStatuses.includes(order.paymentStatus)) return false;
+            // 4. Payment Status filter
+            if (selectedPaymentStatus && selectedPaymentStatus !== 'ALL') {
+                if (order.paymentStatus !== selectedPaymentStatus) return false;
             }
 
-            // 5. Payment method filter
-            if (selectedPaymentMethods.length > 0) {
-                if (!selectedPaymentMethods.includes(order.paymentMethod)) return false;
+            // 5. Payment Method filter
+            if (selectedPaymentMethod && selectedPaymentMethod !== 'ALL') {
+                if (order.paymentMethod !== selectedPaymentMethod) return false;
             }
 
-            // 6. Branch / Cashier filter
+            // 6. Product Category filter (Checks category.id or categoryId or category.name)
+            if (filterCategoryId) {
+                const hasCat = Array.isArray(order.items) && order.items.some((i: any) =>
+                    i.product?.categoryId === filterCategoryId ||
+                    i.product?.category?.id === filterCategoryId ||
+                    i.product?.category?.name === filterCategoryId
+                );
+                if (!hasCat) return false;
+            }
+
+            // 7. Store / Branch filter
             if (selectedBranchId && order.storeId !== selectedBranchId && order.store?.id !== selectedBranchId) {
                 return false;
             }
+
+            // 8. Staff / Cashier filter
             if (selectedCashierId && order.cashierId !== selectedCashierId && order.cashier?.id !== selectedCashierId) {
                 return false;
             }
 
-            // 7. Total Order Amount
-            if (filterMinTotal && Number(order.totalAmount) < Number(filterMinTotal)) return false;
-            if (filterMaxTotal && Number(order.totalAmount) > Number(filterMaxTotal)) return false;
-
-            // 8. Itemized Bill & Product Attributes
+            // 9. Item Name / SKU
             if (filterItemName.trim()) {
                 const term = filterItemName.trim().toLowerCase();
                 const hasItem = Array.isArray(order.items) && order.items.some((i: any) =>
@@ -437,51 +446,17 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 if (!hasItem) return false;
             }
 
-            if (filterCategoryId) {
-                const hasCat = Array.isArray(order.items) && order.items.some((i: any) =>
-                    i.product?.categoryId === filterCategoryId ||
-                    i.product?.category?.name === filterCategoryId
-                );
-                if (!hasCat) return false;
-            }
-
-            if (filterMinUnitPrice || filterMaxUnitPrice) {
-                const minP = filterMinUnitPrice ? Number(filterMinUnitPrice) : -Infinity;
-                const maxP = filterMaxUnitPrice ? Number(filterMaxUnitPrice) : Infinity;
-                const hasP = Array.isArray(order.items) && order.items.some((i: any) => {
-                    const p = Number(i.price);
-                    return p >= minP && p <= maxP;
-                });
-                if (!hasP) return false;
-            }
-
-            if (filterMinItemQty || filterMaxItemQty) {
-                const minQ = filterMinItemQty ? Number(filterMinItemQty) : -Infinity;
-                const maxQ = filterMaxItemQty ? Number(filterMaxItemQty) : Infinity;
-                const hasQ = Array.isArray(order.items) && order.items.some((i: any) => {
-                    const q = Number(i.quantity);
-                    return q >= minQ && q <= maxQ;
-                });
-                if (!hasQ) return false;
-            }
-
-            // 9. Client-side placeholders (orderType, fulfillmentStatus, discountApplied)
-            if (filterOrderType && filterOrderType !== 'ALL') {
-                if (order.orderType && order.orderType !== filterOrderType) return false;
-            }
-            if (filterFulfillmentStatus && filterFulfillmentStatus !== 'ALL') {
-                if (order.fulfillmentStatus && order.fulfillmentStatus !== filterFulfillmentStatus) return false;
-            }
+            // 10. Financial Amount Range
+            if (filterMinTotal && Number(order.totalAmount) < Number(filterMinTotal)) return false;
+            if (filterMaxTotal && Number(order.totalAmount) > Number(filterMaxTotal)) return false;
 
             return true;
         });
     }, [
         orders, searchQuery, dateMode, datePreset, singleDate, singleTimeMode, exactTime, exactTolerance,
-        customStartTime, customEndTime, rangeStartDate, rangeEndDate, selectedOrderStatuses,
-        selectedPaymentStatuses, selectedPaymentMethods, selectedBranchId, selectedCashierId,
-        filterMinTotal, filterMaxTotal, filterItemName, filterCategoryId, filterMinUnitPrice,
-        filterMaxUnitPrice, filterMinItemQty, filterMaxItemQty, filterOrderType, filterFulfillmentStatus,
-        matchesOrderSearch
+        customStartTime, customEndTime, rangeStartDate, rangeEndDate, selectedOrderStatus,
+        selectedPaymentStatus, selectedPaymentMethod, filterCategoryId, selectedBranchId, selectedCashierId,
+        filterItemName, filterMinTotal, filterMaxTotal, matchesOrderSearch
     ]);
 
     const downloadCSV = () => {
@@ -561,9 +536,9 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     }, [mainTab, draftOrders, filteredOrders, searchQuery, matchesOrderSearch]);
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            {/* Header & Controls */}
-            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
+        <div className="space-y-4 animate-in fade-in duration-500">
+            {/* ── Top Header & Tab Controls ── */}
+            <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
                 <div>
                     <h1 className="text-2xl font-black text-gray-900 dark:text-white leading-tight">Transaction Archives</h1>
                     <p className="text-gray-500 dark:text-gray-400 text-sm">Review, multi-vector search, filter and export sales & hold orders</p>
@@ -574,615 +549,315 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                     <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-2xl">
                         <button
                             onClick={() => setMainTab('all')}
-                            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'all' ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
+                            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'all' ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                         >
                             <Tag size={14} />
                             All Sales ({(orders || []).length})
                         </button>
                         <button
                             onClick={() => setMainTab('drafts')}
-                            className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'drafts' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
+                            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'drafts' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                         >
                             <Clock size={14} />
                             Hold / Drafts ({(draftOrders || []).length})
                         </button>
                     </div>
 
-                    {/* Search Input with Multi-Field Support */}
-                    <div className="relative group flex-1 xl:flex-none xl:w-72">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-900 dark:group-focus-within:text-white transition-colors" size={18} />
-                        <input
-                            type="text"
-                            placeholder="Search ID, Customer, Staff, Branch, Item..."
-                            className="w-full pl-12 pr-10 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-gray-900/5 focus:border-gray-900 dark:focus:border-gray-500 outline-none font-bold text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all shadow-sm"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        {searchQuery && (
-                            <button
-                                onClick={() => setSearchQuery('')}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
-                                title="Clear search"
-                            >
-                                <X size={16} />
-                            </button>
-                        )}
-                    </div>
-
-                    {mainTab === 'all' && (
-                        /* Advanced Filters Accordion Trigger Button */
-                        <button
-                            onClick={() => setFilterPanelOpen(prev => !prev)}
-                            className={`px-4 py-3 rounded-2xl border transition-all flex items-center gap-2.5 font-black text-xs uppercase tracking-wider shadow-sm ${
-                                filterPanelOpen || activeFilterCount > 0
-                                    ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-gray-900 dark:border-white shadow-md ring-2 ring-gray-900/10'
-                                    : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-700'
-                            }`}
-                        >
-                            <SlidersHorizontal size={16} />
-                            <span>Filters</span>
-                            {activeFilterCount > 0 && (
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                                    filterPanelOpen || activeFilterCount > 0
-                                        ? 'bg-emerald-500 text-white'
-                                        : 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900'
-                                }`}>
-                                    {activeFilterCount}
-                                </span>
-                            )}
-                            {filterPanelOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        </button>
-                    )}
-
                     <button
                         onClick={downloadCSV}
-                        className="p-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl text-gray-900 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all shadow-sm flex items-center gap-2 font-black text-[10px] uppercase tracking-widest"
+                        className="p-2.5 px-4 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-all shadow-sm flex items-center gap-2 font-black text-xs uppercase tracking-wider"
                     >
-                        <Download size={18} />
+                        <Download size={15} />
                         <span>Export CSV</span>
                     </button>
                 </div>
             </div>
 
-            {/* ── Active Filter Chips Bar ── */}
-            {activeFilterChips.length > 0 && mainTab === 'all' && (
-                <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 dark:bg-slate-800/60 border border-gray-100 dark:border-gray-800 rounded-2xl">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-500 pl-1">
-                        Active Filters ({activeFilterChips.length}):
-                    </span>
-                    {activeFilterChips.map(chip => (
-                        <span
-                            key={chip.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-slate-700 text-gray-800 dark:text-gray-200 text-xs font-bold rounded-xl border border-gray-200 dark:border-gray-600 shadow-sm"
-                        >
-                            <span>{chip.label}</span>
-                            <button
-                                onClick={chip.onRemove}
-                                className="p-0.5 hover:bg-gray-100 dark:hover:bg-slate-600 text-gray-400 hover:text-red-500 rounded-md transition-colors"
-                                title="Remove filter"
-                            >
-                                <X size={12} />
-                            </button>
-                        </span>
-                    ))}
-                    <button
-                        onClick={clearAllFilters}
-                        className="text-xs font-black text-red-500 hover:text-red-600 dark:hover:text-red-400 px-2 py-1 transition-colors uppercase tracking-wider underline underline-offset-2"
-                    >
-                        Clear All
-                    </button>
-                </div>
-            )}
-
-            {/* ── Inline Expandable Advanced Filter Panel (Accordion) ── */}
+            {/* ── Reference Design: Clean Horizontal Inline Filter Bar (Directly Above Data Content) ── */}
             {mainTab === 'all' && (
-                <div
-                    className={`transition-all duration-300 ease-in-out ${
-                        filterPanelOpen ? 'max-h-[1400px] opacity-100 mb-6' : 'max-h-0 opacity-0 overflow-hidden m-0 p-0 pointer-events-none'
-                    }`}
-                >
-                    <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-gray-800 rounded-[2rem] p-6 xl:p-8 shadow-xl space-y-6">
-                        {/* Panel Header */}
-                        <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 flex items-center justify-center font-black">
-                                    <SlidersHorizontal size={16} />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-black text-gray-900 dark:text-white leading-tight">Advanced Filter Funnel</h3>
-                                    <p className="text-xs font-medium text-gray-400">Filter transactions across date/time, order/payment status, line items, and channels</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <button
-                                    onClick={clearAllFilters}
-                                    className="px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all"
-                                >
-                                    Reset All
-                                </button>
-                                <button
-                                    onClick={() => setFilterPanelOpen(false)}
-                                    className="p-2 text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-xl hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-                                    title="Close panel"
-                                >
-                                    <X size={18} />
-                                </button>
-                            </div>
+                <div className="space-y-2">
+                    {/* Filter Row: Sequential inline elements aligned to the left with uniform gap */}
+                    <div className="flex flex-wrap items-center gap-2 py-1">
+                        {/* 1. Date Range Dropdown / Selector */}
+                        <div className="relative">
+                            <select
+                                value={datePreset}
+                                onChange={(e) => handleDateSelectChange(e.target.value)}
+                                className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer transition-all hover:border-gray-300 dark:hover:border-gray-600"
+                            >
+                                <option value="all">All Dates</option>
+                                <option value="today">Today</option>
+                                <option value="yesterday">Yesterday</option>
+                                <option value="week">Last 7 Days</option>
+                                <option value="month">This Month</option>
+                                <option value="last30">Last 30 Days</option>
+                                <option value="single_day">Single Day & Time</option>
+                                <option value="custom_range">Custom Date Range</option>
+                            </select>
+                            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                         </div>
 
-                        {/* 4-Column Responsive Grid */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-                            {/* ── COLUMN 1: Date & Time Picker ── */}
-                            <div className="space-y-4 p-4 bg-gray-50/70 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                                <div className="flex items-center justify-between">
-                                    <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                                        <Calendar size={14} className="text-[#8B1538]" /> Date & Time Range
-                                    </h4>
-                                </div>
-
-                                {/* Mode Switcher */}
-                                <div className="grid grid-cols-3 gap-1 bg-gray-200/70 dark:bg-slate-700/70 p-1 rounded-xl text-[10px] font-black uppercase tracking-wider">
-                                    <button
-                                        type="button"
-                                        onClick={() => setDateMode('preset')}
-                                        className={`py-1.5 rounded-lg transition-all ${dateMode === 'preset' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
-                                    >
-                                        Presets
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setDateMode('single')}
-                                        className={`py-1.5 rounded-lg transition-all ${dateMode === 'single' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
-                                    >
-                                        Single Day
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setDateMode('range')}
-                                        className={`py-1.5 rounded-lg transition-all ${dateMode === 'range' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}
-                                    >
-                                        Multi-Day
-                                    </button>
-                                </div>
-
-                                {/* MODE A: Quick Presets */}
-                                {dateMode === 'preset' && (
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Quick Presets</label>
-                                        <div className="grid grid-cols-2 gap-1.5">
-                                            {[
-                                                { id: 'all', label: 'All Time' },
-                                                { id: 'today', label: 'Today' },
-                                                { id: 'yesterday', label: 'Yesterday' },
-                                                { id: 'week', label: 'Last 7 Days' },
-                                                { id: 'last30', label: 'Last 30 Days' },
-                                                { id: 'month', label: 'This Month' }
-                                            ].map(p => (
-                                                <button
-                                                    key={p.id}
-                                                    type="button"
-                                                    onClick={() => setDatePreset(p.id)}
-                                                    className={`px-3 py-2 rounded-xl text-xs font-bold text-left transition-all border ${
-                                                        datePreset === p.id
-                                                            ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-gray-900 dark:border-white shadow-sm'
-                                                            : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200/80 dark:border-gray-700 hover:border-gray-400'
-                                                    }`}
-                                                >
-                                                    {p.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* MODE B: Single Day with Time Scope */}
-                                {dateMode === 'single' && (
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Target Date</label>
-                                            <input
-                                                type="date"
-                                                value={singleDate}
-                                                onChange={(e) => setSingleDate(e.target.value)}
-                                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
-                                            />
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Time Granularity</label>
-                                            <div className="grid grid-cols-3 gap-1 bg-gray-200/60 dark:bg-slate-700/60 p-1 rounded-xl text-[9px] font-black uppercase">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setSingleTimeMode('fullday')}
-                                                    className={`py-1 rounded-lg transition-all ${singleTimeMode === 'fullday' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
-                                                >
-                                                    Full Day (24h)
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setSingleTimeMode('exact')}
-                                                    className={`py-1 rounded-lg transition-all ${singleTimeMode === 'exact' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
-                                                >
-                                                    Exact Time
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setSingleTimeMode('custom')}
-                                                    className={`py-1 rounded-lg transition-all ${singleTimeMode === 'custom' ? 'bg-white dark:bg-slate-900 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500'}`}
-                                                >
-                                                    Time Range
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {singleTimeMode === 'exact' && (
-                                            <div className="space-y-2 pt-1">
-                                                <div>
-                                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Target Time (HH:mm)</label>
-                                                    <input
-                                                        type="time"
-                                                        value={exactTime}
-                                                        onChange={(e) => setExactTime(e.target.value)}
-                                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
-                                                    />
-                                                </div>
-                                                <div className="flex items-center justify-between text-[10px] font-bold text-gray-500">
-                                                    <span>Window Tolerance:</span>
-                                                    <select
-                                                        value={exactTolerance}
-                                                        onChange={(e) => setExactTolerance(Number(e.target.value))}
-                                                        className="px-2 py-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-lg text-[10px] font-bold text-gray-900 dark:text-white"
-                                                    >
-                                                        <option value={5}>± 5 mins</option>
-                                                        <option value={15}>± 15 mins</option>
-                                                        <option value={30}>± 30 mins</option>
-                                                        <option value={60}>± 1 hour</option>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {singleTimeMode === 'custom' && (
-                                            <div className="grid grid-cols-2 gap-2 pt-1">
-                                                <div>
-                                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">From Time</label>
-                                                    <input
-                                                        type="time"
-                                                        value={customStartTime}
-                                                        onChange={(e) => setCustomStartTime(e.target.value)}
-                                                        className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">To Time</label>
-                                                    <input
-                                                        type="time"
-                                                        value={customEndTime}
-                                                        onChange={(e) => setCustomEndTime(e.target.value)}
-                                                        className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
-                                                    />
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* MODE C: Multi-Day Date Range */}
-                                {dateMode === 'range' && (
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Start Date</label>
-                                            <input
-                                                type="date"
-                                                value={rangeStartDate}
-                                                onChange={(e) => setRangeStartDate(e.target.value)}
-                                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">End Date</label>
-                                            <input
-                                                type="date"
-                                                value={rangeEndDate}
-                                                onChange={(e) => setRangeEndDate(e.target.value)}
-                                                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* ── COLUMN 2: Order & Payment Statuses ── */}
-                            <div className="space-y-4 p-4 bg-gray-50/70 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                                <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                                    <Tag size={14} className="text-amber-500" /> Order & Payment Statuses
-                                </h4>
-
-                                {/* Order Status Multi-Select Pills */}
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Order Status</label>
-                                        {selectedOrderStatuses.length > 0 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedOrderStatuses([])}
-                                                className="text-[10px] font-bold text-red-500 hover:underline"
-                                            >
-                                                Clear
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {['COMPLETED', 'PENDING', 'READY', 'CANCELLED', 'REFUNDED'].map(st => {
-                                            const active = selectedOrderStatuses.includes(st);
-                                            return (
-                                                <button
-                                                    key={st}
-                                                    type="button"
-                                                    onClick={() => toggleStatusPill(selectedOrderStatuses, setSelectedOrderStatuses, st)}
-                                                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center gap-1 ${
-                                                        active
-                                                            ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
-                                                            : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400'
-                                                    }`}
-                                                >
-                                                    {active && <Check size={12} />}
-                                                    <span>{st}</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* Payment Status Multi-Select Pills */}
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Payment Status</label>
-                                        {selectedPaymentStatuses.length > 0 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedPaymentStatuses([])}
-                                                className="text-[10px] font-bold text-red-500 hover:underline"
-                                            >
-                                                Clear
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {['SUCCESS', 'PENDING', 'IN_CHECKOUT', 'FAILED', 'REFUNDED'].map(ps => {
-                                            const active = selectedPaymentStatuses.includes(ps);
-                                            return (
-                                                <button
-                                                    key={ps}
-                                                    type="button"
-                                                    onClick={() => toggleStatusPill(selectedPaymentStatuses, setSelectedPaymentStatuses, ps)}
-                                                    className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold transition-all border flex items-center gap-1 ${
-                                                        active
-                                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                                                            : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400'
-                                                    }`}
-                                                >
-                                                    {active && <Check size={12} />}
-                                                    <span>{ps === 'SUCCESS' ? 'PAID / SUCCESS' : ps}</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* Fulfillment Status (Client Placeholder) */}
-                                <div className="space-y-1">
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">Fulfillment Track</label>
-                                    <select
-                                        value={filterFulfillmentStatus}
-                                        onChange={(e) => setFilterFulfillmentStatus(e.target.value)}
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none"
-                                    >
-                                        <option value="ALL">All Fulfillment Tracks</option>
-                                        <option value="DELIVERED">Delivered</option>
-                                        <option value="IN_PREPARATION">In Preparation</option>
-                                        <option value="READY_FOR_PICKUP">Ready for Pickup</option>
-                                        <option value="SHIPPED">Shipped</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* ── COLUMN 3: Itemized Bill & Product Attributes ── */}
-                            <div className="space-y-4 p-4 bg-gray-50/70 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                                <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                                    <Package size={14} className="text-blue-500" /> Line Items & Attributes
-                                </h4>
-
-                                {/* Item Name / SKU Search */}
-                                <div>
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Line Item Name or SKU</label>
+                        {/* Inline Granular Date Inputs if Single Day Mode */}
+                        {dateMode === 'single' && (
+                            <div className="flex items-center gap-1.5 animate-in fade-in duration-200">
+                                <input
+                                    type="date"
+                                    value={singleDate}
+                                    onChange={(e) => setSingleDate(e.target.value)}
+                                    className="h-10 px-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
+                                />
+                                <select
+                                    value={singleTimeMode}
+                                    onChange={(e) => setSingleTimeMode(e.target.value as SingleTimeMode)}
+                                    className="h-10 px-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                >
+                                    <option value="fullday">Full 24h</option>
+                                    <option value="exact">Exact Time</option>
+                                    <option value="custom">Time Range</option>
+                                </select>
+                                {singleTimeMode === 'exact' && (
                                     <input
-                                        type="text"
-                                        placeholder="e.g. Milk, DM-SKU-001..."
-                                        value={filterItemName}
-                                        onChange={(e) => setFilterItemName(e.target.value)}
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:border-gray-900"
+                                        type="time"
+                                        value={exactTime}
+                                        onChange={(e) => setExactTime(e.target.value)}
+                                        className="h-10 px-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
                                     />
-                                </div>
-
-                                {/* Category Selector */}
-                                <div>
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Product Category</label>
-                                    <select
-                                        value={filterCategoryId}
-                                        onChange={(e) => setFilterCategoryId(e.target.value)}
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none"
-                                    >
-                                        <option value="">All Categories</option>
-                                        {availableCategories.map(cat => (
-                                            <option key={cat} value={cat}>{cat}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Min / Max Unit Price */}
-                                <div>
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Item Unit Price (₦)</label>
-                                    <div className="grid grid-cols-2 gap-2">
+                                )}
+                                {singleTimeMode === 'custom' && (
+                                    <div className="flex items-center gap-1">
                                         <input
-                                            type="number"
-                                            placeholder="Min ₦"
-                                            value={filterMinUnitPrice}
-                                            onChange={(e) => setFilterMinUnitPrice(e.target.value)}
-                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                            type="time"
+                                            value={customStartTime}
+                                            onChange={(e) => setCustomStartTime(e.target.value)}
+                                            className="h-10 px-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
                                         />
+                                        <span className="text-xs text-gray-400 font-bold">-</span>
                                         <input
-                                            type="number"
-                                            placeholder="Max ₦"
-                                            value={filterMaxUnitPrice}
-                                            onChange={(e) => setFilterMaxUnitPrice(e.target.value)}
-                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
+                                            type="time"
+                                            value={customEndTime}
+                                            onChange={(e) => setCustomEndTime(e.target.value)}
+                                            className="h-10 px-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
                                         />
                                     </div>
-                                </div>
-
-                                {/* Min / Max Item Quantity */}
-                                <div>
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Line Quantity Range</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input
-                                            type="number"
-                                            placeholder="Min Qty"
-                                            value={filterMinItemQty}
-                                            onChange={(e) => setFilterMinItemQty(e.target.value)}
-                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
-                                        />
-                                        <input
-                                            type="number"
-                                            placeholder="Max Qty"
-                                            value={filterMaxItemQty}
-                                            onChange={(e) => setFilterMaxItemQty(e.target.value)}
-                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
-                                        />
-                                    </div>
-                                </div>
+                                )}
                             </div>
+                        )}
 
-                            {/* ── COLUMN 4: Channels, Personnel & Financials ── */}
-                            <div className="space-y-4 p-4 bg-gray-50/70 dark:bg-slate-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-                                <h4 className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                                    <CreditCard size={14} className="text-purple-500" /> Channels & Personnel
-                                </h4>
-
-                                {/* Payment Method Multi-Select */}
-                                <div className="space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Payment Methods</label>
-                                        {selectedPaymentMethods.length > 0 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedPaymentMethods([])}
-                                                className="text-[10px] font-bold text-red-500 hover:underline"
-                                            >
-                                                Clear
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {['CASH', 'CARD', 'TRANSFER', 'WALLET', 'SPLIT', 'CREDIT'].map(m => {
-                                            const active = selectedPaymentMethods.includes(m);
-                                            return (
-                                                <button
-                                                    key={m}
-                                                    type="button"
-                                                    onClick={() => toggleStatusPill(selectedPaymentMethods, setSelectedPaymentMethods, m)}
-                                                    className={`px-2 py-1 rounded-xl text-[10px] font-bold transition-all border flex items-center gap-1 ${
-                                                        active
-                                                            ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
-                                                            : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-gray-400'
-                                                    }`}
-                                                >
-                                                    {active && <Check size={10} />}
-                                                    <span>{m}</span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* Branch Selector */}
-                                <div>
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Store / Branch</label>
-                                    <select
-                                        value={selectedBranchId}
-                                        onChange={(e) => setSelectedBranchId(e.target.value)}
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none"
-                                    >
-                                        <option value="">All Branches</option>
-                                        {availableBranches.map(b => (
-                                            <option key={b.id} value={b.id}>{b.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Staff / Cashier Selector */}
-                                <div>
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Cashier / Staff</label>
-                                    <select
-                                        value={selectedCashierId}
-                                        onChange={(e) => setSelectedCashierId(e.target.value)}
-                                        className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-800 dark:text-gray-200 outline-none"
-                                    >
-                                        <option value="">All Staff</option>
-                                        {availableCashiers.map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Min / Max Order Total */}
-                                <div>
-                                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block mb-1">Order Total Amount (₦)</label>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input
-                                            type="number"
-                                            placeholder="Min ₦"
-                                            value={filterMinTotal}
-                                            onChange={(e) => setFilterMinTotal(e.target.value)}
-                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
-                                        />
-                                        <input
-                                            type="number"
-                                            placeholder="Max ₦"
-                                            value={filterMaxTotal}
-                                            onChange={(e) => setFilterMaxTotal(e.target.value)}
-                                            className="w-full px-2.5 py-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
-                                        />
-                                    </div>
-                                </div>
+                        {/* Inline Granular Date Inputs if Multi-Day Range Mode */}
+                        {dateMode === 'range' && (
+                            <div className="flex items-center gap-1.5 animate-in fade-in duration-200">
+                                <input
+                                    type="date"
+                                    value={rangeStartDate}
+                                    placeholder="Start Date"
+                                    onChange={(e) => setRangeStartDate(e.target.value)}
+                                    className="h-10 px-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
+                                />
+                                <span className="text-xs text-gray-400 font-bold">to</span>
+                                <input
+                                    type="date"
+                                    value={rangeEndDate}
+                                    placeholder="End Date"
+                                    onChange={(e) => setRangeEndDate(e.target.value)}
+                                    className="h-10 px-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
+                                />
                             </div>
+                        )}
+
+                        {/* 2. Search by Keyword / Order ID / Customer / Staff */}
+                        <div className="relative flex-1 min-w-[200px] max-w-[280px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
+                            <input
+                                type="text"
+                                placeholder="Search by keyword, ID..."
+                                className="w-full h-10 pl-9 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm transition-all"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 rounded-md"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
                         </div>
 
-                        {/* Panel Footer */}
-                        <div className="flex flex-wrap items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800 text-xs">
-                            <div className="text-gray-400 font-bold">
-                                Matching <span className="text-gray-900 dark:text-white font-black">{filteredOrders.length}</span> of {orders.length} total sales records
+                        {/* 3. Order Status Selector */}
+                        {showFilters && (
+                            <div className="relative">
+                                <select
+                                    value={selectedOrderStatus}
+                                    onChange={(e) => setSelectedOrderStatus(e.target.value)}
+                                    className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
+                                >
+                                    <option value="ALL">Order Status</option>
+                                    <option value="COMPLETED">Completed</option>
+                                    <option value="PENDING">Pending</option>
+                                    <option value="READY">Ready</option>
+                                    <option value="CANCELLED">Cancelled</option>
+                                    <option value="REFUNDED">Refunded</option>
+                                </select>
+                                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                             </div>
-                            <div className="flex items-center gap-3">
+                        )}
+
+                        {/* 4. Payment Status Selector */}
+                        {showFilters && (
+                            <div className="relative">
+                                <select
+                                    value={selectedPaymentStatus}
+                                    onChange={(e) => setSelectedPaymentStatus(e.target.value)}
+                                    className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
+                                >
+                                    <option value="ALL">Payment Status</option>
+                                    <option value="SUCCESS">Paid / Success</option>
+                                    <option value="PENDING">Pending</option>
+                                    <option value="IN_CHECKOUT">In Checkout</option>
+                                    <option value="FAILED">Failed</option>
+                                    <option value="REFUNDED">Refunded</option>
+                                </select>
+                                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                        )}
+
+                        {/* 5. Payment Method Selector */}
+                        {showFilters && (
+                            <div className="relative">
+                                <select
+                                    value={selectedPaymentMethod}
+                                    onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                                    className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
+                                >
+                                    <option value="ALL">Payment Method</option>
+                                    <option value="CASH">Cash</option>
+                                    <option value="CARD">Card (POS)</option>
+                                    <option value="TRANSFER">Transfer</option>
+                                    <option value="WALLET">Wallet</option>
+                                    <option value="SPLIT">Split</option>
+                                    <option value="CREDIT">Credit</option>
+                                </select>
+                                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                        )}
+
+                        {/* 6. Product Category Selector (Renders category.name holding category.id) */}
+                        {showFilters && (
+                            <div className="relative">
+                                <select
+                                    value={filterCategoryId}
+                                    onChange={(e) => setFilterCategoryId(e.target.value)}
+                                    className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 max-w-[160px] truncate"
+                                >
+                                    <option value="">Product Category</option>
+                                    {availableCategories.map(category => (
+                                        <option key={category.id} value={category.id}>
+                                            {category.name || 'Unnamed Category'}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                        )}
+
+                        {/* 7. Branch Selector */}
+                        {showFilters && availableBranches.length > 1 && (
+                            <div className="relative">
+                                <select
+                                    value={selectedBranchId}
+                                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                                    className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 max-w-[150px] truncate"
+                                >
+                                    <option value="">All Branches</option>
+                                    {availableBranches.map(b => (
+                                        <option key={b.id} value={b.id}>{b.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                        )}
+
+                        {/* 8. Staff Selector */}
+                        {showFilters && availableCashiers.length > 1 && (
+                            <div className="relative">
+                                <select
+                                    value={selectedCashierId}
+                                    onChange={(e) => setSelectedCashierId(e.target.value)}
+                                    className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 max-w-[140px] truncate"
+                                >
+                                    <option value="">All Staff</option>
+                                    {availableCashiers.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                        )}
+
+                        {/* Far Right Control: "Hide filters" / "Show filters" button */}
+                        <div className="ml-auto flex items-center gap-2">
+                            {activeFilterCount > 0 && (
                                 <button
                                     onClick={clearAllFilters}
-                                    className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-gray-500 hover:text-red-600 transition-colors"
+                                    className="h-10 px-3 text-xs font-black text-red-500 hover:text-red-600 dark:hover:text-red-400 transition-colors uppercase tracking-wider"
                                 >
-                                    Clear Filters
+                                    Reset
                                 </button>
-                                <button
-                                    onClick={() => setFilterPanelOpen(false)}
-                                    className="px-5 py-2.5 bg-gray-900 text-white dark:bg-white dark:text-gray-900 rounded-xl font-black text-xs uppercase tracking-wider shadow-md hover:opacity-90 transition-all"
-                                >
-                                    Apply & View Results ({filteredOrders.length})
-                                </button>
-                            </div>
+                            )}
+
+                            <button
+                                onClick={() => setShowFilters(prev => !prev)}
+                                className={`h-10 px-3.5 rounded-xl border font-bold text-xs transition-all flex items-center gap-1.5 shadow-sm ${
+                                    !showFilters
+                                        ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-gray-900 dark:border-white'
+                                        : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+                                }`}
+                            >
+                                <Filter size={14} />
+                                <span>{showFilters ? 'Hide filters' : 'Show filters'}</span>
+                                {activeFilterCount > 0 && (
+                                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white">
+                                        {activeFilterCount}
+                                    </span>
+                                )}
+                            </button>
                         </div>
                     </div>
+
+                    {/* ── Active Filter Chips Bar ── */}
+                    {activeFilterChips.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-gray-400 dark:text-gray-500 pr-1">
+                                Filters:
+                            </span>
+                            {activeFilterChips.map(chip => (
+                                <span
+                                    key={chip.id}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-200 text-xs font-bold rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm"
+                                >
+                                    <span>{chip.label}</span>
+                                    <button
+                                        onClick={chip.onRemove}
+                                        className="p-0.5 hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-400 hover:text-red-500 rounded transition-colors"
+                                        title="Remove filter"
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                </span>
+                            ))}
+                            <button
+                                onClick={clearAllFilters}
+                                className="text-[11px] font-bold text-red-500 hover:text-red-600 dark:hover:text-red-400 px-2 py-0.5 transition-colors underline"
+                            >
+                                Clear all
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
-            {/* Table Container */}
+            {/* ── Main Data Table ── */}
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto custom-scrollbar">
                     <table className="w-full text-left">
@@ -1195,7 +870,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 <th className="px-8 py-5 text-right">View</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
+                        <tbody className="divide-y divide-gray-50 dark:divide-gray-800/60">
                             {isLoading ? (
                                 <tr><td colSpan={5} className="px-8 py-24 text-center text-gray-400 font-bold animate-pulse uppercase tracking-[0.2em]">Synchronizing Archives...</td></tr>
                             ) : displayList.length === 0 ? (
@@ -1207,13 +882,13 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                     key={order.id}
                                     id={`order-${order.id}`}
                                     className={`group transition-all ${order.id === highlightId
-                                            ? 'bg-green-50 ring-2 ring-inset ring-[#2D7A3E]/30 animate-pulse-subtle'
-                                            : 'hover:bg-gray-50/30'
+                                            ? 'bg-green-50 dark:bg-green-950/20 ring-2 ring-inset ring-[#2D7A3E]/30 animate-pulse-subtle'
+                                            : 'hover:bg-gray-50/30 dark:hover:bg-slate-800/40'
                                         }`}
                                 >
                                     <td className="px-8 py-6">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400 group-hover:bg-gray-900 group-hover:text-white transition-all">
+                                            <div className="w-10 h-10 bg-gray-100 dark:bg-slate-800 rounded-xl flex items-center justify-center text-gray-400 group-hover:bg-gray-900 group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-gray-900 transition-all">
                                                 <Tag size={18} />
                                             </div>
                                             <div>
@@ -1247,9 +922,9 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                     <td className="px-8 py-6">
                                         <div className="flex flex-wrap gap-2">
                                             {/* Fulfillment Status */}
-                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100' :
-                                                    order.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                                        'bg-amber-50 text-amber-600 border-amber-100'
+                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
+                                                    order.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-400' :
+                                                        'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
                                                 }`}>
                                                 <div className={`w-1.5 h-1.5 rounded-full ${order.status === 'COMPLETED' ? 'bg-green-500' :
                                                         order.status === 'READY' ? 'bg-blue-500' :
@@ -1258,14 +933,14 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                                 FUL: {order.status}
                                             </span>
                                             {/* Payment Status */}
-                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
-                                                    order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-50 text-purple-600 border-purple-100' :
-                                                    order.paymentStatus === 'DRAFT' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                                                        'bg-amber-50 text-amber-600 border-amber-100'
+                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
+                                                    order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-950/30 dark:border-purple-800 dark:text-purple-400' :
+                                                    order.paymentStatus === 'DRAFT' ? 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400' :
+                                                        'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
                                                 }`}>
                                                 <div className={`w-1.5 h-1.5 rounded-full ${order.paymentStatus === 'SUCCESS' ? 'bg-green-500' :
                                                         order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-500' :
-                                                        'bg-amber-500'
+                                                            'bg-amber-500'
                                                     }`}></div>
                                                 PAY: {order.paymentStatus || 'PENDING'}
                                             </span>
@@ -1292,7 +967,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                         ) : (
                                             <button
                                                 onClick={() => setSelectedOrder(order)}
-                                                className="p-2 hover:bg-gray-100 rounded-xl text-gray-300 hover:text-gray-900 transition-all"
+                                                className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl text-gray-300 hover:text-gray-900 dark:hover:text-white transition-all"
                                             >
                                                 <ArrowRight size={20} />
                                             </button>
@@ -1305,29 +980,29 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 </div>
 
                 {filteredOrders.length > 0 && (
-                    <div className="p-6 border-t border-gray-50 flex items-center justify-between text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
+                    <div className="p-6 border-t border-gray-50 dark:border-gray-800 flex items-center justify-between text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">
                         <span>Viewing {filteredOrders.length} of {orders.length} Global Records</span>
                         <div className="flex items-center gap-4">
-                            <span className="text-gray-900">Page 01</span>
+                            <span className="text-gray-900 dark:text-white font-bold">Page 01</span>
                             <ChevronDown size={14} />
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Order Details Modal */}
+            {/* ── Order Details Modal ── */}
             {selectedOrder && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setSelectedOrder(null)} />
                     <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-2xl relative z-[101] overflow-hidden animate-in zoom-in-95">
-                        <div className="p-8 border-b border-gray-100 flex items-center justify-between">
+                        <div className="p-8 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                             <div>
                                 <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter">Transaction Details</h2>
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
                                     Ref: ORD-{selectedOrder.id.slice(-5).toUpperCase()} • {new Date(selectedOrder.createdAt).toLocaleString()}
                                 </p>
                             </div>
-                            <button onClick={() => setSelectedOrder(null)} className="p-3 hover:bg-gray-50 rounded-2xl text-gray-400">
+                            <button onClick={() => setSelectedOrder(null)} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400">
                                 <X size={20} />
                             </button>
                         </div>
@@ -1387,32 +1062,32 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 <div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Method & Payment</p>
                                     <div className="flex gap-2">
-                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-black rounded-full uppercase tracking-widest">
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-black rounded-full uppercase tracking-widest">
                                             <CreditCard size={12} /> {selectedOrder.paymentMethod}
                                         </span>
-                                        <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${selectedOrder.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100' :
-                                                selectedOrder.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100' :
-                                                    'bg-amber-50 text-amber-600 border-amber-100'
+                                        <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${selectedOrder.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
+                                                selectedOrder.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400' :
+                                                    'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
                                             }`}>
                                             PAY: {selectedOrder.paymentStatus || 'PENDING'}
                                         </span>
                                     </div>
                                     {selectedOrder.posDeviceType && (
-                                        <div className="mt-2 text-[10px] font-black uppercase text-gray-600 bg-gray-200/60 px-2.5 py-1 rounded-lg">
+                                        <div className="mt-2 text-[10px] font-black uppercase text-gray-600 dark:text-gray-300 bg-gray-200/60 dark:bg-slate-700 px-2.5 py-1 rounded-lg">
                                             Device: {selectedOrder.posDeviceType}
                                         </div>
                                     )}
                                     {selectedOrder.terminalTransaction && (
-                                        <div className="mt-2 text-[10px] font-mono font-bold text-green-700 bg-green-100/60 px-2.5 py-1 rounded-lg">
+                                        <div className="mt-2 text-[10px] font-mono font-bold text-green-700 dark:text-green-400 bg-green-100/60 dark:bg-green-950/30 px-2.5 py-1 rounded-lg">
                                             Monnify Ref: {selectedOrder.terminalTransaction.transactionRef}
                                         </div>
                                     )}
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Fulfillment</p>
-                                    <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${selectedOrder.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100' :
-                                            selectedOrder.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                                'bg-amber-50 text-amber-600 border-amber-100'
+                                    <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${selectedOrder.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
+                                            selectedOrder.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-400' :
+                                                'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
                                         }`}>
                                         FUL: {selectedOrder.status}
                                     </span>
@@ -1427,7 +1102,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 <div className="px-8 pb-6">
                                     <button
                                         onClick={() => { setRefundTarget(selectedOrder); setSelectedOrder(null); }}
-                                        className="w-full flex items-center justify-center gap-2 py-3 bg-red-50 hover:bg-red-100 text-red-600 font-black rounded-2xl border border-red-200 transition-all text-sm uppercase tracking-widest"
+                                        className="w-full flex items-center justify-center gap-2 py-3 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 text-red-600 font-black rounded-2xl border border-red-200 dark:border-red-800 transition-all text-sm uppercase tracking-widest"
                                     >
                                         <RotateCcw size={16} /> Issue Refund
                                     </button>
@@ -1451,7 +1126,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-md mx-4 p-8 space-y-6 border border-gray-100 dark:border-gray-800">
                         <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center shrink-0">
+                            <div className="w-14 h-14 bg-red-50 dark:bg-red-950/30 rounded-2xl flex items-center justify-center shrink-0">
                                 <Trash2 size={24} className="text-red-500" />
                             </div>
                             <div>
@@ -1489,7 +1164,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                     <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-md mx-4 p-8 space-y-6 border border-gray-100 dark:border-gray-800">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
-                                <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center shrink-0">
+                                <div className="w-14 h-14 bg-red-50 dark:bg-red-950/30 rounded-2xl flex items-center justify-center shrink-0">
                                     <RotateCcw size={24} className="text-red-500" />
                                 </div>
                                 <div>
@@ -1497,7 +1172,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                     <p className="text-sm text-gray-500 dark:text-gray-400">ORD-{refundTarget.id.slice(-5).toUpperCase()} · ₦{Number(refundTarget.totalAmount).toLocaleString()}</p>
                                 </div>
                             </div>
-                            <button onClick={() => setRefundTarget(null)} className="p-2 hover:bg-gray-100 rounded-xl">
+                            <button onClick={() => setRefundTarget(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl">
                                 <X size={18} className="text-gray-400" />
                             </button>
                         </div>
@@ -1537,4 +1212,3 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
 };
 
 export default OrdersPage;
-
