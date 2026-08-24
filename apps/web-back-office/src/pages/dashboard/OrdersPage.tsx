@@ -17,6 +17,8 @@ interface OrdersPageProps {
 const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftOrder, lockDraftOrder }: OrdersPageProps) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [dateFilter, setDateFilter] = useState('all'); // all, today, week, month
+    const [paymentMethodFilter, setPaymentMethodFilter] = useState('ALL');
+    const [paymentStatusFilter, setPaymentStatusFilter] = useState('ALL');
     const [mainTab, setMainTab] = useState<'all' | 'drafts'>('all'); // 'all' or 'drafts'
     const location = useLocation();
     const navigate = useNavigate();
@@ -64,12 +66,62 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         }
     }, [highlightId, orders, isLoading]);
 
+    // Multi-vector search matcher
+    const matchesOrderSearch = useCallback((order: any, query: string) => {
+        if (!query || !query.trim()) return true;
+        const q = query.trim().toLowerCase();
+
+        // 1. Order ID & Reference codes
+        const idMatches =
+            order.id?.toLowerCase().includes(q) ||
+            `ord-${order.id?.slice(-5)}`.toLowerCase().includes(q) ||
+            order.id?.slice(-8).toLowerCase().includes(q);
+
+        // 2. Customer fields
+        const customerMatches =
+            order.customer?.name?.toLowerCase().includes(q) ||
+            order.customer?.phone?.toLowerCase().includes(q) ||
+            order.customer?.email?.toLowerCase().includes(q) ||
+            order.customer?.id?.toLowerCase().includes(q);
+
+        // 3. Cashier/Staff fields
+        const cashierMatches =
+            order.cashier?.name?.toLowerCase().includes(q) ||
+            order.cashier?.email?.toLowerCase().includes(q) ||
+            order.cashier?.staffCode?.toLowerCase().includes(q) ||
+            order.cashier?.id?.toLowerCase().includes(q);
+
+        // 4. Branch/Store fields
+        const storeMatches =
+            order.store?.name?.toLowerCase().includes(q) ||
+            order.store?.branchCode?.toLowerCase().includes(q) ||
+            order.storeId?.toLowerCase().includes(q);
+
+        // 5. Payment details
+        const paymentMatches =
+            order.paymentMethod?.toLowerCase().includes(q) ||
+            order.paymentStatus?.toLowerCase().includes(q) ||
+            order.status?.toLowerCase().includes(q) ||
+            order.posDeviceType?.toLowerCase().includes(q);
+
+        // 6. Terminal transaction references
+        const terminalMatches =
+            order.terminalTransaction?.transactionRef?.toLowerCase().includes(q) ||
+            order.terminalTransaction?.paymentRef?.toLowerCase().includes(q);
+
+        // 7. Order items
+        const itemMatches = Array.isArray(order.items) && order.items.some((i: any) =>
+            i.product?.name?.toLowerCase().includes(q) ||
+            i.product?.sku?.toLowerCase().includes(q) ||
+            i.product?.barcode?.toLowerCase().includes(q)
+        );
+
+        return idMatches || customerMatches || cashierMatches || storeMatches || paymentMatches || terminalMatches || itemMatches;
+    }, []);
+
     const filteredOrders = useMemo(() => {
-        return orders.filter(order => {
-            const matchesSearch =
-                order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (order.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (order.cashier?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
+        return (orders || []).filter(order => {
+            const matchesSearch = matchesOrderSearch(order, searchQuery);
 
             const orderDate = new Date(order.createdAt);
             const now = new Date();
@@ -84,9 +136,12 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 matchesDate = orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear();
             }
 
-            return matchesSearch && matchesDate;
+            const matchesMethod = paymentMethodFilter === 'ALL' || order.paymentMethod === paymentMethodFilter;
+            const matchesStatus = paymentStatusFilter === 'ALL' || order.paymentStatus === paymentStatusFilter || order.status === paymentStatusFilter;
+
+            return matchesSearch && matchesDate && matchesMethod && matchesStatus;
         });
-    }, [orders, searchQuery, dateFilter]);
+    }, [orders, searchQuery, dateFilter, paymentMethodFilter, paymentStatusFilter, matchesOrderSearch]);
 
     const downloadCSV = () => {
         const headers = ['Order ID', 'Date', 'Customer', 'Cashier', 'Amount', 'Method', 'Status'];
@@ -157,15 +212,12 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
 
     // Filtered list based on active main tab
     const displayList = useMemo(() => {
-        const sourceList = mainTab === 'drafts' ? draftOrders : filteredOrders;
-        return sourceList.filter(o => {
-            const matchesSearch =
-                o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (o.customer?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (o.cashier?.name || '').toLowerCase().includes(searchQuery.toLowerCase());
-            return matchesSearch;
-        });
-    }, [mainTab, draftOrders, filteredOrders, searchQuery]);
+        const sourceList = mainTab === 'drafts' ? (draftOrders || []) : filteredOrders;
+        if (mainTab === 'drafts') {
+            return sourceList.filter(o => matchesOrderSearch(o, searchQuery));
+        }
+        return sourceList;
+    }, [mainTab, draftOrders, filteredOrders, searchQuery, matchesOrderSearch]);
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
@@ -173,52 +225,92 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
                 <div>
                     <h1 className="text-2xl font-black text-gray-900 dark:text-white leading-tight">Transaction Archives</h1>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm">Review, filter and export sales & hold orders</p>
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">Review, multi-vector search, filter and export sales & hold orders</p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
                     {/* Main Tab Switcher */}
-                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-2xl">
+                    <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-2xl">
                         <button
                             onClick={() => setMainTab('all')}
                             className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'all' ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                         >
                             <Tag size={14} />
-                            All Sales ({orders.length})
+                            All Sales ({(orders || []).length})
                         </button>
                         <button
                             onClick={() => setMainTab('drafts')}
                             className={`px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'drafts' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                         >
                             <Clock size={14} />
-                            Hold / Drafts ({draftOrders.length})
+                            Hold / Drafts ({(draftOrders || []).length})
                         </button>
                     </div>
 
-                    <div className="relative group flex-1 xl:flex-none xl:w-64">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-900 transition-colors" size={18} />
+                    {/* Search Input with Multi-Field Support */}
+                    <div className="relative group flex-1 xl:flex-none xl:w-72">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-gray-900 dark:group-focus-within:text-white transition-colors" size={18} />
                         <input
                             type="text"
-                            placeholder="Search ID, Customer, Staff..."
-                            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-gray-900/5 focus:border-gray-900 dark:focus:border-gray-500 outline-none font-bold text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all shadow-sm"
+                            placeholder="Search ID, Customer, Staff, Branch, Item..."
+                            className="w-full pl-12 pr-10 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-gray-900/5 focus:border-gray-900 dark:focus:border-gray-500 outline-none font-bold text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all shadow-sm"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
+                        {searchQuery && (
+                            <button
+                                onClick={() => setSearchQuery('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                                title="Clear search"
+                            >
+                                <X size={16} />
+                            </button>
+                        )}
                     </div>
 
                     {mainTab === 'all' && (
-                        <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-1 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm">
-                            {['all', 'today', 'week', 'month'].map((f) => (
-                                <button
-                                    key={f}
-                                    onClick={() => setDateFilter(f)}
-                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dateFilter === f ? 'bg-gray-900 text-white shadow-lg' : 'text-gray-400 hover:text-gray-900'
-                                        }`}
-                                >
-                                    {f}
-                                </button>
-                            ))}
-                        </div>
+                        <>
+                            {/* Payment Method Filter */}
+                            <select
+                                value={paymentMethodFilter}
+                                onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                                className="px-3 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl font-bold text-xs text-gray-700 dark:text-gray-200 outline-none shadow-sm focus:border-gray-900"
+                            >
+                                <option value="ALL">All Methods</option>
+                                <option value="CASH">Cash</option>
+                                <option value="CARD">Card (POS)</option>
+                                <option value="TRANSFER">Transfer</option>
+                                <option value="SPLIT">Split</option>
+                                <option value="CREDIT">Credit</option>
+                                <option value="WALLET">Wallet</option>
+                            </select>
+
+                            {/* Payment Status Filter */}
+                            <select
+                                value={paymentStatusFilter}
+                                onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                                className="px-3 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 rounded-2xl font-bold text-xs text-gray-700 dark:text-gray-200 outline-none shadow-sm focus:border-gray-900"
+                            >
+                                <option value="ALL">All Statuses</option>
+                                <option value="SUCCESS">Success / Paid</option>
+                                <option value="PENDING">Pending</option>
+                                <option value="REFUNDED">Refunded</option>
+                            </select>
+
+                            {/* Date Filter */}
+                            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-1 border border-gray-100 dark:border-gray-700 rounded-2xl shadow-sm">
+                                {['all', 'today', 'week', 'month'].map((f) => (
+                                    <button
+                                        key={f}
+                                        onClick={() => setDateFilter(f)}
+                                        className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${dateFilter === f ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-md' : 'text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                                            }`}
+                                    >
+                                        {f}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
                     )}
 
                     <button

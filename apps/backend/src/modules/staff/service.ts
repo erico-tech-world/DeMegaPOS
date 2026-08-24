@@ -140,9 +140,51 @@ export async function acceptInvitation(token: string, name: string, password: st
 // Staff CRUD
 // ---------------------------------------------------------------------------
 
-export async function getStaffList(tenantId: string) {
+export interface GetStaffFilters {
+    search?: string
+    role?: string
+    status?: string
+    branchId?: string
+}
+
+export async function getStaffList(tenantId: string, filters?: GetStaffFilters) {
+    const whereClause: any = { tenantId }
+
+    if (filters?.role && filters.role !== 'ALL') {
+        whereClause.role = filters.role
+    }
+
+    if (filters?.status && filters.status !== 'ALL') {
+        whereClause.status = filters.status
+    }
+
+    if (filters?.branchId) {
+        if (filters.branchId === 'OMNI') {
+            whereClause.branchId = null
+        } else if (filters.branchId !== 'ALL') {
+            whereClause.branchId = filters.branchId
+        }
+    }
+
+    if (filters?.search && filters.search.trim()) {
+        const q = filters.search.trim()
+        whereClause.OR = [
+            { name: { contains: q, mode: 'insensitive' } },
+            { email: { contains: q, mode: 'insensitive' } },
+            { phone: { contains: q, mode: 'insensitive' } },
+            { staffCode: { contains: q, mode: 'insensitive' } },
+            { id: { contains: q, mode: 'insensitive' } },
+            { branch: { name: { contains: q, mode: 'insensitive' } } },
+            { branch: { branchCode: { contains: q, mode: 'insensitive' } } }
+        ]
+    }
+
     return prisma.user.findMany({
-        where: { tenantId }
+        where: whereClause,
+        include: {
+            branch: true
+        },
+        orderBy: { name: 'asc' }
     })
 }
 

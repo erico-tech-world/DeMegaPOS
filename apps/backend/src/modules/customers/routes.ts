@@ -3,8 +3,26 @@ import { prisma } from '@demegapos/db'
 
 export default async function customerRoutes(server: FastifyInstance) {
     server.get('/', async (request: any) => {
+        const { search } = (request.query || {}) as { search?: string }
+        const whereClause: any = { tenantId: request.user.tenantId }
+
+        if (search && search.trim()) {
+            const q = search.trim()
+            whereClause.OR = [
+                { name: { contains: q, mode: 'insensitive' } },
+                { email: { contains: q, mode: 'insensitive' } },
+                { phone: { contains: q, mode: 'insensitive' } },
+                { id: { contains: q, mode: 'insensitive' } }
+            ]
+        }
+
         return prisma.customer.findMany({
-            where: { tenantId: request.user.tenantId },
+            where: whereClause,
+            include: {
+                _count: {
+                    select: { orders: true }
+                }
+            },
             orderBy: { name: 'asc' }
         })
     })

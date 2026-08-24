@@ -24,6 +24,7 @@ export const staffResponseSchema = z.object({
     role: z.string(),
     staffCode: z.string().nullable().optional(),
     branchId: z.string().nullable(),
+    branch: z.any().optional(),
     status: z.string().optional(),
     isActive: z.boolean().optional(),
     onboardedAt: z.date().nullable().optional(),

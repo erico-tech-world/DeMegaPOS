@@ -4,7 +4,7 @@ import { CustomConfirmModal, CustomAlertModal } from '../../components/Inventory
 import { useAuth } from '../../context/AuthContext';
 import {
     ShieldAlert, Key, Eye, EyeOff, Loader2, CheckCircle2,
-    Users, UserX, Globe, Ban, AlertTriangle, X, BadgeCheck
+    Users, UserX, Globe, Ban, AlertTriangle, X, BadgeCheck, Search
 } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../../lib/apiConfig';
@@ -294,8 +294,23 @@ const StaffPage = ({ staff, isLoading, refresh }: StaffPageProps) => {
     const isSuperAdmin = user?.role === 'SUPER_ADMIN';
     const isManager = ['SUPER_ADMIN', 'ADMIN', 'BRANCH_MANAGER', 'OWNER'].includes(user?.role || '');
 
+    const [archiveSearch, setArchiveSearch] = useState('');
+
     const activeStaff = staff.filter((s: any) => s.status !== 'TERMINATED' && s.status !== 'SUSPENDED' && s.isActive !== false);
     const inactiveStaff = staff.filter((s: any) => s.status === 'TERMINATED' || s.status === 'SUSPENDED' || s.isActive === false);
+
+    const filteredInactiveStaff = inactiveStaff.filter((s: any) => {
+        if (!archiveSearch.trim()) return true;
+        const q = archiveSearch.trim().toLowerCase();
+        return (
+            s.name?.toLowerCase().includes(q) ||
+            s.email?.toLowerCase().includes(q) ||
+            s.phone?.toLowerCase().includes(q) ||
+            s.staffCode?.toLowerCase().includes(q) ||
+            s.id?.toLowerCase().includes(q) ||
+            s.status?.toLowerCase().includes(q)
+        );
+    });
 
     const handleEdit = (staffMember: any) => {
         setSelectedStaff(staffMember);
@@ -365,21 +380,51 @@ const StaffPage = ({ staff, isLoading, refresh }: StaffPageProps) => {
                         />
                     ) : (
                         <div className="bg-white dark:bg-gray-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
-                            <div className="p-6 border-b border-gray-100 dark:border-gray-800">
-                                <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-3">
-                                    <div className="w-1.5 h-6 bg-red-500 rounded-full"></div>
-                                    Terminated &amp; Suspended Staff Archive
-                                </h3>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-bold uppercase tracking-widest">Historical records preserved for audit trail</p>
+                            <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                                <div>
+                                    <h3 className="text-lg font-black text-gray-900 dark:text-white flex items-center gap-3">
+                                        <div className="w-1.5 h-6 bg-red-500 rounded-full"></div>
+                                        Terminated &amp; Suspended Staff Archive
+                                    </h3>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-bold uppercase tracking-widest">Historical records preserved for audit trail</p>
+                                </div>
+                                <div className="relative group w-full sm:w-72">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-red-500 transition-colors" size={16} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search archive..."
+                                        className="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 dark:text-white dark:placeholder-gray-400 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-400 outline-none font-bold text-xs transition-all"
+                                        value={archiveSearch}
+                                        onChange={(e) => setArchiveSearch(e.target.value)}
+                                    />
+                                    {archiveSearch && (
+                                        <button
+                                            onClick={() => setArchiveSearch('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 rounded-md"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                             {inactiveStaff.length === 0 ? (
                                 <div className="p-12 text-center">
                                     <UserX size={48} className="mx-auto text-gray-300 dark:text-gray-600 mb-4" />
                                     <p className="text-gray-500 dark:text-gray-400 font-bold">No terminated or suspended staff on record</p>
                                 </div>
+                            ) : filteredInactiveStaff.length === 0 ? (
+                                <div className="p-12 text-center">
+                                    <p className="text-gray-500 dark:text-gray-400 font-bold text-sm">No archive records matching "{archiveSearch}"</p>
+                                    <button
+                                        onClick={() => setArchiveSearch('')}
+                                        className="mt-2 px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-300"
+                                    >
+                                        Clear Search
+                                    </button>
+                                </div>
                             ) : (
                                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                                    {inactiveStaff.map((s: any) => (
+                                    {filteredInactiveStaff.map((s: any) => (
                                         <div key={s.id} className="flex items-center justify-between p-5 gap-4">
                                             <div className="flex items-center gap-4">
                                                 <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center font-black text-gray-400 dark:text-gray-500 text-sm">

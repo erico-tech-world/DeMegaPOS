@@ -25,6 +25,12 @@ export default async function staffRoutes(app: FastifyInstance) {
         '/',
         {
             schema: {
+                querystring: z.object({
+                    search: z.string().optional(),
+                    role: z.string().optional(),
+                    status: z.string().optional(),
+                    branchId: z.string().optional(),
+                }),
                 response: {
                     200: z.array(staffResponseSchema),
                 },
@@ -32,7 +38,13 @@ export default async function staffRoutes(app: FastifyInstance) {
         },
         async (request, reply) => {
             const { tenantId } = request.user
-            const staff = await getStaffList(tenantId)
+            const { search, role, status, branchId } = (request.query || {}) as {
+                search?: string
+                role?: string
+                status?: string
+                branchId?: string
+            }
+            const staff = await getStaffList(tenantId, { search, role, status, branchId })
             return reply.send(staff)
         }
     )

@@ -135,7 +135,15 @@ export async function createOrder(data: CreateOrderInput) {
     return order
 }
 
-export async function getOrders(storeId?: string, tenantId?: string) {
+export interface GetOrdersFilters {
+    search?: string
+    paymentStatus?: string
+    paymentMethod?: string
+    cashierId?: string
+    customerId?: string
+}
+
+export async function getOrders(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
     const whereClause: any = {
         NOT: {
             paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
@@ -147,9 +155,46 @@ export async function getOrders(storeId?: string, tenantId?: string) {
         whereClause.store = { tenantId }
     }
 
+    if (filters?.paymentStatus && filters.paymentStatus !== 'ALL') {
+        whereClause.paymentStatus = filters.paymentStatus
+    }
+
+    if (filters?.paymentMethod && filters.paymentMethod !== 'ALL') {
+        whereClause.paymentMethod = filters.paymentMethod
+    }
+
+    if (filters?.cashierId) {
+        whereClause.cashierId = filters.cashierId
+    }
+
+    if (filters?.customerId) {
+        whereClause.customerId = filters.customerId
+    }
+
+    if (filters?.search && filters.search.trim()) {
+        const q = filters.search.trim()
+        whereClause.OR = [
+            { id: { contains: q, mode: 'insensitive' } },
+            { customer: { name: { contains: q, mode: 'insensitive' } } },
+            { customer: { phone: { contains: q, mode: 'insensitive' } } },
+            { customer: { email: { contains: q, mode: 'insensitive' } } },
+            { customer: { id: { contains: q, mode: 'insensitive' } } },
+            { cashier: { name: { contains: q, mode: 'insensitive' } } },
+            { cashier: { email: { contains: q, mode: 'insensitive' } } },
+            { cashier: { staffCode: { contains: q, mode: 'insensitive' } } },
+            { cashier: { id: { contains: q, mode: 'insensitive' } } },
+            { store: { name: { contains: q, mode: 'insensitive' } } },
+            { store: { branchCode: { contains: q, mode: 'insensitive' } } },
+            { posDeviceType: { contains: q, mode: 'insensitive' } },
+            { items: { some: { product: { name: { contains: q, mode: 'insensitive' } } } } },
+            { items: { some: { product: { sku: { contains: q, mode: 'insensitive' } } } } }
+        ]
+    }
+
     return prisma.order.findMany({
         where: whereClause,
         include: {
+            store: true,
             items: {
                 include: {
                     product: true
@@ -158,7 +203,9 @@ export async function getOrders(storeId?: string, tenantId?: string) {
             customer: true,
             cashier: true,
             splitPayments: true,
-            terminalTransaction: true
+            terminalTransaction: true,
+            refund: true,
+            creditSale: true
         },
         orderBy: {
             createdAt: 'desc'

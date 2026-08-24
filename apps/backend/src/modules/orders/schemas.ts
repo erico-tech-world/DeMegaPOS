@@ -28,6 +28,7 @@ export const createOrderSchema = z.object({
 export const orderResponseSchema = z.object({
     id: z.string(),
     storeId: z.string(),
+    store: z.any().optional(),
     cashierId: z.string().nullable().optional(),
     cashier: z.any().optional(),
     customerId: z.string().nullable(),
@@ -36,8 +37,12 @@ export const orderResponseSchema = z.object({
     paymentMethod: z.string(),
     status: z.string(),
     paymentStatus: z.string(),
+    posDeviceType: z.string().nullable().optional(),
     items: z.array(z.any()),
     splitPayments: z.array(z.any()).optional(),
+    terminalTransaction: z.any().optional(),
+    refund: z.any().optional(),
+    creditSale: z.any().optional(),
     createdAt: z.date(),
     updatedAt: z.date(),
 })

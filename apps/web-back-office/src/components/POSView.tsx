@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History, Plus, X, Minus, Package, Clock, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
@@ -366,6 +366,62 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
 
     const removeFromCart = (productId: string) => {
         setCart(prev => prev.filter(i => i.id !== productId));
+    };
+
+    // Full-spectrum product search: evaluates Name, SKU, Barcode, Category, and Variant SKUs
+    const filteredProducts = useMemo(() => {
+        const query = search.trim().toLowerCase();
+        if (!query) return products || [];
+        return (products || []).filter((p: any) => {
+            const nameMatch = p.name?.toLowerCase().includes(query);
+            const skuMatch = p.sku?.toLowerCase().includes(query);
+            const barcodeMatch = p.barcode?.toLowerCase().includes(query);
+            const categoryMatch = p.category?.name?.toLowerCase().includes(query);
+            const variantMatch = Array.isArray(p.variants) && p.variants.some((v: any) =>
+                v.sku?.toLowerCase().includes(query) || v.name?.toLowerCase().includes(query)
+            );
+            return nameMatch || skuMatch || barcodeMatch || categoryMatch || variantMatch;
+        });
+    }, [products, search]);
+
+    // Handle Enter key for barcode scanner hardware and quick-add
+    const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            const query = search.trim().toLowerCase();
+            if (!query) return;
+
+            // 1. Direct barcode match
+            const exactBarcodeMatch = (products || []).find((p: any) => p.barcode?.toLowerCase() === query);
+            if (exactBarcodeMatch) {
+                addToCart(exactBarcodeMatch);
+                setSearch('');
+                return;
+            }
+
+            // 2. Direct SKU match on product
+            const exactSkuMatch = (products || []).find((p: any) => p.sku?.toLowerCase() === query);
+            if (exactSkuMatch) {
+                addToCart(exactSkuMatch);
+                setSearch('');
+                return;
+            }
+
+            // 3. Direct SKU match on product variant
+            const exactVariantMatch = (products || []).find((p: any) =>
+                Array.isArray(p.variants) && p.variants.some((v: any) => v.sku?.toLowerCase() === query)
+            );
+            if (exactVariantMatch) {
+                addToCart(exactVariantMatch);
+                setSearch('');
+                return;
+            }
+
+            // 4. If exactly 1 product matched in current filtered list, auto-add it
+            if (filteredProducts.length === 1) {
+                addToCart(filteredProducts[0]);
+                setSearch('');
+            }
+        }
     };
 
     const handleCheckout = async () => {
@@ -812,49 +868,90 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#2D7A3E] transition-colors" size={20} />
                         <input
                             type="text"
-                            placeholder="Search products by name or SKU..."
-                            className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 dark:text-white dark:placeholder-slate-400 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-sm transition-all"
+                            placeholder="Scan barcode, or search by name, SKU, category..."
+                            className="w-full pl-12 pr-10 py-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-gray-700 dark:text-white dark:placeholder-slate-400 rounded-2xl focus:ring-4 focus:ring-green-900/5 focus:border-[#2D7A3E] outline-none font-bold text-sm transition-all"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
+                            onKeyDown={handleSearchKeyDown}
                         />
+                        {search && (
+                            <button
+                                onClick={() => setSearch('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+                                title="Clear search"
+                            >
+                                <X size={16} />
+                            </button>
+                        )}
                     </div>
+                    {search && (
+                        <div className="mt-2 text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center justify-between">
+                            <span>Found {filteredProducts.length} product{filteredProducts.length === 1 ? '' : 's'} matching "{search}"</span>
+                            <span className="text-[#2D7A3E] font-bold lowercase">Press Enter to quick-add single match</span>
+                        </div>
+                    )}
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 custom-scrollbar">
-                    {products.filter((p: any) => p.name.toLowerCase().includes(search.toLowerCase())).map((p: any) => (
-                        <button
-                            key={p.id}
-                            onClick={() => addToCart(p)}
-                            className="p-4 sm:p-5 bg-gray-50 dark:bg-slate-800 rounded-[2rem] border border-gray-50 dark:border-gray-700 hover:border-[#2D7A3E] dark:hover:border-green-500 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xl hover:shadow-green-900/5 transition-all text-left flex flex-col justify-between group min-h-[220px] sm:h-[260px]"
-                        >
-                            {/* Top Text Details */}
-                            <div className="w-full">
-                                <div className="font-black text-gray-900 dark:text-white group-hover:text-[#2D7A3E] dark:group-hover:text-green-400 text-base leading-tight transition-colors truncate">{p.name}</div>
-                                <div className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest mt-1">{p.sku || 'NO-SKU'}</div>
-                            </div>
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+                    {filteredProducts.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center p-8 text-center text-gray-400">
+                            <Package size={48} className="mb-3 opacity-30" />
+                            <p className="font-black uppercase tracking-wider text-sm text-gray-600 dark:text-gray-300">No matching products</p>
+                            <p className="text-xs text-gray-400 mt-1">No products found matching "{search}" across Name, SKU, or Barcode.</p>
+                            <button
+                                onClick={() => setSearch('')}
+                                className="mt-4 px-4 py-2 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-bold hover:bg-gray-200"
+                            >
+                                Clear Search Filter
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+                            {filteredProducts.map((p: any) => (
+                                <button
+                                    key={p.id}
+                                    onClick={() => addToCart(p)}
+                                    className="p-4 sm:p-5 bg-gray-50 dark:bg-slate-800 rounded-[2rem] border border-gray-50 dark:border-gray-700 hover:border-[#2D7A3E] dark:hover:border-green-500 hover:bg-white dark:hover:bg-slate-700 hover:shadow-xl hover:shadow-green-900/5 transition-all text-left flex flex-col justify-between group min-h-[220px] sm:h-[260px]"
+                                >
+                                    {/* Top Text Details */}
+                                    <div className="w-full">
+                                        <div className="font-black text-gray-900 dark:text-white group-hover:text-[#2D7A3E] dark:group-hover:text-green-400 text-base leading-tight transition-colors truncate">{p.name}</div>
+                                        <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                            <span className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest font-mono">
+                                                {p.sku || 'NO-SKU'}
+                                            </span>
+                                            {p.barcode && (
+                                                <span className="text-[9px] bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300 px-1.5 py-0.5 rounded font-mono">
+                                                    #{p.barcode}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
 
-                            {/* Center Image Area */}
-                            <div className="my-3 w-full h-24 sm:h-28 rounded-2xl overflow-hidden bg-gray-100 border border-gray-100 flex items-center justify-center flex-shrink-0 relative">
-                                {p.imageUrl ? (
-                                    <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                                ) : (
-                                    <span className="text-[#2D7A3E] font-black text-lg uppercase tracking-wider bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
-                                        {p.name.slice(0, 2)}
-                                    </span>
-                                )}
-                            </div>
+                                    {/* Center Image Area */}
+                                    <div className="my-3 w-full h-24 sm:h-28 rounded-2xl overflow-hidden bg-gray-100 border border-gray-100 flex items-center justify-center flex-shrink-0 relative">
+                                        {p.imageUrl ? (
+                                            <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                        ) : (
+                                            <span className="text-[#2D7A3E] font-black text-lg uppercase tracking-wider bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
+                                                {p.name.slice(0, 2)}
+                                            </span>
+                                        )}
+                                    </div>
 
-                            {/* Bottom Details */}
-                            <div className="flex justify-between items-end w-full">
-                                <div>
-                                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter block leading-none mb-1">Price</span>
-                                    <span className="font-black text-[#2D7A3E] text-lg">₦{Number(p.price).toLocaleString()}</span>
-                                </div>
-                                <span className={`px-2.5 py-1 rounded-full text-[9px] font-black shadow-sm uppercase ${p.stock < 10 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
-                                    {p.stock} IN STOCK
-                                </span>
-                            </div>
-                        </button>
-                    ))}
+                                    {/* Bottom Details */}
+                                    <div className="flex justify-between items-end w-full">
+                                        <div>
+                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter block leading-none mb-1">Price</span>
+                                            <span className="font-black text-[#2D7A3E] text-lg">₦{Number(p.price).toLocaleString()}</span>
+                                        </div>
+                                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-black shadow-sm uppercase ${p.stock < 10 ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}>
+                                            {p.stock} IN STOCK
+                                        </span>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 

@@ -45,6 +45,11 @@ export default async function orderRoutes(app: FastifyInstance) {
                 querystring: z.object({
                     storeId: z.string().optional(),
                     branchId: z.string().optional(),
+                    search: z.string().optional(),
+                    paymentStatus: z.string().optional(),
+                    paymentMethod: z.string().optional(),
+                    cashierId: z.string().optional(),
+                    customerId: z.string().optional(),
                 }),
                 response: {
                     200: z.array(orderResponseSchema),
@@ -52,10 +57,18 @@ export default async function orderRoutes(app: FastifyInstance) {
             },
         },
         async (request) => {
-            const { storeId, branchId } = request.query as { storeId?: string; branchId?: string }
+            const { storeId, branchId, search, paymentStatus, paymentMethod, cashierId, customerId } = request.query as {
+                storeId?: string
+                branchId?: string
+                search?: string
+                paymentStatus?: string
+                paymentMethod?: string
+                cashierId?: string
+                customerId?: string
+            }
             const effectiveStoreId = storeId || branchId
             const { tenantId } = request.user as any
-            return getOrders(effectiveStoreId, tenantId)
+            return getOrders(effectiveStoreId, tenantId, { search, paymentStatus, paymentMethod, cashierId, customerId })
         }
     )
 
