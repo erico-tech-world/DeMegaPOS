@@ -194,3 +194,21 @@
 - `[x]` Validate that all Phase 25 features (inline filter panel, granular date/time pickers, active filter chips, and backend Prisma query engine) are fully intact and compiling cleanly
 - `[x]` Verified successful production builds across `web-back-office` (Vite, 1802 modules) and `demegapos-backend` (Prisma + TypeScript)
 - `[x]` Confirmed 100% parity across local `main`, `origin/main`, and `megakash/main`
+
+## Phase 27: Order Status Separation & Strict Product Filter (Order History)
+- `[x]` Deep codebase audit: Confirmed `Order.status` is a single String column (no enum); identified mixed lifecycle/fulfillment semantics; confirmed `Product` is tenant-scoped (no storeId)
+- `[x]` Documented architectural strategy, schema reality, non-breaking guarantee, and mutual exclusion design in `IMPLEMENTATION_PLAN.md`
+- `[x]` Frontend (`OrdersPage.tsx`): Split single status selector into two independent dropdowns:
+  - **Order Status** (lifecycle): `COMPLETED`, `CANCELLED`, `REFUNDED`, `PARTIALLY_REFUNDED`
+  - **Fulfillment Status** (progression): `NEW`, `IN_PREPARATION`, `READY_FOR_PICKUP`, `DELIVERED`, `SHIPPED`
+- `[x]` Frontend: Mutual exclusion enforced — selecting one status type auto-clears the other (both map to `Order.status` DB column)
+- `[x]` Frontend: Added strict **Product Filter** dropdown dynamically populated from `GET /inventory/products` (tenant-scoped, alphabetically sorted)
+- `[x]` Frontend: Active filter chips updated with human-readable labels for both new status types and product filter chip
+- `[x]` Frontend: `clearAllFilters()` extended to reset `selectedFulfillmentStatus`, `filterProductId`, `filterProductName`
+- `[x]` Frontend: Order Details modal — when product filter active, isolates ONLY the matching line-item in itemized bill with amber "Showing filtered item only" badge
+- `[x]` Frontend: `filteredOrders` memo updated with fulfillment status (step 4) and strict product ID exact-match (step 8) conditions
+- `[x]` Backend (`orders/service.ts`): Extended `GetOrdersFilters` with `fulfillmentStatus` and `productId`; implemented in `whereClause` — fulfillmentStatus routes to `status` column; productId merges into `items.some { productId }` for exact relational match
+- `[x]` Backend (`orders/routes.ts`): Added `fulfillmentStatus` and `productId` to `GET /` querystring schema; passed to service
+- `[x]` Verified zero TypeScript errors on both `web-back-office` (Vite, 1802 modules) and `demegapos-backend` (Prisma + tsc)
+- `[x]` Synchronize all commits (`f645130`) to `origin/main` and `megakash/main`
+
