@@ -143,6 +143,7 @@ export interface GetOrdersFilters {
     paymentMethods?: string[]
     orderStatuses?: string[]
     status?: string
+    fulfillmentStatus?: string   // NEW — maps to same Order.status column
     cashierId?: string
     customerId?: string
     dateFrom?: string
@@ -155,6 +156,7 @@ export interface GetOrdersFilters {
     maxItemQty?: number
     minTotal?: number
     maxTotal?: number
+    productId?: string           // NEW — strict exact relational ID match on OrderItem.productId
 }
 
 export async function getOrders(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
@@ -170,10 +172,13 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
     }
 
     // Status Filters
+    // Priority: orderStatuses array > single status > fulfillmentStatus (all target same column)
     if (filters?.orderStatuses && filters.orderStatuses.length > 0) {
         whereClause.status = { in: filters.orderStatuses }
     } else if (filters?.status && filters.status !== 'ALL') {
         whereClause.status = filters.status
+    } else if (filters?.fulfillmentStatus && filters.fulfillmentStatus !== 'ALL') {
+        whereClause.status = filters.fulfillmentStatus.toUpperCase()
     }
 
     // Payment Status Filters
@@ -232,6 +237,10 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
     }
     if (filters?.maxUnitPrice !== undefined) {
         itemConditions.price = { ...itemConditions.price, lte: filters.maxUnitPrice }
+    }
+    // Strict exact-match product filter — merged into item conditions
+    if (filters?.productId && filters.productId.trim()) {
+        itemConditions.productId = filters.productId.trim()
     }
     if (Object.keys(itemConditions).length > 0) {
         whereClause.items = { some: itemConditions }

@@ -46,12 +46,21 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     const [rangeEndDate, setRangeEndDate] = useState<string>(''); // YYYY-MM-DD
 
     // ── Statuses & Dropdown Filters ───────────────────────────────────────────
+    // selectedOrderStatus: lifecycle statuses (COMPLETED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED)
+    // selectedFulfillmentStatus: progression statuses (NEW, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
+    // Both map to the same Order.status DB column — UI enforces mutual exclusion
     const [selectedOrderStatus, setSelectedOrderStatus] = useState<string>('ALL');
+    const [selectedFulfillmentStatus, setSelectedFulfillmentStatus] = useState<string>('ALL');
     const [selectedPaymentStatus, setSelectedPaymentStatus] = useState<string>('ALL');
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('ALL');
     const [filterCategoryId, setFilterCategoryId] = useState<string>('');
     const [selectedBranchId, setSelectedBranchId] = useState<string>('');
     const [selectedCashierId, setSelectedCashierId] = useState<string>('');
+
+    // ── Strict Product Filter ──────────────────────────────────────────────────
+    const [filterProductId, setFilterProductId] = useState<string>('');
+    const [filterProductName, setFilterProductName] = useState<string>('');
+    const [availableProducts, setAvailableProducts] = useState<{ id: string; name: string }[]>([]);
 
     // ── Additional Item & Financial Filters ───────────────────────────────────
     const [filterItemName, setFilterItemName] = useState<string>('');
@@ -106,6 +115,28 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             }
         };
         loadCategories();
+    }, []);
+
+    // Fetch products from backend API for the strict product filter dropdown
+    useEffect(() => {
+        const loadProducts = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const res = await axios.get(`${API_URL}/inventory/products`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (Array.isArray(res.data)) {
+                    setAvailableProducts(
+                        res.data
+                            .map((p: any) => ({ id: p.id, name: p.name || `Product ${p.id.slice(0, 6)}` }))
+                            .sort((a: { id: string; name: string }, b: { id: string; name: string }) => a.name.localeCompare(b.name))
+                    );
+                }
+            } catch {
+                // Fallback silently if offline
+            }
+        };
+        loadProducts();
     }, []);
 
     // Auto-scroll to highlighted order
@@ -227,6 +258,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         setRangeStartDate('');
         setRangeEndDate('');
         setSelectedOrderStatus('ALL');
+        setSelectedFulfillmentStatus('ALL');
         setSelectedPaymentStatus('ALL');
         setSelectedPaymentMethod('ALL');
         setFilterCategoryId('');
@@ -235,6 +267,8 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         setFilterItemName('');
         setFilterMinTotal('');
         setFilterMaxTotal('');
+        setFilterProductId('');
+        setFilterProductName('');
     }, []);
 
     // ── Active Filters Chips ───────────────────────────────────────────────────
@@ -265,9 +299,27 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             chips.push({ id: 'date-range', label: `Range: ${rangeStartDate || '...'} to ${rangeEndDate || '...'}`, onRemove: () => { setRangeStartDate(''); setRangeEndDate(''); setDateMode('preset'); setDatePreset('all'); } });
         }
 
-        // Order Status
+        // Order Lifecycle Status
         if (selectedOrderStatus && selectedOrderStatus !== 'ALL') {
-            chips.push({ id: 'order-status', label: `Status: ${selectedOrderStatus}`, onRemove: () => setSelectedOrderStatus('ALL') });
+            const statusLabels: Record<string, string> = {
+                COMPLETED: 'Completed',
+                CANCELLED: 'Cancelled',
+                REFUNDED: 'Refunded',
+                PARTIALLY_REFUNDED: 'Partially Refunded',
+            };
+            chips.push({ id: 'order-status', label: `Order: ${statusLabels[selectedOrderStatus] || selectedOrderStatus}`, onRemove: () => setSelectedOrderStatus('ALL') });
+        }
+
+        // Fulfillment Status
+        if (selectedFulfillmentStatus && selectedFulfillmentStatus !== 'ALL') {
+            const fulfillLabels: Record<string, string> = {
+                NEW: 'New',
+                IN_PREPARATION: 'In Preparation',
+                READY_FOR_PICKUP: 'Ready for Pickup',
+                DELIVERED: 'Delivered',
+                SHIPPED: 'Shipped',
+            };
+            chips.push({ id: 'fulfillment-status', label: `Fulfillment: ${fulfillLabels[selectedFulfillmentStatus] || selectedFulfillmentStatus}`, onRemove: () => setSelectedFulfillmentStatus('ALL') });
         }
 
         // Payment Status
@@ -284,6 +336,11 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         if (filterCategoryId) {
             const catObj = availableCategories.find(c => c.id === filterCategoryId);
             chips.push({ id: 'category', label: `Category: ${catObj?.name || filterCategoryId}`, onRemove: () => setFilterCategoryId('') });
+        }
+
+        // Strict Product Filter
+        if (filterProductId) {
+            chips.push({ id: 'product-filter', label: `Product: "${filterProductName || filterProductId.slice(0, 8)}"`, onRemove: () => { setFilterProductId(''); setFilterProductName(''); } });
         }
 
         // Branch
@@ -311,8 +368,8 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         return chips;
     }, [
         dateMode, datePreset, singleDate, singleTimeMode, exactTime, exactTolerance, customStartTime, customEndTime,
-        rangeStartDate, rangeEndDate, selectedOrderStatus, selectedPaymentStatus, selectedPaymentMethod,
-        filterCategoryId, selectedBranchId, selectedCashierId, filterItemName, filterMinTotal, filterMaxTotal,
+        rangeStartDate, rangeEndDate, selectedOrderStatus, selectedFulfillmentStatus, selectedPaymentStatus, selectedPaymentMethod,
+        filterCategoryId, filterProductId, filterProductName, selectedBranchId, selectedCashierId, filterItemName, filterMinTotal, filterMaxTotal,
         availableCategories, availableBranches, availableCashiers
     ]);
 
@@ -400,22 +457,27 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 }
             }
 
-            // 3. Order Status filter
+            // 3. Order Lifecycle Status filter (COMPLETED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED)
             if (selectedOrderStatus && selectedOrderStatus !== 'ALL') {
                 if (order.status !== selectedOrderStatus) return false;
             }
 
-            // 4. Payment Status filter
+            // 4. Fulfillment Status filter (NEW, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
+            if (selectedFulfillmentStatus && selectedFulfillmentStatus !== 'ALL') {
+                if (order.status !== selectedFulfillmentStatus) return false;
+            }
+
+            // 5. Payment Status filter
             if (selectedPaymentStatus && selectedPaymentStatus !== 'ALL') {
                 if (order.paymentStatus !== selectedPaymentStatus) return false;
             }
 
-            // 5. Payment Method filter
+            // 6. Payment Method filter
             if (selectedPaymentMethod && selectedPaymentMethod !== 'ALL') {
                 if (order.paymentMethod !== selectedPaymentMethod) return false;
             }
 
-            // 6. Product Category filter (Checks category.id or categoryId or category.name)
+            // 7. Product Category filter (Checks category.id or categoryId or category.name)
             if (filterCategoryId) {
                 const hasCat = Array.isArray(order.items) && order.items.some((i: any) =>
                     i.product?.categoryId === filterCategoryId ||
@@ -425,17 +487,25 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 if (!hasCat) return false;
             }
 
-            // 7. Store / Branch filter
+            // 8. Strict Product ID exact-match filter
+            if (filterProductId) {
+                const hasProduct = Array.isArray(order.items) && order.items.some((i: any) =>
+                    i.productId === filterProductId || i.product?.id === filterProductId
+                );
+                if (!hasProduct) return false;
+            }
+
+            // 9. Store / Branch filter
             if (selectedBranchId && order.storeId !== selectedBranchId && order.store?.id !== selectedBranchId) {
                 return false;
             }
 
-            // 8. Staff / Cashier filter
+            // 10. Staff / Cashier filter
             if (selectedCashierId && order.cashierId !== selectedCashierId && order.cashier?.id !== selectedCashierId) {
                 return false;
             }
 
-            // 9. Item Name / SKU
+            // 11. Item Name / SKU
             if (filterItemName.trim()) {
                 const term = filterItemName.trim().toLowerCase();
                 const hasItem = Array.isArray(order.items) && order.items.some((i: any) =>
@@ -446,7 +516,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 if (!hasItem) return false;
             }
 
-            // 10. Financial Amount Range
+            // 12. Financial Amount Range
             if (filterMinTotal && Number(order.totalAmount) < Number(filterMinTotal)) return false;
             if (filterMaxTotal && Number(order.totalAmount) > Number(filterMaxTotal)) return false;
 
@@ -454,8 +524,8 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         });
     }, [
         orders, searchQuery, dateMode, datePreset, singleDate, singleTimeMode, exactTime, exactTolerance,
-        customStartTime, customEndTime, rangeStartDate, rangeEndDate, selectedOrderStatus,
-        selectedPaymentStatus, selectedPaymentMethod, filterCategoryId, selectedBranchId, selectedCashierId,
+        customStartTime, customEndTime, rangeStartDate, rangeEndDate, selectedOrderStatus, selectedFulfillmentStatus,
+        selectedPaymentStatus, selectedPaymentMethod, filterCategoryId, filterProductId, selectedBranchId, selectedCashierId,
         filterItemName, filterMinTotal, filterMaxTotal, matchesOrderSearch
     ]);
 
@@ -684,20 +754,46 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             )}
                         </div>
 
-                        {/* 3. Order Status Selector */}
+                        {/* 3. Order Lifecycle Status Selector */}
                         {showFilters && (
                             <div className="relative">
                                 <select
                                     value={selectedOrderStatus}
-                                    onChange={(e) => setSelectedOrderStatus(e.target.value)}
+                                    onChange={(e) => {
+                                        setSelectedOrderStatus(e.target.value);
+                                        // Mutual exclusion: clear fulfillment status if setting order status
+                                        if (e.target.value !== 'ALL') setSelectedFulfillmentStatus('ALL');
+                                    }}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
                                 >
                                     <option value="ALL">Order Status</option>
                                     <option value="COMPLETED">Completed</option>
-                                    <option value="PENDING">Pending</option>
-                                    <option value="READY">Ready</option>
                                     <option value="CANCELLED">Cancelled</option>
                                     <option value="REFUNDED">Refunded</option>
+                                    <option value="PARTIALLY_REFUNDED">Partially Refunded</option>
+                                </select>
+                                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                        )}
+
+                        {/* 3b. Fulfillment Status Selector */}
+                        {showFilters && (
+                            <div className="relative">
+                                <select
+                                    value={selectedFulfillmentStatus}
+                                    onChange={(e) => {
+                                        setSelectedFulfillmentStatus(e.target.value);
+                                        // Mutual exclusion: clear order lifecycle status if setting fulfillment status
+                                        if (e.target.value !== 'ALL') setSelectedOrderStatus('ALL');
+                                    }}
+                                    className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
+                                >
+                                    <option value="ALL">Fulfillment Status</option>
+                                    <option value="NEW">New</option>
+                                    <option value="IN_PREPARATION">In Preparation</option>
+                                    <option value="READY_FOR_PICKUP">Ready for Pickup</option>
+                                    <option value="DELIVERED">Delivered</option>
+                                    <option value="SHIPPED">Shipped</option>
                                 </select>
                                 <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                             </div>
@@ -754,6 +850,30 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                     {availableCategories.map(category => (
                                         <option key={category.id} value={category.id}>
                                             {category.name || 'Unnamed Category'}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                            </div>
+                        )}
+
+                        {/* 6b. Strict Product Filter Dropdown */}
+                        {showFilters && (
+                            <div className="relative">
+                                <select
+                                    value={filterProductId}
+                                    onChange={(e) => {
+                                        const selectedId = e.target.value;
+                                        const selectedProduct = availableProducts.find(p => p.id === selectedId);
+                                        setFilterProductId(selectedId);
+                                        setFilterProductName(selectedProduct?.name || '');
+                                    }}
+                                    className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 max-w-[180px] truncate"
+                                >
+                                    <option value="">Filter by Product</option>
+                                    {availableProducts.map(product => (
+                                        <option key={product.id} value={product.id}>
+                                            {product.name}
                                         </option>
                                     ))}
                                 </select>
@@ -1031,6 +1151,11 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <div className="space-y-4">
                                 <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-2">
                                     <Package size={14} /> Itemized Bill
+                                    {filterProductId && (
+                                        <span className="ml-2 px-2 py-0.5 bg-amber-100 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-[10px] font-black rounded-full border border-amber-200 dark:border-amber-800 uppercase tracking-wider">
+                                            Showing filtered item only
+                                        </span>
+                                    )}
                                 </h3>
                                 <div className="border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden">
                                     <table className="w-full text-left">
@@ -1043,8 +1168,17 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-50 dark:divide-gray-800 text-sm">
-                                            {selectedOrder.items?.map((item: any) => (
-                                                <tr key={item.id} className="font-bold text-gray-900 dark:text-gray-200">
+                                            {(filterProductId
+                                                ? (selectedOrder.items?.filter((item: any) =>
+                                                    item.productId === filterProductId || item.product?.id === filterProductId
+                                                ) ?? [])
+                                                : (selectedOrder.items ?? [])
+                                            ).map((item: any) => (
+                                                <tr key={item.id} className={`font-bold text-gray-900 dark:text-gray-200 ${
+                                                    filterProductId && (item.productId === filterProductId || item.product?.id === filterProductId)
+                                                        ? 'bg-amber-50/60 dark:bg-amber-950/20'
+                                                        : ''
+                                                }`}>
                                                     <td className="px-4 py-3">{item.product?.name || `Product ID: ${item.productId.slice(0, 8)}...`}</td>
                                                     <td className="px-4 py-3 text-center">{item.quantity}</td>
                                                     <td className="px-4 py-3 text-right">₦{Number(item.price).toLocaleString()}</td>
