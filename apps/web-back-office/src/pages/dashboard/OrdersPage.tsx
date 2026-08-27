@@ -457,14 +457,45 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 }
             }
 
-            // 3. Order Lifecycle Status filter (COMPLETED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED)
+            // 3. Order Lifecycle Status filter (COMPLETED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, PENDING)
             if (selectedOrderStatus && selectedOrderStatus !== 'ALL') {
-                if (order.status !== selectedOrderStatus) return false;
+                const targetStatus = selectedOrderStatus.toUpperCase();
+                const orderStatus = (order.status || '').toUpperCase();
+                const paymentStatus = (order.paymentStatus || '').toUpperCase();
+
+                if (targetStatus === 'COMPLETED') {
+                    const isCompleted = orderStatus === 'COMPLETED' || 
+                        ((paymentStatus === 'SUCCESS' || paymentStatus === 'PAID') && orderStatus !== 'CANCELLED' && paymentStatus !== 'REFUNDED' && orderStatus !== 'REFUNDED');
+                    if (!isCompleted) return false;
+                } else if (targetStatus === 'REFUNDED') {
+                    const isRefunded = orderStatus === 'REFUNDED' || paymentStatus === 'REFUNDED' || Boolean(order.refund);
+                    if (!isRefunded) return false;
+                } else if (targetStatus === 'CANCELLED') {
+                    const isCancelled = orderStatus === 'CANCELLED' || paymentStatus === 'CANCELLED';
+                    if (!isCancelled) return false;
+                } else if (targetStatus === 'PARTIALLY_REFUNDED') {
+                    const isPartiallyRefunded = orderStatus === 'PARTIALLY_REFUNDED' || paymentStatus === 'PARTIALLY_REFUNDED';
+                    if (!isPartiallyRefunded) return false;
+                } else if (targetStatus === 'PENDING') {
+                    const isPending = orderStatus === 'PENDING' || (paymentStatus === 'PENDING' && orderStatus !== 'CANCELLED');
+                    if (!isPending) return false;
+                } else {
+                    if (orderStatus !== targetStatus && paymentStatus !== targetStatus) return false;
+                }
             }
 
             // 4. Fulfillment Status filter (NEW, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
             if (selectedFulfillmentStatus && selectedFulfillmentStatus !== 'ALL') {
-                if (order.status !== selectedFulfillmentStatus) return false;
+                const targetFulfill = selectedFulfillmentStatus.toUpperCase();
+                const orderStatus = (order.status || '').toUpperCase();
+
+                if (targetFulfill === 'READY_FOR_PICKUP' || targetFulfill === 'READY') {
+                    if (orderStatus !== 'READY' && orderStatus !== 'READY_FOR_PICKUP') return false;
+                } else if (targetFulfill === 'IN_PREPARATION' || targetFulfill === 'PREPARING') {
+                    if (orderStatus !== 'IN_PREPARATION' && orderStatus !== 'PREPARING') return false;
+                } else {
+                    if (orderStatus !== targetFulfill) return false;
+                }
             }
 
             // 5. Payment Status filter
@@ -496,8 +527,10 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             }
 
             // 9. Store / Branch filter
-            if (selectedBranchId && order.storeId !== selectedBranchId && order.store?.id !== selectedBranchId) {
-                return false;
+            if (selectedBranchId && selectedBranchId !== 'ALL' && selectedBranchId !== 'all') {
+                if (order.storeId !== selectedBranchId && order.store?.id !== selectedBranchId) {
+                    return false;
+                }
             }
 
             // 10. Staff / Cashier filter
@@ -604,6 +637,68 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         }
         return sourceList;
     }, [mainTab, draftOrders, filteredOrders, searchQuery, matchesOrderSearch]);
+
+    // ── Real-Time Dynamic Financial Summary Metrics ────────────────────────────
+    const financialSummary = useMemo(() => {
+        let totalRevenue = 0;
+        const totalCount = displayList.length;
+        let paidCount = 0;
+        let pendingCount = 0;
+        let refundedCount = 0;
+        let productUnitsSold = 0;
+        let productRevenue = 0;
+
+        const targetProdId = filterProductId?.trim();
+        const targetItemText = filterItemName?.trim()?.toLowerCase();
+
+        displayList.forEach(order => {
+            const amt = Number(order.totalAmount || 0);
+            totalRevenue += amt;
+
+            const pStatus = (order.paymentStatus || '').toUpperCase();
+            const oStatus = (order.status || '').toUpperCase();
+
+            if (pStatus === 'SUCCESS' || pStatus === 'PAID' || oStatus === 'COMPLETED') {
+                paidCount++;
+            } else if (pStatus === 'REFUNDED' || oStatus === 'REFUNDED') {
+                refundedCount++;
+            } else {
+                pendingCount++;
+            }
+
+            if (Array.isArray(order.items)) {
+                order.items.forEach((item: any) => {
+                    const matchesProduct = targetProdId ? (item.productId === targetProdId || item.product?.id === targetProdId) : false;
+                    const matchesItemText = targetItemText ? (
+                        item.product?.name?.toLowerCase().includes(targetItemText) ||
+                        item.product?.sku?.toLowerCase().includes(targetItemText) ||
+                        item.product?.barcode?.toLowerCase().includes(targetItemText)
+                    ) : false;
+
+                    if (matchesProduct || matchesItemText) {
+                        const qty = Number(item.quantity || 0);
+                        const price = Number(item.price || 0);
+                        productUnitsSold += qty;
+                        productRevenue += price * qty;
+                    }
+                });
+            }
+        });
+
+        const avgTicket = totalCount > 0 ? totalRevenue / totalCount : 0;
+
+        return {
+            totalRevenue,
+            totalCount,
+            paidCount,
+            pendingCount,
+            refundedCount,
+            avgTicket,
+            productUnitsSold,
+            productRevenue,
+            isProductFiltered: Boolean(targetProdId || targetItemText)
+        };
+    }, [displayList, filterProductId, filterItemName]);
 
     return (
         <div className="space-y-4 animate-in fade-in duration-500">
@@ -976,6 +1071,112 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                     )}
                 </div>
             )}
+
+            {/* ── Context-Aware Financial Summary Strip ── */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* 1. Total Revenue / Pipeline Value */}
+                <div className="bg-gradient-to-br from-emerald-50 to-teal-50/40 dark:from-emerald-950/20 dark:to-teal-950/10 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
+                            {mainTab === 'drafts' ? 'Draft Pipeline Value' : 'Total Revenue'}
+                        </span>
+                        <div className="w-7 h-7 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                            <CreditCard size={14} />
+                        </div>
+                    </div>
+                    <div className="mt-2">
+                        <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+                            ₦{financialSummary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
+                            <span>Avg: ₦{financialSummary.avgTicket.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}/order</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 2. Order Volume & Breakdown */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50/40 dark:from-blue-950/20 dark:to-indigo-950/10 border border-blue-100 dark:border-blue-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400">
+                            {mainTab === 'drafts' ? 'Hold Orders Count' : 'Total Order Volume'}
+                        </span>
+                        <div className="w-7 h-7 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                            <Package size={14} />
+                        </div>
+                    </div>
+                    <div className="mt-2">
+                        <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+                            {financialSummary.totalCount.toLocaleString()} {mainTab === 'drafts' ? 'Drafts' : 'Orders'}
+                        </div>
+                        <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span className="text-green-600 dark:text-green-400 font-black">{financialSummary.paidCount} Paid</span>
+                            {financialSummary.pendingCount > 0 && <span className="text-amber-600 dark:text-amber-400 font-black">· {financialSummary.pendingCount} Pending</span>}
+                            {financialSummary.refundedCount > 0 && <span className="text-red-600 dark:text-red-400 font-black">· {financialSummary.refundedCount} Refunded</span>}
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Average Order Value */}
+                <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50/40 dark:from-purple-950/20 dark:to-fuchsia-950/10 border border-purple-100 dark:border-purple-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-purple-700 dark:text-purple-400">
+                            Average Ticket Size
+                        </span>
+                        <div className="w-7 h-7 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                            <Tag size={14} />
+                        </div>
+                    </div>
+                    <div className="mt-2">
+                        <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+                            ₦{financialSummary.avgTicket.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5">
+                            <span>Per transaction average</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Product Metric (Conditional if product/item filter active) OR Branch Context Pill */}
+                {financialSummary.isProductFiltered ? (
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-50/40 dark:from-amber-950/20 dark:to-orange-950/10 border border-amber-200 dark:border-amber-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between ring-2 ring-amber-400/30 transition-all hover:shadow-md">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 truncate max-w-[130px]" title={filterProductName || filterItemName}>
+                                {filterProductName || filterItemName || 'Product Filter'}
+                            </span>
+                            <div className="w-7 h-7 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                                <Package size={14} />
+                            </div>
+                        </div>
+                        <div className="mt-2">
+                            <div className="text-xl sm:text-2xl font-black text-amber-900 dark:text-amber-200 tracking-tight">
+                                {financialSummary.productUnitsSold} Units Sold
+                            </div>
+                            <div className="text-[10px] font-bold text-amber-700 dark:text-amber-400 mt-0.5">
+                                <span>₦{financialSummary.productRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} product total</span>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-gradient-to-br from-slate-50 to-gray-50/40 dark:from-slate-800/40 dark:to-slate-800/20 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
+                                Active Context
+                            </span>
+                            <div className="w-7 h-7 rounded-xl bg-gray-200 dark:bg-slate-700 flex items-center justify-center text-gray-600 dark:text-gray-300">
+                                <Clock size={14} />
+                            </div>
+                        </div>
+                        <div className="mt-2">
+                            <div className="text-sm font-black text-gray-900 dark:text-white truncate" title={selectedBranchId ? (availableBranches.find(b => b.id === selectedBranchId)?.name || selectedBranchId) : 'All Branches'}>
+                                {selectedBranchId ? (availableBranches.find(b => b.id === selectedBranchId)?.name || 'Filtered Branch') : 'All Branches'}
+                            </div>
+                            <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5">
+                                <span>{datePreset !== 'all' ? `Preset: ${datePreset}` : 'All Date Archives'}</span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {/* ── Main Data Table ── */}
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">

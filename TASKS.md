@@ -212,3 +212,14 @@
 - `[x]` Verified zero TypeScript errors on both `web-back-office` (Vite, 1802 modules) and `demegapos-backend` (Prisma + tsc)
 - `[x]` Synchronize all commits (`f645130`) to `origin/main` and `megakash/main`
 
+## Phase 28: Multi-Branch Order Status Query Engine & Financial Metrics Strip
+- `[x]` Audit multi-branch query behavior and diagnose status filter drop on sub-branches (e.g. Abuja Branch)
+- `[x]` Fix status normalization across backend Prisma `where` clause & frontend `filteredOrders` memo (support `COMPLETED`, `REFUNDED`, `CANCELLED`, `PARTIALLY_REFUNDED`, `PENDING` multi-field evaluation)
+- `[x]` Update `refundOrder()` in `orders/service.ts` to sync both `paymentStatus: 'REFUNDED'` and `status: 'REFUNDED'`
+- `[x]` Backend (`orders/service.ts` & `routes.ts`): Implement `getOrderAggregates()` engine with `totalRevenue`, `totalCount`, `productUnitsSold`, and `productRevenue` metrics + `GET /orders/summary` endpoint
+- `[x]` Frontend (`OrdersPage.tsx`): Build and render dynamic Financial Summary Strip above the table with real-time recalculation for all filters, date ranges, branch contexts, and tabs
+- `[x]` Verify TypeScript & Vite builds across `web-back-office` (1802 modules) and `backend` (0 errors)
+- `[x]` Synchronize all commits to `origin/main` and `megakash/main`
+
+
+

@@ -143,7 +143,7 @@ export interface GetOrdersFilters {
     paymentMethods?: string[]
     orderStatuses?: string[]
     status?: string
-    fulfillmentStatus?: string   // NEW — maps to same Order.status column
+    fulfillmentStatus?: string   // Progression status (NEW, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
     cashierId?: string
     customerId?: string
     dateFrom?: string
@@ -156,46 +156,145 @@ export interface GetOrdersFilters {
     maxItemQty?: number
     minTotal?: number
     maxTotal?: number
-    productId?: string           // NEW — strict exact relational ID match on OrderItem.productId
+    productId?: string           // Strict exact relational ID match on OrderItem.productId
 }
 
-export async function getOrders(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
+export function buildOrderWhereClause(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
     const whereClause: any = {
         NOT: {
             paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
         }
     }
-    if (storeId) {
+
+    // 1. Branch & Tenant Scoping
+    const isAllBranches = !storeId || storeId === 'ALL' || storeId === 'all' || storeId.trim() === ''
+    if (!isAllBranches) {
         whereClause.storeId = storeId
+        if (tenantId) {
+            whereClause.store = { tenantId }
+        }
     } else if (tenantId) {
         whereClause.store = { tenantId }
     }
 
-    // Status Filters
-    // Priority: orderStatuses array > single status > fulfillmentStatus (all target same column)
-    if (filters?.orderStatuses && filters.orderStatuses.length > 0) {
-        whereClause.status = { in: filters.orderStatuses }
-    } else if (filters?.status && filters.status !== 'ALL') {
-        whereClause.status = filters.status
-    } else if (filters?.fulfillmentStatus && filters.fulfillmentStatus !== 'ALL') {
-        whereClause.status = filters.fulfillmentStatus.toUpperCase()
+    const andConditions: any[] = []
+
+    // 2. Order Lifecycle Status Filter (COMPLETED, REFUNDED, CANCELLED, PARTIALLY_REFUNDED, PENDING)
+    const targetStatus = (filters?.status && filters.status !== 'ALL' ? filters.status : (filters?.orderStatuses && filters.orderStatuses.length === 1 ? filters.orderStatuses[0] : undefined))?.toUpperCase()
+    
+    if (filters?.orderStatuses && filters.orderStatuses.length > 1) {
+        const statusOrClauses: any[] = []
+        for (const s of filters.orderStatuses) {
+            const st = s.toUpperCase()
+            if (st === 'COMPLETED') {
+                statusOrClauses.push(
+                    { status: { in: ['COMPLETED', 'completed'] } },
+                    { paymentStatus: { in: ['SUCCESS', 'PAID'] }, NOT: { status: { in: ['CANCELLED', 'REFUNDED'] } } }
+                )
+            } else if (st === 'REFUNDED') {
+                statusOrClauses.push(
+                    { status: { in: ['REFUNDED', 'refunded'] } },
+                    { paymentStatus: { in: ['REFUNDED', 'refunded'] } },
+                    { refund: { isNot: null } }
+                )
+            } else if (st === 'CANCELLED') {
+                statusOrClauses.push(
+                    { status: { in: ['CANCELLED', 'cancelled'] } },
+                    { paymentStatus: { in: ['CANCELLED', 'cancelled'] } }
+                )
+            } else if (st === 'PARTIALLY_REFUNDED') {
+                statusOrClauses.push(
+                    { status: { in: ['PARTIALLY_REFUNDED', 'partially_refunded'] } },
+                    { paymentStatus: { in: ['PARTIALLY_REFUNDED', 'partially_refunded'] } }
+                )
+            } else {
+                statusOrClauses.push({ status: st })
+            }
+        }
+        andConditions.push({ OR: statusOrClauses })
+    } else if (targetStatus) {
+        if (targetStatus === 'COMPLETED') {
+            andConditions.push({
+                OR: [
+                    { status: { in: ['COMPLETED', 'completed'] } },
+                    {
+                        paymentStatus: { in: ['SUCCESS', 'PAID'] },
+                        NOT: [
+                            { status: { in: ['CANCELLED', 'REFUNDED'] } },
+                            { paymentStatus: 'REFUNDED' }
+                        ]
+                    }
+                ]
+            })
+        } else if (targetStatus === 'REFUNDED') {
+            andConditions.push({
+                OR: [
+                    { status: { in: ['REFUNDED', 'refunded'] } },
+                    { paymentStatus: { in: ['REFUNDED', 'refunded'] } },
+                    { refund: { isNot: null } }
+                ]
+            })
+        } else if (targetStatus === 'CANCELLED') {
+            andConditions.push({
+                OR: [
+                    { status: { in: ['CANCELLED', 'cancelled'] } },
+                    { paymentStatus: { in: ['CANCELLED', 'cancelled'] } }
+                ]
+            })
+        } else if (targetStatus === 'PARTIALLY_REFUNDED') {
+            andConditions.push({
+                OR: [
+                    { status: { in: ['PARTIALLY_REFUNDED', 'partially_refunded'] } },
+                    { paymentStatus: { in: ['PARTIALLY_REFUNDED', 'partially_refunded'] } }
+                ]
+            })
+        } else if (targetStatus === 'PENDING') {
+            andConditions.push({
+                OR: [
+                    { status: { in: ['PENDING', 'pending'] } },
+                    {
+                        paymentStatus: { in: ['PENDING', 'pending'] },
+                        NOT: { status: { in: ['CANCELLED', 'REFUNDED'] } }
+                    }
+                ]
+            })
+        } else {
+            andConditions.push({
+                OR: [
+                    { status: { equals: targetStatus, mode: 'insensitive' } },
+                    { paymentStatus: { equals: targetStatus, mode: 'insensitive' } }
+                ]
+            })
+        }
     }
 
-    // Payment Status Filters
+    // 3. Fulfillment Status Filter (NEW, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
+    if (filters?.fulfillmentStatus && filters.fulfillmentStatus !== 'ALL') {
+        const fulfill = filters.fulfillmentStatus.toUpperCase()
+        if (fulfill === 'READY_FOR_PICKUP' || fulfill === 'READY') {
+            andConditions.push({ status: { in: ['READY', 'READY_FOR_PICKUP', 'ready', 'ready_for_pickup'] } })
+        } else if (fulfill === 'IN_PREPARATION' || fulfill === 'PREPARING') {
+            andConditions.push({ status: { in: ['IN_PREPARATION', 'PREPARING', 'in_preparation', 'preparing'] } })
+        } else {
+            andConditions.push({ status: { equals: fulfill, mode: 'insensitive' } })
+        }
+    }
+
+    // 4. Payment Status Filters
     if (filters?.paymentStatuses && filters.paymentStatuses.length > 0) {
         whereClause.paymentStatus = { in: filters.paymentStatuses }
     } else if (filters?.paymentStatus && filters.paymentStatus !== 'ALL') {
         whereClause.paymentStatus = filters.paymentStatus
     }
 
-    // Payment Method Filters
+    // 5. Payment Method Filters
     if (filters?.paymentMethods && filters.paymentMethods.length > 0) {
         whereClause.paymentMethod = { in: filters.paymentMethods as any }
     } else if (filters?.paymentMethod && filters.paymentMethod !== 'ALL') {
         whereClause.paymentMethod = filters.paymentMethod as any
     }
 
-    // Personnel & Customer
+    // 6. Personnel & Customer
     if (filters?.cashierId) {
         whereClause.cashierId = filters.cashierId
     }
@@ -204,7 +303,7 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
         whereClause.customerId = filters.customerId
     }
 
-    // Date/Time ISO Boundaries
+    // 7. Date/Time ISO Boundaries
     if (filters?.dateFrom || filters?.dateTo) {
         whereClause.createdAt = {
             ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
@@ -212,7 +311,7 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
         }
     }
 
-    // Itemized Bill & Product Attribute Filters
+    // 8. Itemized Bill & Product Attribute Filters
     const itemConditions: any = {}
     if (filters?.itemName && filters.itemName.trim()) {
         itemConditions.product = {
@@ -238,7 +337,7 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
     if (filters?.maxUnitPrice !== undefined) {
         itemConditions.price = { ...itemConditions.price, lte: filters.maxUnitPrice }
     }
-    // Strict exact-match product filter — merged into item conditions
+    // Strict exact-match product filter
     if (filters?.productId && filters.productId.trim()) {
         itemConditions.productId = filters.productId.trim()
     }
@@ -246,7 +345,7 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
         whereClause.items = { some: itemConditions }
     }
 
-    // Financial Bounds
+    // 9. Financial Bounds
     if (filters?.minTotal !== undefined || filters?.maxTotal !== undefined) {
         whereClause.totalAmount = {
             ...(filters.minTotal !== undefined ? { gte: filters.minTotal } : {}),
@@ -254,25 +353,38 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
         }
     }
 
+    // 10. Multi-vector search
     if (filters?.search && filters.search.trim()) {
         const q = filters.search.trim()
-        whereClause.OR = [
-            { id: { contains: q, mode: 'insensitive' } },
-            { customer: { name: { contains: q, mode: 'insensitive' } } },
-            { customer: { phone: { contains: q, mode: 'insensitive' } } },
-            { customer: { email: { contains: q, mode: 'insensitive' } } },
-            { customer: { id: { contains: q, mode: 'insensitive' } } },
-            { cashier: { name: { contains: q, mode: 'insensitive' } } },
-            { cashier: { email: { contains: q, mode: 'insensitive' } } },
-            { cashier: { staffCode: { contains: q, mode: 'insensitive' } } },
-            { cashier: { id: { contains: q, mode: 'insensitive' } } },
-            { store: { name: { contains: q, mode: 'insensitive' } } },
-            { store: { branchCode: { contains: q, mode: 'insensitive' } } },
-            { posDeviceType: { contains: q, mode: 'insensitive' } },
-            { items: { some: { product: { name: { contains: q, mode: 'insensitive' } } } } },
-            { items: { some: { product: { sku: { contains: q, mode: 'insensitive' } } } } }
-        ]
+        andConditions.push({
+            OR: [
+                { id: { contains: q, mode: 'insensitive' } },
+                { customer: { name: { contains: q, mode: 'insensitive' } } },
+                { customer: { phone: { contains: q, mode: 'insensitive' } } },
+                { customer: { email: { contains: q, mode: 'insensitive' } } },
+                { customer: { id: { contains: q, mode: 'insensitive' } } },
+                { cashier: { name: { contains: q, mode: 'insensitive' } } },
+                { cashier: { email: { contains: q, mode: 'insensitive' } } },
+                { cashier: { staffCode: { contains: q, mode: 'insensitive' } } },
+                { cashier: { id: { contains: q, mode: 'insensitive' } } },
+                { store: { name: { contains: q, mode: 'insensitive' } } },
+                { store: { branchCode: { contains: q, mode: 'insensitive' } } },
+                { posDeviceType: { contains: q, mode: 'insensitive' } },
+                { items: { some: { product: { name: { contains: q, mode: 'insensitive' } } } } },
+                { items: { some: { product: { sku: { contains: q, mode: 'insensitive' } } } } }
+            ]
+        })
     }
+
+    if (andConditions.length > 0) {
+        whereClause.AND = andConditions
+    }
+
+    return whereClause
+}
+
+export async function getOrders(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
+    const whereClause = buildOrderWhereClause(storeId, tenantId, filters)
 
     return prisma.order.findMany({
         where: whereClause,
@@ -298,6 +410,50 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
             createdAt: 'desc'
         }
     })
+}
+
+export async function getOrderAggregates(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
+    const whereClause = buildOrderWhereClause(storeId, tenantId, filters)
+
+    const [totalCount, totalRevenueResult] = await Promise.all([
+        prisma.order.count({ where: whereClause }),
+        prisma.order.aggregate({
+            where: whereClause,
+            _sum: {
+                totalAmount: true
+            }
+        })
+    ])
+
+    const totalRevenue = Number(totalRevenueResult._sum.totalAmount || 0)
+
+    let productUnitsSold = 0
+    let productRevenue = 0
+
+    if (filters?.productId && filters.productId.trim()) {
+        const itemAggregates = await prisma.orderItem.findMany({
+            where: {
+                productId: filters.productId.trim(),
+                order: whereClause
+            },
+            select: {
+                quantity: true,
+                price: true
+            }
+        })
+
+        for (const item of itemAggregates) {
+            productUnitsSold += item.quantity
+            productRevenue += Number(item.price) * item.quantity
+        }
+    }
+
+    return {
+        totalCount,
+        totalRevenue,
+        productUnitsSold,
+        productRevenue
+    }
 }
 
 export async function getOrderById(id: string) {
@@ -579,7 +735,7 @@ export async function refundOrder(orderId: string, authorizedBy: string, reason:
     // Mark order as REFUNDED
     await prisma.order.update({
         where: { id: orderId },
-        data: { paymentStatus: 'REFUNDED' }
+        data: { paymentStatus: 'REFUNDED', status: 'REFUNDED' }
     })
 
     // Log the refund activity & record in Refund database table

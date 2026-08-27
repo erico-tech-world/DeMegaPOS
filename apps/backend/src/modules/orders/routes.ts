@@ -4,6 +4,7 @@ import { createOrderSchema, orderResponseSchema } from './schemas.js'
 import {
     createOrder,
     getOrders,
+    getOrderAggregates,
     updateOrderStatus,
     updateOrderPaymentStatus,
     getDraftOrders,
@@ -66,13 +67,25 @@ export default async function orderRoutes(app: FastifyInstance) {
                     maxItemQty: z.string().optional(),
                     minTotal: z.string().optional(),
                     maxTotal: z.string().optional(),
+                    withMeta: z.string().optional(),
                 }),
                 response: {
-                    200: z.array(orderResponseSchema),
+                    200: z.union([
+                        z.array(orderResponseSchema),
+                        z.object({
+                            data: z.array(orderResponseSchema),
+                            meta: z.object({
+                                totalCount: z.number(),
+                                totalRevenue: z.number(),
+                                productUnitsSold: z.number(),
+                                productRevenue: z.number(),
+                            })
+                        })
+                    ]),
                 },
             },
         },
-        async (request) => {
+        async (request, reply) => {
             const query = request.query as any
             const effectiveStoreId = query.storeId || query.branchId
             const { tenantId } = request.user as any
@@ -81,7 +94,7 @@ export default async function orderRoutes(app: FastifyInstance) {
             const paymentStatuses = query.paymentStatuses ? query.paymentStatuses.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
             const paymentMethods = query.paymentMethods ? query.paymentMethods.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
 
-            return getOrders(effectiveStoreId, tenantId, {
+            const filters = {
                 search: query.search,
                 status: query.status,
                 orderStatuses,
@@ -103,7 +116,104 @@ export default async function orderRoutes(app: FastifyInstance) {
                 maxItemQty: query.maxItemQty !== undefined && query.maxItemQty !== '' ? Number(query.maxItemQty) : undefined,
                 minTotal: query.minTotal !== undefined && query.minTotal !== '' ? Number(query.minTotal) : undefined,
                 maxTotal: query.maxTotal !== undefined && query.maxTotal !== '' ? Number(query.maxTotal) : undefined,
-            })
+            }
+
+            const [orders, aggregates] = await Promise.all([
+                getOrders(effectiveStoreId, tenantId, filters),
+                getOrderAggregates(effectiveStoreId, tenantId, filters)
+            ])
+
+            reply.header('X-Total-Count', aggregates.totalCount.toString())
+            reply.header('X-Total-Revenue', aggregates.totalRevenue.toString())
+            reply.header('X-Product-Units-Sold', aggregates.productUnitsSold.toString())
+            reply.header('X-Product-Revenue', aggregates.productRevenue.toString())
+
+            if (query.withMeta === 'true') {
+                return reply.send({
+                    data: orders,
+                    meta: aggregates
+                })
+            }
+
+            return reply.send(orders)
+        }
+    )
+
+    // Aggregate metrics endpoint: GET /orders/summary
+    server.get(
+        '/summary',
+        {
+            schema: {
+                querystring: z.object({
+                    storeId: z.string().optional(),
+                    branchId: z.string().optional(),
+                    search: z.string().optional(),
+                    status: z.string().optional(),
+                    orderStatuses: z.string().optional(),
+                    fulfillmentStatus: z.string().optional(),
+                    paymentStatus: z.string().optional(),
+                    paymentStatuses: z.string().optional(),
+                    paymentMethod: z.string().optional(),
+                    paymentMethods: z.string().optional(),
+                    cashierId: z.string().optional(),
+                    customerId: z.string().optional(),
+                    dateFrom: z.string().optional(),
+                    dateTo: z.string().optional(),
+                    itemName: z.string().optional(),
+                    categoryId: z.string().optional(),
+                    productId: z.string().optional(),
+                    minUnitPrice: z.string().optional(),
+                    maxUnitPrice: z.string().optional(),
+                    minItemQty: z.string().optional(),
+                    maxItemQty: z.string().optional(),
+                    minTotal: z.string().optional(),
+                    maxTotal: z.string().optional(),
+                }),
+                response: {
+                    200: z.object({
+                        totalCount: z.number(),
+                        totalRevenue: z.number(),
+                        productUnitsSold: z.number(),
+                        productRevenue: z.number(),
+                    }),
+                },
+            },
+        },
+        async (request, reply) => {
+            const query = request.query as any
+            const effectiveStoreId = query.storeId || query.branchId
+            const { tenantId } = request.user as any
+
+            const orderStatuses = query.orderStatuses ? query.orderStatuses.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
+            const paymentStatuses = query.paymentStatuses ? query.paymentStatuses.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
+            const paymentMethods = query.paymentMethods ? query.paymentMethods.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
+
+            const filters = {
+                search: query.search,
+                status: query.status,
+                orderStatuses,
+                fulfillmentStatus: query.fulfillmentStatus,
+                paymentStatus: query.paymentStatus,
+                paymentStatuses,
+                paymentMethod: query.paymentMethod,
+                paymentMethods,
+                cashierId: query.cashierId,
+                customerId: query.customerId,
+                dateFrom: query.dateFrom,
+                dateTo: query.dateTo,
+                itemName: query.itemName,
+                categoryId: query.categoryId,
+                productId: query.productId,
+                minUnitPrice: query.minUnitPrice !== undefined && query.minUnitPrice !== '' ? Number(query.minUnitPrice) : undefined,
+                maxUnitPrice: query.maxUnitPrice !== undefined && query.maxUnitPrice !== '' ? Number(query.maxUnitPrice) : undefined,
+                minItemQty: query.minItemQty !== undefined && query.minItemQty !== '' ? Number(query.minItemQty) : undefined,
+                maxItemQty: query.maxItemQty !== undefined && query.maxItemQty !== '' ? Number(query.maxItemQty) : undefined,
+                minTotal: query.minTotal !== undefined && query.minTotal !== '' ? Number(query.minTotal) : undefined,
+                maxTotal: query.maxTotal !== undefined && query.maxTotal !== '' ? Number(query.maxTotal) : undefined,
+            }
+
+            const aggregates = await getOrderAggregates(effectiveStoreId, tenantId, filters)
+            return reply.send(aggregates)
         }
     )
 
