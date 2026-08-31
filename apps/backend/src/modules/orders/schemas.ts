@@ -11,6 +11,7 @@ export const createOrderItemSchema = z.object({
     variantId: z.string().optional(),
     quantity: z.number().int().positive(),
     price: z.number().positive(),
+    seatNumber: z.string().optional(),
 })
 
 export const createOrderSchema = z.object({

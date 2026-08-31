@@ -343,15 +343,16 @@ model StaffInvitation {
 }
 
 model OrderItem {
-  id        String          @id @default(cuid())
-  orderId   String
-  order     Order           @relation(fields: [orderId], references: [id])
-  productId String
-  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  variantId String?
-  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  quantity  Int
-  price     Decimal         @db.Decimal(10, 2)
+  id         String          @id @default(cuid())
+  orderId    String
+  order      Order           @relation(fields: [orderId], references: [id])
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId  String?
+  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity   Int
+  price      Decimal         @db.Decimal(10, 2)
+  seatNumber String?
 }
 
 model IntegrationApp {

@@ -229,5 +229,21 @@ The architecture blueprints, system specifications, and design documents are per
 - **[MODIFY] [`apps/web-back-office/src/components/POSView.tsx`](file:///c:/Users/chiam/Downloads/DeMegaPOS%20(4)/DeMegaPOS/apps/web-back-office/src/components/POSView.tsx)**:
   - Wrap total container in `flex-shrink-0 min-w-max`, remove `truncate`, and add `title={`Grand Total: ₦${total.toLocaleString()}`}`.
 
+---
 
+## Phase 30: Seat Number Logic, POS Draft Quick-Access Widget & Draft Tab Search Engine
 
+### 1. Objectives & Executive Summary
+- **Seat Number Logic**: Add optional `seatNumber` field to `OrderItem` across Prisma schema, TypeScript types, backend service/schemas, POS cart, and Order History.
+- **POS Draft Quick-Access Widget**: Render real-time widget showing top 3 most recently created drafts (`createdAt DESC`) with instant 1-click Resume and "View All Drafts" navigation.
+- **Draft Tab Search Engine**: Dedicated multi-vector search input within the Hold/Drafts tab of Order History with instant filtering across Reference ID, Customer Name, Cashier Name, Item Name, and Seat Number.
+
+### 2. Architectural Blueprint & Changes
+- **Prisma Schema (`packages/db/prisma/schema.prisma`)**: Add `seatNumber String?` to `OrderItem` model.
+- **Backend Orders Schemas (`apps/backend/src/modules/orders/schemas.ts`)**: Add `seatNumber: z.string().optional()` to `createOrderItemSchema`.
+- **Backend Orders Service (`apps/backend/src/modules/orders/service.ts`)**: Persist `seatNumber` in `createOrder`, add `seatNumber` and `items.some.seatNumber` to `buildOrderWhereClause` and `getDraftOrders`.
+- **Backend Orders Routes (`apps/backend/src/modules/orders/routes.ts`)**: Accept `seatNumber` and `q` across `GET /`, `GET /summary`, `GET /drafts`.
+- **POS Routing & State (`AppRoutes.tsx` -> `POSPage.tsx` -> `POSView.tsx`)**: Thread `draftOrders` and `fetchDraftOrders` to `POSView`.
+- **POS Cart (`POSView.tsx`)**: Support per-item non-blocking Seat Number input, draft hold/resume seat retention.
+- **POS Draft Widget (`POSView.tsx`)**: Real-time 3-item Quick Access panel with time elapsed, item/seat preview, resume action.
+- **Order History (`OrdersPage.tsx`)**: Dedicated draft search bar, seat number matching in search vectors, seat badges in item lists and detail modal.

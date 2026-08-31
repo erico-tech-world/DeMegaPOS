@@ -221,14 +221,18 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             order.terminalTransaction?.transactionRef?.toLowerCase().includes(q) ||
             order.terminalTransaction?.paymentRef?.toLowerCase().includes(q);
 
-        // 7. Order items
+        // 7. Order items (name, sku, barcode) + seat number
         const itemMatches = Array.isArray(order.items) && order.items.some((i: any) =>
             i.product?.name?.toLowerCase().includes(q) ||
             i.product?.sku?.toLowerCase().includes(q) ||
-            i.product?.barcode?.toLowerCase().includes(q)
+            i.product?.barcode?.toLowerCase().includes(q) ||
+            i.seatNumber?.toLowerCase().includes(q)
         );
 
-        return idMatches || customerMatches || cashierMatches || storeMatches || paymentMatches || terminalMatches || itemMatches;
+        // 8. Notes / reference fields
+        const notesMatches = order.notes?.toLowerCase().includes(q);
+
+        return idMatches || customerMatches || cashierMatches || storeMatches || paymentMatches || terminalMatches || itemMatches || notesMatches;
     }, []);
 
     // ── Dynamic Categories List (Displays category.name holding category.id) ────
@@ -1089,6 +1093,34 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 </div>
             )}
 
+            {/* ── Draft Tab: Dedicated Search Bar ── */}
+            {mainTab === 'drafts' && (
+                <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl">
+                    <div className="w-8 h-8 flex items-center justify-center bg-amber-100 dark:bg-amber-900/50 rounded-xl text-amber-600 dark:text-amber-400 shrink-0">
+                        <Search size={15} />
+                    </div>
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => updateFilterParams({ q: e.target.value || null })}
+                        placeholder="Search drafts by ID, customer, cashier, item name, or seat #..."
+                        className="flex-1 bg-transparent text-sm font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-amber-700/60 outline-none"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => updateFilterParams({ q: null })}
+                            className="p-1 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-500 hover:text-amber-700 transition-colors"
+                            title="Clear search"
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
+                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 shrink-0">
+                        {displayList.length} Draft{displayList.length !== 1 ? 's' : ''}
+                    </span>
+                </div>
+            )}
+
             {/* ── Context-Aware Financial Summary Strip ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {/* 1. Total Revenue / Pipeline Value */}
@@ -1256,6 +1288,16 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                             <CreditCard size={12} />
                                             {order.paymentMethod}
                                         </div>
+                                        {/* Seat number badges for drafts */}
+                                        {mainTab === 'drafts' && Array.isArray(order.items) && order.items.some((i: any) => i.seatNumber) && (
+                                            <div className="flex flex-wrap gap-1 mt-1.5">
+                                                {order.items.filter((i: any) => i.seatNumber).map((i: any) => (
+                                                    <span key={i.id} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[9px] font-black rounded-md uppercase tracking-wider">
+                                                        Seat {i.seatNumber}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
                                     </td>
                                     <td className="px-8 py-6">
                                         <div className="flex flex-wrap gap-2">
@@ -1380,6 +1422,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                         <thead className="bg-gray-50 dark:bg-slate-800 text-[10px] uppercase tracking-widest text-gray-400 dark:text-gray-500 font-black">
                                             <tr>
                                                 <th className="px-4 py-3">Item</th>
+                                                <th className="px-4 py-3">Seat #</th>
                                                 <th className="px-4 py-3 text-center">Qty</th>
                                                 <th className="px-4 py-3 text-right">Unit Price</th>
                                                 <th className="px-4 py-3 text-right">Total</th>
@@ -1397,7 +1440,16 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                                         ? 'bg-amber-50/60 dark:bg-amber-950/20'
                                                         : ''
                                                 }`}>
-                                                    <td className="px-4 py-3">{item.product?.name || `Product ID: ${item.productId.slice(0, 8)}...`}</td>
+                                                    <td className="px-4 py-3">{item.product?.name || `Product ID: ${item.productId?.slice(0, 8)}...`}</td>
+                                                    <td className="px-4 py-3">
+                                                        {item.seatNumber ? (
+                                                            <span className="inline-flex items-center px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[9px] font-black rounded-md uppercase tracking-wider">
+                                                                Seat {item.seatNumber}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-gray-300 dark:text-gray-600 text-xs">—</span>
+                                                        )}
+                                                    </td>
                                                     <td className="px-4 py-3 text-center">{item.quantity}</td>
                                                     <td className="px-4 py-3 text-right">₦{Number(item.price).toLocaleString()}</td>
                                                     <td className="px-4 py-3 text-right">₦{(Number(item.price) * item.quantity).toLocaleString()}</td>

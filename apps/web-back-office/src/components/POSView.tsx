@@ -1,14 +1,25 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History, Plus, X, Minus, Package, Clock, Loader2 } from 'lucide-react';
+import {
+    Search, ShoppingCart, Trash2, CreditCard, Banknote, Landmark, Split, History,
+    Plus, X, Minus, Package, Clock, Loader2, ChevronDown, ChevronUp, ArrowRight, RotateCcw
+} from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { API_URL, WS_URL } from '../lib/apiConfig';
 
-
-
-
-
-export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, refresh, resumedDraft }: any) => {
+export const POSView = ({
+    products,
+    customers,
+    onSubmitOrder,
+    createDraftOrder,
+    draftOrders = [],
+    fetchDraftOrders,
+    lockDraftOrder,
+    refresh,
+    resumedDraft
+}: any) => {
+    const navigate = useNavigate();
     const [cart, setCart] = useState<any[]>([]);
     const [search, setSearch] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
@@ -23,6 +34,7 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
     const [activeTab, setActiveTab] = useState<'products' | 'cart'>('products');
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isDraftGuardOpen, setIsDraftGuardOpen] = useState(false);
+    const [isDraftWidgetCollapsed, setIsDraftWidgetCollapsed] = useState(false);
     // Checkout idempotency: ref guards against re-entrant async calls; state drives button UI
     const isCheckingOutRef = useRef(false);
     const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
@@ -35,7 +47,8 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                 name: item.product?.name || item.name || 'Product',
                 price: Number(item.price),
                 quantity: item.quantity,
-                vipPrice: item.product?.vipPrice
+                vipPrice: item.product?.vipPrice,
+                seatNumber: item.seatNumber || undefined
             }));
             setCart(draftCart);
             if (resumedDraft.customer) {
@@ -89,7 +102,8 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
             items: cart.map(item => ({
                 productId: item.id,
                 quantity: item.quantity,
-                price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price)
+                price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price),
+                seatNumber: item.seatNumber || undefined
             })),
             totalAmount: total,
             paymentMethod,
@@ -368,6 +382,75 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
         setCart(prev => prev.filter(i => i.id !== productId));
     };
 
+    const updateSeatNumber = (productId: string, seat: string) => {
+        setCart(prev => prev.map(i => i.id === productId ? { ...i, seatNumber: seat.trim() || undefined } : i));
+    };
+
+    // Auto-fetch drafts on mount to ensure quick-access widget has fresh state
+    useEffect(() => {
+        if (fetchDraftOrders) {
+            fetchDraftOrders();
+        }
+    }, [fetchDraftOrders]);
+
+    // Top 3 most recently created draft orders (sorted LIFO / newest-first)
+    const recentDrafts = useMemo(() => {
+        return (draftOrders || [])
+            .slice()
+            .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 3);
+    }, [draftOrders]);
+
+    const getTimeElapsed = (dateStr: string) => {
+        if (!dateStr) return '';
+        const diffSec = Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000));
+        if (diffSec < 60) return 'Just now';
+        if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+        if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+        return `${Math.floor(diffSec / 86400)}d ago`;
+    };
+
+    const handleQuickResumeDraft = async (draftOrder: any) => {
+        if (!draftOrder) return;
+
+        const executeResume = async () => {
+            if (lockDraftOrder) {
+                try { await lockDraftOrder(draftOrder.id); } catch {}
+            }
+            const draftCart = (draftOrder.items || []).map((item: any) => ({
+                id: item.product?.id || item.productId,
+                name: item.product?.name || item.name || 'Product',
+                price: Number(item.price),
+                quantity: item.quantity,
+                vipPrice: item.product?.vipPrice,
+                seatNumber: item.seatNumber || undefined
+            }));
+            setCart(draftCart);
+            if (draftOrder.customer) {
+                setSelectedCustomer(draftOrder.customer);
+            } else {
+                setSelectedCustomer(null);
+            }
+            if (fetchDraftOrders) {
+                try { await fetchDraftOrders(); } catch {}
+            }
+            if (refresh) {
+                try { await refresh(); } catch {}
+            }
+            // Switch to cart tab on mobile if resumed
+            setActiveTab('cart');
+        };
+
+        if (cart.length > 0) {
+            setCustomConfirm({
+                message: `Resuming draft ORD-${draftOrder.id.slice(-5).toUpperCase()} will replace the items currently in your active cart. Do you wish to proceed?`,
+                onConfirm: executeResume
+            });
+        } else {
+            await executeResume();
+        }
+    };
+
     // Full-spectrum product search: evaluates Name, SKU, Barcode, Category, and Variant SKUs
     const filteredProducts = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -457,7 +540,8 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                 items: cart.map(item => ({
                     productId: item.id,
                     quantity: item.quantity,
-                    price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price)
+                    price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price),
+                    seatNumber: item.seatNumber || undefined
                 })),
                 totalAmount: total,
                 paymentMethod,
@@ -502,6 +586,7 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                         setSelectedCustomer(null);
                         setPaymentMethod('CASH');
                         if (refresh) refresh();
+                        if (fetchDraftOrders) fetchDraftOrders();
                     }
                 } else {
                     setCompletedOrder(res);
@@ -512,6 +597,7 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                     setAmountCard(0);
                     setAmountTransfer(0);
                     if (refresh) refresh();
+                    if (fetchDraftOrders) fetchDraftOrders();
                 }
             } catch (err: any) {
                 console.error('Error during checkout:', err);
@@ -542,7 +628,8 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                 items: cart.map(item => ({
                     productId: item.id,
                     quantity: item.quantity,
-                    price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price)
+                    price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price),
+                    seatNumber: item.seatNumber || undefined
                 })),
                 totalAmount: total,
                 paymentMethod,
@@ -560,9 +647,15 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
 
             setCart([]);
             setSelectedCustomer(null);
+            if (fetchDraftOrders) {
+                try { await fetchDraftOrders(); } catch {}
+            }
+            if (refresh) {
+                try { await refresh(); } catch {}
+            }
             setCustomAlert({
                 title: "Order Drafted",
-                message: "Current order has been saved as a Draft. You can resume and complete payment anytime from Order History → Hold / Drafts."
+                message: "Current order has been saved as a Draft. You can resume and complete payment anytime from the Recent Drafts widget or Order History → Hold / Drafts."
             });
         } catch (err: any) {
             console.error('Failed to save draft order:', err);
@@ -995,6 +1088,88 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                             </select>
                         </div>
                     </div>
+
+                    {/* ── Draft Quick-Access Widget (Top 3 Recent Drafts, LIFO) ── */}
+                    {recentDrafts.length > 0 && (
+                        <div className="p-4 bg-amber-500/10 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/40 space-y-2">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-5 h-5 rounded-md bg-amber-500 text-white flex items-center justify-center">
+                                        <Clock size={12} strokeWidth={3} />
+                                    </div>
+                                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-300">
+                                        Recent Drafts ({draftOrders.length})
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => navigate('/orders?tab=drafts')}
+                                        className="text-[11px] font-black text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 underline flex items-center gap-0.5"
+                                        title="Navigate to all drafts in Order History"
+                                    >
+                                        <span>View All</span>
+                                        <ArrowRight size={12} />
+                                    </button>
+                                    <button
+                                        onClick={() => setIsDraftWidgetCollapsed(prev => !prev)}
+                                        className="p-1 text-amber-700 dark:text-amber-400 hover:bg-amber-200/50 dark:hover:bg-amber-900/50 rounded-md transition-colors"
+                                        title={isDraftWidgetCollapsed ? "Expand drafts" : "Collapse drafts"}
+                                    >
+                                        {isDraftWidgetCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {!isDraftWidgetCollapsed && (
+                                <div className="space-y-2 pt-1">
+                                    {recentDrafts.map((draft: any) => {
+                                        const refId = `ORD-${draft.id.slice(-5).toUpperCase()}`;
+                                        const totalAmt = Number(draft.totalAmount || 0);
+                                        const elapsed = getTimeElapsed(draft.createdAt);
+                                        const itemsSummary = (draft.items || []).map((i: any) => {
+                                            const pName = i.product?.name || i.name || 'Item';
+                                            return i.seatNumber ? `${pName} (Seat ${i.seatNumber})` : pName;
+                                        }).join(', ');
+
+                                        return (
+                                            <div
+                                                key={draft.id}
+                                                className="bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-amber-200/70 dark:border-amber-900/40 shadow-xs flex items-center justify-between gap-2 hover:border-amber-400 dark:hover:border-amber-600 transition-all"
+                                            >
+                                                <div className="flex flex-col min-w-0 flex-1">
+                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                        <span className="font-mono text-xs font-black text-gray-900 dark:text-white">
+                                                            {refId}
+                                                        </span>
+                                                        <span className="text-xs font-black text-[#2D7A3E] dark:text-green-400">
+                                                            ₦{totalAmt.toLocaleString()}
+                                                        </span>
+                                                        {elapsed && (
+                                                            <span className="text-[9px] bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 font-bold px-1.5 py-0.2 rounded">
+                                                                {elapsed}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate mt-0.5" title={itemsSummary}>
+                                                        {itemsSummary || 'No item details'}
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    onClick={() => handleQuickResumeDraft(draft)}
+                                                    className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-2.5 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-xs transition-all flex-shrink-0"
+                                                    title={`Resume draft ${refId} into cart`}
+                                                >
+                                                    <RotateCcw size={11} strokeWidth={3} />
+                                                    <span>Resume</span>
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Cart Items List */}
@@ -1007,34 +1182,58 @@ export const POSView = ({ products, customers, onSubmitOrder, createDraftOrder, 
                     ) : cart.map(item => {
                         const itemPrice = selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price);
                         return (
-                            <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl border border-gray-100 group animate-in slide-in-from-right-2 hover:bg-white hover:shadow-md hover:border-gray-200 transition-all">
-                                <div className="flex flex-col min-w-0 flex-1">
-                                    <div className="font-black text-gray-900 text-sm truncate">{item.name}</div>
-                                    <div className="text-[10px] text-[#2D7A3E] font-black mt-0.5">₦{itemPrice.toLocaleString()}</div>
-                                </div>
+                            <div key={item.id} className="flex flex-col p-3 bg-gray-50 dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-gray-700 group animate-in slide-in-from-right-2 hover:bg-white dark:hover:bg-slate-750 hover:shadow-md hover:border-gray-200 transition-all space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                        <div className="font-black text-gray-900 dark:text-white text-sm truncate">{item.name}</div>
+                                        <div className="text-[10px] text-[#2D7A3E] dark:text-green-400 font-black mt-0.5">₦{itemPrice.toLocaleString()}</div>
+                                    </div>
 
-                                <div className="flex items-center gap-3 ml-2">
-                                    <div className="flex items-center bg-gray-200/50 rounded-xl p-1">
+                                    <div className="flex items-center gap-3 ml-2">
+                                        <div className="flex items-center bg-gray-200/50 dark:bg-slate-700 rounded-xl p-1">
+                                            <button
+                                                onClick={() => decrementQuantity(item.id)}
+                                                className="w-6 h-6 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center text-gray-600 dark:text-gray-200 hover:bg-[#2D7A3E] hover:text-white transition-colors active:scale-95 shadow-sm"
+                                            >
+                                                <Minus size={12} strokeWidth={3} />
+                                            </button>
+                                            <span className="px-2 text-xs font-black text-gray-900 dark:text-white min-w-[20px] text-center">{item.quantity}</span>
+                                            <button
+                                                onClick={() => incrementQuantity(item.id)}
+                                                className="w-6 h-6 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center text-gray-600 dark:text-gray-200 hover:bg-[#2D7A3E] hover:text-white transition-colors active:scale-95 shadow-sm"
+                                            >
+                                                <Plus size={12} strokeWidth={3} />
+                                            </button>
+                                        </div>
                                         <button
-                                            onClick={() => decrementQuantity(item.id)}
-                                            className="w-6 h-6 rounded-lg bg-white flex items-center justify-center text-gray-600 hover:bg-[#2D7A3E] hover:text-white transition-colors active:scale-95 shadow-sm"
+                                            onClick={() => removeFromCart(item.id)}
+                                            className="p-2 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl text-red-500 hover:text-red-700 transition-colors active:scale-95"
                                         >
-                                            <Minus size={12} strokeWidth={3} />
-                                        </button>
-                                        <span className="px-2 text-xs font-black text-gray-900 min-w-[20px] text-center">{item.quantity}</span>
-                                        <button
-                                            onClick={() => incrementQuantity(item.id)}
-                                            className="w-6 h-6 rounded-lg bg-white flex items-center justify-center text-gray-600 hover:bg-[#2D7A3E] hover:text-white transition-colors active:scale-95 shadow-sm"
-                                        >
-                                            <Plus size={12} strokeWidth={3} />
+                                            <Trash2 size={16} />
                                         </button>
                                     </div>
-                                    <button
-                                        onClick={() => removeFromCart(item.id)}
-                                        className="p-2 hover:bg-red-50 rounded-xl text-red-500 hover:text-red-700 transition-colors active:scale-95"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
+                                </div>
+
+                                {/* Optional Seat Number Input */}
+                                <div className="flex items-center gap-1.5 pt-1 border-t border-gray-100 dark:border-gray-700/60">
+                                    <span className="text-[9px] font-black uppercase text-gray-400 dark:text-gray-500 tracking-wider">Seat:</span>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. 1, Bar 3 (opt)"
+                                        value={item.seatNumber || ''}
+                                        onChange={(e) => updateSeatNumber(item.id, e.target.value)}
+                                        className="w-32 h-6 px-2 text-[11px] font-bold bg-white dark:bg-slate-900 border border-gray-200 dark:border-gray-700 rounded-md text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:border-[#2D7A3E] focus:ring-1 focus:ring-[#2D7A3E] transition-all"
+                                        title="Optional seat number for this item"
+                                    />
+                                    {item.seatNumber && (
+                                        <button
+                                            onClick={() => updateSeatNumber(item.id, '')}
+                                            className="text-gray-400 hover:text-red-500 p-0.5 rounded transition-colors"
+                                            title="Clear seat number"
+                                        >
+                                            <X size={12} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         );

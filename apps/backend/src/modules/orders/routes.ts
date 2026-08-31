@@ -66,6 +66,7 @@ export default async function orderRoutes(app: FastifyInstance) {
                     itemName: z.string().optional(),
                     categoryId: z.string().optional(),
                     productId: z.string().optional(),
+                    seatNumber: z.string().optional(),
                     minUnitPrice: z.string().optional(),
                     maxUnitPrice: z.string().optional(),
                     minItemQty: z.string().optional(),
@@ -122,6 +123,7 @@ export default async function orderRoutes(app: FastifyInstance) {
                 itemName: query.itemName,
                 categoryId: query.categoryId,
                 productId: query.productId,
+                seatNumber: query.seatNumber,
                 minUnitPrice: query.minUnitPrice !== undefined && query.minUnitPrice !== '' ? Number(query.minUnitPrice) : undefined,
                 maxUnitPrice: query.maxUnitPrice !== undefined && query.maxUnitPrice !== '' ? Number(query.maxUnitPrice) : undefined,
                 minItemQty: query.minItemQty !== undefined && query.minItemQty !== '' ? Number(query.minItemQty) : undefined,
@@ -181,6 +183,7 @@ export default async function orderRoutes(app: FastifyInstance) {
                     itemName: z.string().optional(),
                     categoryId: z.string().optional(),
                     productId: z.string().optional(),
+                    seatNumber: z.string().optional(),
                     minUnitPrice: z.string().optional(),
                     maxUnitPrice: z.string().optional(),
                     minItemQty: z.string().optional(),
@@ -228,6 +231,7 @@ export default async function orderRoutes(app: FastifyInstance) {
                 itemName: query.itemName,
                 categoryId: query.categoryId,
                 productId: query.productId,
+                seatNumber: query.seatNumber,
                 minUnitPrice: query.minUnitPrice !== undefined && query.minUnitPrice !== '' ? Number(query.minUnitPrice) : undefined,
                 maxUnitPrice: query.maxUnitPrice !== undefined && query.maxUnitPrice !== '' ? Number(query.maxUnitPrice) : undefined,
                 minItemQty: query.minItemQty !== undefined && query.minItemQty !== '' ? Number(query.minItemQty) : undefined,
@@ -325,6 +329,10 @@ export default async function orderRoutes(app: FastifyInstance) {
                     storeId: z.string().optional(),
                     branchId: z.string().optional(),
                     cashierId: z.string().optional(),
+                    q: z.string().optional(),
+                    search: z.string().optional(),
+                    seatNumber: z.string().optional(),
+                    limit: z.string().optional(),
                 }),
                 response: {
                     200: z.array(orderResponseSchema),
@@ -332,9 +340,21 @@ export default async function orderRoutes(app: FastifyInstance) {
             },
         },
         async (request) => {
-            const { storeId, branchId, cashierId } = request.query as { storeId?: string; branchId?: string; cashierId?: string }
+            const { storeId, branchId, cashierId, q, search, seatNumber, limit } = request.query as {
+                storeId?: string
+                branchId?: string
+                cashierId?: string
+                q?: string
+                search?: string
+                seatNumber?: string
+                limit?: string
+            }
             const effectiveStoreId = storeId || branchId
-            return getDraftOrders(effectiveStoreId, cashierId)
+            return getDraftOrders(effectiveStoreId, cashierId, {
+                q: q || search,
+                seatNumber,
+                limit: limit !== undefined && limit !== '' ? Number(limit) : undefined
+            })
         }
     )
 

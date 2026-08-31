@@ -77,6 +77,10 @@ const AppRoutes = () => {
                             customers={dashboardData.customers}
                             onSubmitOrder={dashboardData.handleCreateOrder}
                             createDraftOrder={dashboardData.createDraftOrder}
+                            draftOrders={dashboardData.draftOrders}
+                            fetchDraftOrders={dashboardData.fetchDraftOrders}
+                            cancelDraftOrder={dashboardData.cancelDraftOrder}
+                            lockDraftOrder={dashboardData.lockDraftOrder}
                             refresh={dashboardData.refresh}
                         />
                     } />

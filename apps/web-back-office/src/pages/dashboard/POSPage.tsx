@@ -6,10 +6,24 @@ interface POSPageProps {
     customers: any[];
     onSubmitOrder: (orderData: any) => Promise<any>;
     createDraftOrder?: (orderData: any) => Promise<any>;
+    draftOrders?: any[];
+    fetchDraftOrders?: () => Promise<any>;
+    cancelDraftOrder?: (id: string) => Promise<void>;
+    lockDraftOrder?: (id: string) => Promise<any>;
     refresh: () => Promise<void>;
 }
 
-const POSPage = ({ products, customers, onSubmitOrder, createDraftOrder, refresh }: POSPageProps) => {
+const POSPage = ({
+    products,
+    customers,
+    onSubmitOrder,
+    createDraftOrder,
+    draftOrders = [],
+    fetchDraftOrders,
+    cancelDraftOrder,
+    lockDraftOrder,
+    refresh
+}: POSPageProps) => {
     const location = useLocation();
     const resumedDraft = (location.state as any)?.resumedDraft;
 
@@ -20,6 +34,10 @@ const POSPage = ({ products, customers, onSubmitOrder, createDraftOrder, refresh
                 customers={customers}
                 onSubmitOrder={onSubmitOrder}
                 createDraftOrder={createDraftOrder}
+                draftOrders={draftOrders}
+                fetchDraftOrders={fetchDraftOrders}
+                cancelDraftOrder={cancelDraftOrder}
+                lockDraftOrder={lockDraftOrder}
                 refresh={refresh}
                 resumedDraft={resumedDraft}
             />

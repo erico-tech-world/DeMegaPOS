@@ -54,6 +54,7 @@ export async function createOrder(data: CreateOrderInput) {
                     variantId: item.variantId,
                     quantity: item.quantity,
                     price: item.price.toString(),
+                    seatNumber: item.seatNumber,
                 })),
             },
             splitPayments: data.splitPayments ? {
@@ -162,6 +163,7 @@ export interface GetOrdersFilters {
     minTotal?: number
     maxTotal?: number
     productId?: string           // Strict exact relational ID match on OrderItem.productId
+    seatNumber?: string          // Optional seat number filter
     branchId?: string
     storeId?: string
     page?: number
@@ -355,6 +357,10 @@ export function buildOrderWhereClause(storeId?: string, tenantId?: string, filte
     if (filters?.productId && filters.productId.trim()) {
         itemConditions.productId = filters.productId.trim()
     }
+    // Optional seat number filter
+    if (filters?.seatNumber && filters.seatNumber.trim()) {
+        itemConditions.seatNumber = { contains: filters.seatNumber.trim(), mode: 'insensitive' }
+    }
     if (Object.keys(itemConditions).length > 0) {
         whereClause.items = { some: itemConditions }
     }
@@ -385,7 +391,8 @@ export function buildOrderWhereClause(storeId?: string, tenantId?: string, filte
                 { store: { branchCode: { contains: effectiveQuery, mode: 'insensitive' } } },
                 { posDeviceType: { contains: effectiveQuery, mode: 'insensitive' } },
                 { items: { some: { product: { name: { contains: effectiveQuery, mode: 'insensitive' } } } } },
-                { items: { some: { product: { sku: { contains: effectiveQuery, mode: 'insensitive' } } } } }
+                { items: { some: { product: { sku: { contains: effectiveQuery, mode: 'insensitive' } } } } },
+                { items: { some: { seatNumber: { contains: effectiveQuery, mode: 'insensitive' } } } }
             ]
         })
     }
@@ -508,13 +515,37 @@ export async function updateOrderPaymentStatus(id: string, paymentStatus: string
     return getOrderById(id)
 }
 
-export async function getDraftOrders(storeId?: string, cashierId?: string) {
+export async function getDraftOrders(storeId?: string, cashierId?: string, filters?: { q?: string; search?: string; seatNumber?: string; limit?: number }) {
+    const andConditions: any[] = []
+    const query = (filters?.q || filters?.search)?.trim()
+    if (query) {
+        andConditions.push({
+            OR: [
+                { id: { contains: query, mode: 'insensitive' } },
+                { customer: { name: { contains: query, mode: 'insensitive' } } },
+                { customer: { phone: { contains: query, mode: 'insensitive' } } },
+                { cashier: { name: { contains: query, mode: 'insensitive' } } },
+                { cashier: { staffCode: { contains: query, mode: 'insensitive' } } },
+                { items: { some: { product: { name: { contains: query, mode: 'insensitive' } } } } },
+                { items: { some: { product: { sku: { contains: query, mode: 'insensitive' } } } } },
+                { items: { some: { seatNumber: { contains: query, mode: 'insensitive' } } } }
+            ]
+        })
+    }
+    if (filters?.seatNumber && filters.seatNumber.trim()) {
+        andConditions.push({
+            items: { some: { seatNumber: { contains: filters.seatNumber.trim(), mode: 'insensitive' } } }
+        })
+    }
+
     return prisma.order.findMany({
         where: {
             storeId: storeId ? storeId : undefined,
             cashierId: cashierId ? cashierId : undefined,
-            paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+            paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] },
+            ...(andConditions.length > 0 ? { AND: andConditions } : {})
         },
+        take: filters?.limit && filters.limit > 0 ? filters.limit : undefined,
         include: {
             items: {
                 include: {

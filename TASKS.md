@@ -228,3 +228,15 @@
 - `[x]` Verify multi-filter deep-linking, tab switching, and direct URL rehydration across new browser sessions
 - `[x]` Verify TypeScript & Vite builds across `web-back-office` (1802 modules) and `backend` (0 errors)
 - `[x]` Synchronize all commits to `origin/main` and `megakash/main`
+
+## Phase 30: Seat Number Logic, POS Draft Quick-Access Widget & Draft Tab Search Engine
+- `[x]` Update Prisma schema (`OrderItem.seatNumber String?`) and generate DB client / run migration
+- `[x]` Update backend order schemas (`schemas.ts`) and order service (`service.ts`) to persist `seatNumber` and support multi-vector seat search
+- `[x]` Update backend orders routes (`routes.ts`) for `seatNumber`, `q`, and draft search parameters
+- `[x]` Thread draft data through frontend route tree (`AppRoutes.tsx` -> `POSPage.tsx` -> `POSView.tsx`)
+- `[x]` Implement POS Cart Seat Number input and preservation across checkout, draft hold, and draft resume in `POSView.tsx`
+- `[x]` Build real-time POS Terminal Draft Quick-Access widget (top 3 drafts, LIFO/newest-first, one-click resume, view all link) in `POSView.tsx`
+- `[x]` Implement dedicated Draft Search bar, seat number matching in search vectors, and seat number badges in `OrdersPage.tsx`
+- `[x]` Verify builds across `db`, `backend`, and `web-back-office`
+- `[x]` Synchronize all commits to `origin/main` and `megakash/main`
+
