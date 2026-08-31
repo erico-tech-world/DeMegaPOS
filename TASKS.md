@@ -240,3 +240,12 @@
 - `[x]` Verify builds across `db`, `backend`, and `web-back-office`
 - `[x]` Synchronize all commits to `origin/main` and `megakash/main`
 
+## Phase 31: Data Pipeline & Database Migration Fix (Zero Records Diagnosis)
+- `[x]` Execute direct Prisma database query to diagnose query failures (`P2022: OrderItem.seatNumber column missing in database`)
+- `[x]` Execute `prisma db push` to synchronize remote database schema with `OrderItem.seatNumber` column
+- `[x]` Harden backend branch scoping in `getDraftOrders`, `getAnalyticsData`, and `getDashboardSummary` to handle `'ALL'`/empty string gracefully
+- `[x]` Verify end-to-end multi-branch queries: Global (119 sales, 5 drafts), Abuja Branch (73 sales, 1 draft), Lagos Branch (46 sales, 4 drafts)
+- `[x]` Verify clean builds across `backend` and `web-back-office` (0 errors)
+- `[x]` Synchronize all commits to `origin/main` and `megakash/main`
+
+

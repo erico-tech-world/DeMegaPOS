@@ -516,6 +516,9 @@ export async function updateOrderPaymentStatus(id: string, paymentStatus: string
 }
 
 export async function getDraftOrders(storeId?: string, cashierId?: string, filters?: { q?: string; search?: string; seatNumber?: string; limit?: number }) {
+    const isAllBranches = !storeId || storeId === 'ALL' || storeId === 'all' || storeId.trim() === ''
+    const isAllCashiers = !cashierId || cashierId === 'ALL' || cashierId === 'all' || cashierId.trim() === ''
+
     const andConditions: any[] = []
     const query = (filters?.q || filters?.search)?.trim()
     if (query) {
@@ -540,8 +543,8 @@ export async function getDraftOrders(storeId?: string, cashierId?: string, filte
 
     return prisma.order.findMany({
         where: {
-            storeId: storeId ? storeId : undefined,
-            cashierId: cashierId ? cashierId : undefined,
+            ...(!isAllBranches ? { storeId } : {}),
+            ...(!isAllCashiers ? { cashierId } : {}),
             paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] },
             ...(andConditions.length > 0 ? { AND: andConditions } : {})
         },
@@ -819,12 +822,16 @@ export async function getAnalyticsData(storeId?: string, tenantId?: string, star
     const now = endDate || new Date()
     const start = startDate || new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
+    const isAllBranches = !storeId || storeId === 'ALL' || storeId === 'all' || storeId.trim() === ''
+
     const whereClause: any = {
         paymentStatus: { in: ['SUCCESS', 'PAID'] },
         createdAt: { gte: start, lte: now }
     }
-    if (storeId) whereClause.storeId = storeId
-    if (tenantId && !storeId) {
+    if (!isAllBranches) {
+        whereClause.storeId = storeId
+        if (tenantId) whereClause.store = { tenantId }
+    } else if (tenantId) {
         whereClause.store = { tenantId }
     }
 
@@ -839,8 +846,9 @@ export async function getAnalyticsData(storeId?: string, tenantId?: string, star
 
     // Fetch refund records for net calculation
     const refundWhere: any = { createdAt: { gte: start, lte: now } }
-    if (storeId) {
+    if (!isAllBranches) {
         refundWhere.order = { storeId }
+        if (tenantId) refundWhere.order.store = { tenantId }
     } else if (tenantId) {
         refundWhere.order = { store: { tenantId } }
     }
@@ -964,16 +972,20 @@ export async function getDashboardSummary(storeId?: string, tenantId?: string, c
     // Start of Current Month
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
 
+    const isAllBranches = !storeId || storeId === 'ALL' || storeId === 'all' || storeId.trim() === ''
+    const isAllCashiers = !cashierId || cashierId === 'ALL' || cashierId === 'all' || cashierId.trim() === ''
+
     // Base query conditions for completed sales
     const baseWhere: any = {
         paymentStatus: { in: ['SUCCESS', 'PAID'] }
     }
-    if (storeId) {
+    if (!isAllBranches) {
         baseWhere.storeId = storeId
+        if (tenantId) baseWhere.store = { tenantId }
     } else if (tenantId) {
         baseWhere.store = { tenantId }
     }
-    if (cashierId) {
+    if (!isAllCashiers) {
         baseWhere.cashierId = cashierId
     }
 
@@ -990,8 +1002,9 @@ export async function getDashboardSummary(storeId?: string, tenantId?: string, c
 
     // 2. Base query conditions for refunds
     const refundWhere: any = {}
-    if (storeId) {
+    if (!isAllBranches) {
         refundWhere.order = { storeId }
+        if (tenantId) refundWhere.order.store = { tenantId }
     } else if (tenantId) {
         refundWhere.order = { store: { tenantId } }
     }
@@ -1032,12 +1045,13 @@ export async function getDashboardSummary(storeId?: string, tenantId?: string, c
             paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT', 'REFUNDED'] }
         }
     }
-    if (storeId) {
+    if (!isAllBranches) {
         activeOrdersWhere.storeId = storeId
+        if (tenantId) activeOrdersWhere.store = { tenantId }
     } else if (tenantId) {
         activeOrdersWhere.store = { tenantId }
     }
-    if (cashierId) {
+    if (!isAllCashiers) {
         activeOrdersWhere.cashierId = cashierId
     }
     const activeOrdersCount = await prisma.order.count({ where: activeOrdersWhere })
