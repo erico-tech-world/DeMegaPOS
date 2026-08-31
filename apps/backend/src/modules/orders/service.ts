@@ -136,16 +136,21 @@ export async function createOrder(data: CreateOrderInput) {
 }
 
 export interface GetOrdersFilters {
+    q?: string
     search?: string
     paymentStatus?: string
     paymentStatuses?: string[]
     paymentMethod?: string
     paymentMethods?: string[]
+    orderStatus?: string
     orderStatuses?: string[]
     status?: string
     fulfillmentStatus?: string   // Progression status (NEW, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
+    staffId?: string
     cashierId?: string
     customerId?: string
+    startDate?: string
+    endDate?: string
     dateFrom?: string
     dateTo?: string
     itemName?: string
@@ -157,6 +162,10 @@ export interface GetOrdersFilters {
     minTotal?: number
     maxTotal?: number
     productId?: string           // Strict exact relational ID match on OrderItem.productId
+    branchId?: string
+    storeId?: string
+    page?: number
+    limit?: number
 }
 
 export function buildOrderWhereClause(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
@@ -166,10 +175,11 @@ export function buildOrderWhereClause(storeId?: string, tenantId?: string, filte
         }
     }
 
-    // 1. Branch & Tenant Scoping
-    const isAllBranches = !storeId || storeId === 'ALL' || storeId === 'all' || storeId.trim() === ''
+    // 1. Branch & Tenant Scoping (Supports storeId, branchId, filters.storeId, filters.branchId)
+    const effectiveStoreId = storeId || filters?.branchId || filters?.storeId
+    const isAllBranches = !effectiveStoreId || effectiveStoreId === 'ALL' || effectiveStoreId === 'all' || effectiveStoreId.trim() === ''
     if (!isAllBranches) {
-        whereClause.storeId = storeId
+        whereClause.storeId = effectiveStoreId
         if (tenantId) {
             whereClause.store = { tenantId }
         }
@@ -180,7 +190,8 @@ export function buildOrderWhereClause(storeId?: string, tenantId?: string, filte
     const andConditions: any[] = []
 
     // 2. Order Lifecycle Status Filter (COMPLETED, REFUNDED, CANCELLED, PARTIALLY_REFUNDED, PENDING)
-    const targetStatus = (filters?.status && filters.status !== 'ALL' ? filters.status : (filters?.orderStatuses && filters.orderStatuses.length === 1 ? filters.orderStatuses[0] : undefined))?.toUpperCase()
+    const rawStatus = filters?.orderStatus || filters?.status
+    const targetStatus = (rawStatus && rawStatus !== 'ALL' ? rawStatus : (filters?.orderStatuses && filters.orderStatuses.length === 1 ? filters.orderStatuses[0] : undefined))?.toUpperCase()
     
     if (filters?.orderStatuses && filters.orderStatuses.length > 1) {
         const statusOrClauses: any[] = []
@@ -294,20 +305,23 @@ export function buildOrderWhereClause(storeId?: string, tenantId?: string, filte
         whereClause.paymentMethod = filters.paymentMethod as any
     }
 
-    // 6. Personnel & Customer
-    if (filters?.cashierId) {
-        whereClause.cashierId = filters.cashierId
+    // 6. Personnel & Customer (Supports staffId / cashierId)
+    const effectiveCashierId = filters?.staffId || filters?.cashierId
+    if (effectiveCashierId) {
+        whereClause.cashierId = effectiveCashierId
     }
 
     if (filters?.customerId) {
         whereClause.customerId = filters.customerId
     }
 
-    // 7. Date/Time ISO Boundaries
-    if (filters?.dateFrom || filters?.dateTo) {
+    // 7. Date/Time ISO Boundaries (Supports startDate / endDate / dateFrom / dateTo)
+    const effectiveDateFrom = filters?.startDate || filters?.dateFrom
+    const effectiveDateTo = filters?.endDate || filters?.dateTo
+    if (effectiveDateFrom || effectiveDateTo) {
         whereClause.createdAt = {
-            ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
-            ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {})
+            ...(effectiveDateFrom ? { gte: new Date(effectiveDateFrom) } : {}),
+            ...(effectiveDateTo ? { lte: new Date(effectiveDateTo) } : {})
         }
     }
 
@@ -353,25 +367,25 @@ export function buildOrderWhereClause(storeId?: string, tenantId?: string, filte
         }
     }
 
-    // 10. Multi-vector search
-    if (filters?.search && filters.search.trim()) {
-        const q = filters.search.trim()
+    // 10. Multi-vector search (Supports q / search)
+    const effectiveQuery = (filters?.q || filters?.search)?.trim()
+    if (effectiveQuery) {
         andConditions.push({
             OR: [
-                { id: { contains: q, mode: 'insensitive' } },
-                { customer: { name: { contains: q, mode: 'insensitive' } } },
-                { customer: { phone: { contains: q, mode: 'insensitive' } } },
-                { customer: { email: { contains: q, mode: 'insensitive' } } },
-                { customer: { id: { contains: q, mode: 'insensitive' } } },
-                { cashier: { name: { contains: q, mode: 'insensitive' } } },
-                { cashier: { email: { contains: q, mode: 'insensitive' } } },
-                { cashier: { staffCode: { contains: q, mode: 'insensitive' } } },
-                { cashier: { id: { contains: q, mode: 'insensitive' } } },
-                { store: { name: { contains: q, mode: 'insensitive' } } },
-                { store: { branchCode: { contains: q, mode: 'insensitive' } } },
-                { posDeviceType: { contains: q, mode: 'insensitive' } },
-                { items: { some: { product: { name: { contains: q, mode: 'insensitive' } } } } },
-                { items: { some: { product: { sku: { contains: q, mode: 'insensitive' } } } } }
+                { id: { contains: effectiveQuery, mode: 'insensitive' } },
+                { customer: { name: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { customer: { phone: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { customer: { email: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { customer: { id: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { cashier: { name: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { cashier: { email: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { cashier: { staffCode: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { cashier: { id: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { store: { name: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { store: { branchCode: { contains: effectiveQuery, mode: 'insensitive' } } },
+                { posDeviceType: { contains: effectiveQuery, mode: 'insensitive' } },
+                { items: { some: { product: { name: { contains: effectiveQuery, mode: 'insensitive' } } } } },
+                { items: { some: { product: { sku: { contains: effectiveQuery, mode: 'insensitive' } } } } }
             ]
         })
     }
@@ -386,8 +400,13 @@ export function buildOrderWhereClause(storeId?: string, tenantId?: string, filte
 export async function getOrders(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
     const whereClause = buildOrderWhereClause(storeId, tenantId, filters)
 
+    const take = filters?.limit && filters.limit > 0 ? filters.limit : undefined
+    const skip = filters?.page && filters.page > 0 && take ? (filters.page - 1) * take : undefined
+
     return prisma.order.findMany({
         where: whereClause,
+        take,
+        skip,
         include: {
             store: true,
             items: {

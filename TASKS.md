@@ -220,6 +220,11 @@
 - `[x]` Frontend (`OrdersPage.tsx`): Build and render dynamic Financial Summary Strip above the table with real-time recalculation for all filters, date ranges, branch contexts, and tabs
 - `[x]` Verify TypeScript & Vite builds across `web-back-office` (1802 modules) and `backend` (0 errors)
 - `[x]` Synchronize all commits to `origin/main` and `megakash/main`
-
-
-
+## Phase 29: URL Search Parameters Standardization & Multi-Parametric Backend Query Engine
+- `[x]` Refactor `apps/web-back-office/src/pages/dashboard/OrdersPage.tsx` to use `useSearchParams` as the single source of truth for all filters (`q`, `tab`, `orderStatus`, `fulfillmentStatus`, `paymentStatus`, `paymentMethod`, `productId`, `categoryId`, `branchId`, `staffId`, `dateMode`, `datePreset`, `singleDate`, `startDate`, `endDate`, `minTotal`, `maxTotal`, `itemName`)
+- `[x]` Implement atomic `updateFilterParams` helper and "Clear All Filters" reset action
+- `[x]` Wire all dropdowns, search inputs, date/time pickers, and filter chips directly to URL search params
+- `[x]` Update backend `apps/backend/src/modules/orders/routes.ts` & `service.ts` to accept canonical URL parameters additively with pagination support
+- `[x]` Verify multi-filter deep-linking, tab switching, and direct URL rehydration across new browser sessions
+- `[x]` Verify TypeScript & Vite builds across `web-back-office` (1802 modules) and `backend` (0 errors)
+- `[x]` Synchronize all commits to `origin/main` and `megakash/main`

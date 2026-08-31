@@ -4,7 +4,7 @@ import {
     ChevronDown, X, Package, Clock, Play, Trash2, RotateCcw,
     AlertTriangle, CheckCircle, Filter
 } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../../lib/apiConfig';
 
@@ -22,50 +22,50 @@ type DateMode = 'preset' | 'single' | 'range';
 type SingleTimeMode = 'fullday' | 'exact' | 'custom';
 
 const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftOrder, lockDraftOrder }: OrdersPageProps) => {
-    const [searchQuery, setSearchQuery] = useState('');
-    const [mainTab, setMainTab] = useState<'all' | 'drafts'>('all');
-    const location = useLocation();
+    const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
-    const queryParams = new URLSearchParams(location.search);
-    const highlightId = queryParams.get('id');
+    const highlightId = searchParams.get('id');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
     // ── Horizontal Filter Row Visibility (Default Visible) ─────────────────────
     const [showFilters, setShowFilters] = useState(true);
 
-    // ── Date & Time Filter State ───────────────────────────────────────────────
-    const [dateMode, setDateMode] = useState<DateMode>('preset');
-    const [datePreset, setDatePreset] = useState<string>('all'); // all, today, yesterday, week, month, last30, single_day, custom_range
-    const [singleDate, setSingleDate] = useState<string>(''); // YYYY-MM-DD
-    const [singleTimeMode, setSingleTimeMode] = useState<SingleTimeMode>('fullday');
-    const [exactTime, setExactTime] = useState<string>(''); // HH:mm
-    const [exactTolerance] = useState<number>(15); // +/- 15 min tolerance
-    const [customStartTime, setCustomStartTime] = useState<string>(''); // HH:mm
-    const [customEndTime, setCustomEndTime] = useState<string>(''); // HH:mm
-    const [rangeStartDate, setRangeStartDate] = useState<string>(''); // YYYY-MM-DD
-    const [rangeEndDate, setRangeEndDate] = useState<string>(''); // YYYY-MM-DD
+    // ── Canonical Filter State (Derived from URL searchParams as Single Source of Truth) ──
+    const searchQuery = searchParams.get('q') || searchParams.get('search') || '';
+    const mainTab = (searchParams.get('tab') === 'drafts' ? 'drafts' : 'all') as 'all' | 'drafts';
 
-    // ── Statuses & Dropdown Filters ───────────────────────────────────────────
-    // selectedOrderStatus: lifecycle statuses (COMPLETED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED)
-    // selectedFulfillmentStatus: progression statuses (NEW, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
-    // Both map to the same Order.status DB column — UI enforces mutual exclusion
-    const [selectedOrderStatus, setSelectedOrderStatus] = useState<string>('ALL');
-    const [selectedFulfillmentStatus, setSelectedFulfillmentStatus] = useState<string>('ALL');
-    const [selectedPaymentStatus, setSelectedPaymentStatus] = useState<string>('ALL');
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('ALL');
-    const [filterCategoryId, setFilterCategoryId] = useState<string>('');
-    const [selectedBranchId, setSelectedBranchId] = useState<string>('');
-    const [selectedCashierId, setSelectedCashierId] = useState<string>('');
+    // ── Statuses & Dropdown Filters ──
+    const selectedOrderStatus = (searchParams.get('orderStatus') || searchParams.get('status') || 'ALL').toUpperCase();
+    const selectedFulfillmentStatus = (searchParams.get('fulfillmentStatus') || 'ALL').toUpperCase();
+    const selectedPaymentStatus = (searchParams.get('paymentStatus') || 'ALL').toUpperCase();
+    const selectedPaymentMethod = (searchParams.get('paymentMethod') || 'ALL').toUpperCase();
+    const filterCategoryId = searchParams.get('categoryId') || '';
+    const selectedBranchId = searchParams.get('branchId') || searchParams.get('storeId') || '';
+    const selectedCashierId = searchParams.get('staffId') || searchParams.get('cashierId') || '';
 
-    // ── Strict Product Filter ──────────────────────────────────────────────────
-    const [filterProductId, setFilterProductId] = useState<string>('');
-    const [filterProductName, setFilterProductName] = useState<string>('');
+    // ── Strict Product Filter ──
+    const filterProductId = searchParams.get('productId') || '';
     const [availableProducts, setAvailableProducts] = useState<{ id: string; name: string }[]>([]);
 
-    // ── Additional Item & Financial Filters ───────────────────────────────────
-    const [filterItemName, setFilterItemName] = useState<string>('');
-    const [filterMinTotal, setFilterMinTotal] = useState<string>('');
-    const [filterMaxTotal, setFilterMaxTotal] = useState<string>('');
+    // ── Additional Item & Financial Filters ──
+    const filterItemName = searchParams.get('itemName') || '';
+    const filterMinTotal = searchParams.get('minTotal') || '';
+    const filterMaxTotal = searchParams.get('maxTotal') || '';
+
+    // ── Date & Time Filter State (Derived from URL searchParams) ──
+    const datePreset = searchParams.get('datePreset') || 'all';
+    const singleDate = searchParams.get('singleDate') || '';
+    const singleTimeMode = (searchParams.get('singleTimeMode') as SingleTimeMode) || 'fullday';
+    const exactTime = searchParams.get('exactTime') || '';
+    const exactTolerance = 15; // +/- 15 min tolerance
+    const customStartTime = searchParams.get('customStartTime') || '';
+    const customEndTime = searchParams.get('customEndTime') || '';
+    const rangeStartDate = searchParams.get('startDate') || searchParams.get('rangeStartDate') || '';
+    const rangeEndDate = searchParams.get('endDate') || searchParams.get('rangeEndDate') || '';
+
+    const dateMode: DateMode = (searchParams.get('dateMode') as DateMode) || (
+        rangeStartDate || rangeEndDate ? 'range' : singleDate ? 'single' : 'preset'
+    );
 
     // ── Categories State (Fetched from Backend API + Extracted from Orders) ────
     const [fetchedCategories, setFetchedCategories] = useState<{ id: string; name: string }[]>([]);
@@ -86,10 +86,38 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     const [refundReason, setRefundReason] = useState('');
     const [refundLoading, setRefundLoading] = useState(false);
 
-    // Auto-switch to drafts tab if query param tab=drafts
-    useEffect(() => {
-        if (queryParams.get('tab') === 'drafts') setMainTab('drafts');
-    }, [location.search]);
+    // ── Atomic URL Search Parameter Updater ────────────────────────────────────
+    const updateFilterParams = useCallback((updates: Record<string, string | null | undefined>) => {
+        setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            Object.entries(updates).forEach(([key, val]) => {
+                if (
+                    val === null ||
+                    val === undefined ||
+                    val === '' ||
+                    val === 'ALL' ||
+                    (val === 'all' && (key === 'datePreset' || key === 'tab'))
+                ) {
+                    next.delete(key);
+                } else {
+                    next.set(key, val);
+                }
+            });
+            return next;
+        }, { replace: true });
+    }, [setSearchParams]);
+
+    // ── Reset All Filters in a Single Action ───────────────────────────────────
+    const clearAllFilters = useCallback(() => {
+        setSearchParams(prev => {
+            const next = new URLSearchParams();
+            const highlight = prev.get('id');
+            if (highlight) next.set('id', highlight);
+            const tab = prev.get('tab');
+            if (tab && tab !== 'all') next.set('tab', tab);
+            return next;
+        }, { replace: true });
+    }, [setSearchParams]);
 
     // Fetch fresh orders immediately on page mount
     useEffect(() => {
@@ -139,24 +167,27 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         loadProducts();
     }, []);
 
-    // Auto-scroll to highlighted order
-    useEffect(() => {
-        if (highlightId) {
-            const el = document.getElementById(`order-${highlightId}`);
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    }, [highlightId, orders, isLoading]);
+    const filterProductName = useMemo(() => {
+        return availableProducts.find(p => p.id === filterProductId)?.name || '';
+    }, [availableProducts, filterProductId]);
 
-    // Multi-vector search matcher
+    // Auto-open detail modal if query param ?id=ORD-... matches
+    useEffect(() => {
+        if (!highlightId || !orders || orders.length === 0) return;
+        const matched = orders.find(o => o.id === highlightId || o.id?.slice(-5)?.toUpperCase() === highlightId?.toUpperCase());
+        if (matched) setSelectedOrder(matched);
+    }, [highlightId, orders]);
+
+    // ── Multi-Vector Search Predicate ──────────────────────────────────────────
     const matchesOrderSearch = useCallback((order: any, query: string) => {
-        if (!query || !query.trim()) return true;
+        if (!query.trim()) return true;
         const q = query.trim().toLowerCase();
 
-        // 1. Order ID & Reference codes
+        // 1. Order ID
         const idMatches =
             order.id?.toLowerCase().includes(q) ||
-            `ord-${order.id?.slice(-5)}`.toLowerCase().includes(q) ||
-            order.id?.slice(-8).toLowerCase().includes(q);
+            order.id?.slice(-5)?.toLowerCase().includes(q) ||
+            `ord-${order.id?.slice(-5)?.toLowerCase()}`.includes(q);
 
         // 2. Customer fields
         const customerMatches =
@@ -203,13 +234,11 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     // ── Dynamic Categories List (Displays category.name holding category.id) ────
     const availableCategories = useMemo(() => {
         const map = new Map<string, string>();
-        // Add fetched categories first
         fetchedCategories.forEach(c => {
             if (c.id) {
                 map.set(c.id, c.name || 'Unnamed Category');
             }
         });
-        // Also extract from loaded orders
         (orders || []).forEach(o => {
             (o.items || []).forEach((i: any) => {
                 const catId = i.product?.category?.id || i.product?.categoryId;
@@ -246,34 +275,14 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
     }, [orders]);
 
-    // ── Reset All Filters ──────────────────────────────────────────────────────
-    const clearAllFilters = useCallback(() => {
-        setDateMode('preset');
-        setDatePreset('all');
-        setSingleDate('');
-        setSingleTimeMode('fullday');
-        setExactTime('');
-        setCustomStartTime('');
-        setCustomEndTime('');
-        setRangeStartDate('');
-        setRangeEndDate('');
-        setSelectedOrderStatus('ALL');
-        setSelectedFulfillmentStatus('ALL');
-        setSelectedPaymentStatus('ALL');
-        setSelectedPaymentMethod('ALL');
-        setFilterCategoryId('');
-        setSelectedBranchId('');
-        setSelectedCashierId('');
-        setFilterItemName('');
-        setFilterMinTotal('');
-        setFilterMaxTotal('');
-        setFilterProductId('');
-        setFilterProductName('');
-    }, []);
-
-    // ── Active Filters Chips ───────────────────────────────────────────────────
+    // ── Active Filters Chips (Built directly from URL Search Parameters) ───────
     const activeFilterChips = useMemo(() => {
         const chips: { id: string; label: string; onRemove: () => void }[] = [];
+
+        // Search query chip
+        if (searchQuery.trim()) {
+            chips.push({ id: 'search-query', label: `Search: "${searchQuery.trim()}"`, onRemove: () => updateFilterParams({ q: null, search: null }) });
+        }
 
         // Date chip
         if (dateMode === 'preset' && datePreset !== 'all') {
@@ -284,19 +293,19 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 month: 'Date: This Month',
                 last30: 'Date: Last 30 Days'
             };
-            chips.push({ id: 'date-preset', label: labels[datePreset] || `Date: ${datePreset}`, onRemove: () => setDatePreset('all') });
+            chips.push({ id: 'date-preset', label: labels[datePreset] || `Date: ${datePreset}`, onRemove: () => updateFilterParams({ datePreset: null, dateMode: null }) });
         } else if (dateMode === 'single' && singleDate) {
             if (singleTimeMode === 'fullday') {
-                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => { setSingleDate(''); setDateMode('preset'); setDatePreset('all'); } });
+                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => updateFilterParams({ singleDate: null, datePreset: null, dateMode: null }) });
             } else if (singleTimeMode === 'exact' && exactTime) {
-                chips.push({ id: 'date-exact', label: `Exact: ${singleDate} ${exactTime} (±${exactTolerance}m)`, onRemove: () => { setSingleDate(''); setExactTime(''); setDateMode('preset'); setDatePreset('all'); } });
+                chips.push({ id: 'date-exact', label: `Exact: ${singleDate} ${exactTime} (±${exactTolerance}m)`, onRemove: () => updateFilterParams({ singleDate: null, exactTime: null, datePreset: null, dateMode: null }) });
             } else if (singleTimeMode === 'custom' && (customStartTime || customEndTime)) {
-                chips.push({ id: 'date-custom', label: `Time: ${singleDate} ${customStartTime || '00:00'}-${customEndTime || '23:59'}`, onRemove: () => { setSingleDate(''); setCustomStartTime(''); setCustomEndTime(''); setDateMode('preset'); setDatePreset('all'); } });
+                chips.push({ id: 'date-custom', label: `Time: ${singleDate} ${customStartTime || '00:00'}-${customEndTime || '23:59'}`, onRemove: () => updateFilterParams({ singleDate: null, customStartTime: null, customEndTime: null, datePreset: null, dateMode: null }) });
             } else {
-                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => { setSingleDate(''); setDateMode('preset'); setDatePreset('all'); } });
+                chips.push({ id: 'date-single', label: `Date: ${singleDate}`, onRemove: () => updateFilterParams({ singleDate: null, datePreset: null, dateMode: null }) });
             }
         } else if (dateMode === 'range' && (rangeStartDate || rangeEndDate)) {
-            chips.push({ id: 'date-range', label: `Range: ${rangeStartDate || '...'} to ${rangeEndDate || '...'}`, onRemove: () => { setRangeStartDate(''); setRangeEndDate(''); setDateMode('preset'); setDatePreset('all'); } });
+            chips.push({ id: 'date-range', label: `Range: ${rangeStartDate || '...'} to ${rangeEndDate || '...'}`, onRemove: () => updateFilterParams({ startDate: null, endDate: null, rangeStartDate: null, rangeEndDate: null, datePreset: null, dateMode: null }) });
         }
 
         // Order Lifecycle Status
@@ -306,8 +315,9 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 CANCELLED: 'Cancelled',
                 REFUNDED: 'Refunded',
                 PARTIALLY_REFUNDED: 'Partially Refunded',
+                PENDING: 'Pending'
             };
-            chips.push({ id: 'order-status', label: `Order: ${statusLabels[selectedOrderStatus] || selectedOrderStatus}`, onRemove: () => setSelectedOrderStatus('ALL') });
+            chips.push({ id: 'order-status', label: `Order: ${statusLabels[selectedOrderStatus] || selectedOrderStatus}`, onRemove: () => updateFilterParams({ orderStatus: null, status: null }) });
         }
 
         // Fulfillment Status
@@ -319,50 +329,50 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 DELIVERED: 'Delivered',
                 SHIPPED: 'Shipped',
             };
-            chips.push({ id: 'fulfillment-status', label: `Fulfillment: ${fulfillLabels[selectedFulfillmentStatus] || selectedFulfillmentStatus}`, onRemove: () => setSelectedFulfillmentStatus('ALL') });
+            chips.push({ id: 'fulfillment-status', label: `Fulfillment: ${fulfillLabels[selectedFulfillmentStatus] || selectedFulfillmentStatus}`, onRemove: () => updateFilterParams({ fulfillmentStatus: null }) });
         }
 
         // Payment Status
         if (selectedPaymentStatus && selectedPaymentStatus !== 'ALL') {
-            chips.push({ id: 'pay-status', label: `Payment: ${selectedPaymentStatus === 'SUCCESS' ? 'PAID' : selectedPaymentStatus}`, onRemove: () => setSelectedPaymentStatus('ALL') });
+            chips.push({ id: 'pay-status', label: `Payment: ${selectedPaymentStatus === 'SUCCESS' ? 'PAID' : selectedPaymentStatus}`, onRemove: () => updateFilterParams({ paymentStatus: null }) });
         }
 
         // Payment Method
         if (selectedPaymentMethod && selectedPaymentMethod !== 'ALL') {
-            chips.push({ id: 'pay-method', label: `Method: ${selectedPaymentMethod}`, onRemove: () => setSelectedPaymentMethod('ALL') });
+            chips.push({ id: 'pay-method', label: `Method: ${selectedPaymentMethod}`, onRemove: () => updateFilterParams({ paymentMethod: null }) });
         }
 
         // Category
         if (filterCategoryId) {
             const catObj = availableCategories.find(c => c.id === filterCategoryId);
-            chips.push({ id: 'category', label: `Category: ${catObj?.name || filterCategoryId}`, onRemove: () => setFilterCategoryId('') });
+            chips.push({ id: 'category', label: `Category: ${catObj?.name || filterCategoryId}`, onRemove: () => updateFilterParams({ categoryId: null }) });
         }
 
         // Strict Product Filter
         if (filterProductId) {
-            chips.push({ id: 'product-filter', label: `Product: "${filterProductName || filterProductId.slice(0, 8)}"`, onRemove: () => { setFilterProductId(''); setFilterProductName(''); } });
+            chips.push({ id: 'product-filter', label: `Product: "${filterProductName || filterProductId.slice(0, 8)}"`, onRemove: () => updateFilterParams({ productId: null }) });
         }
 
         // Branch
         if (selectedBranchId) {
             const branchObj = availableBranches.find(b => b.id === selectedBranchId);
-            chips.push({ id: 'branch', label: `Branch: ${branchObj?.name || selectedBranchId}`, onRemove: () => setSelectedBranchId('') });
+            chips.push({ id: 'branch', label: `Branch: ${branchObj?.name || selectedBranchId}`, onRemove: () => updateFilterParams({ branchId: null, storeId: null }) });
         }
 
         // Cashier
         if (selectedCashierId) {
             const cashierObj = availableCashiers.find(c => c.id === selectedCashierId);
-            chips.push({ id: 'cashier', label: `Staff: ${cashierObj?.name || selectedCashierId}`, onRemove: () => setSelectedCashierId('') });
+            chips.push({ id: 'cashier', label: `Staff: ${cashierObj?.name || selectedCashierId}`, onRemove: () => updateFilterParams({ staffId: null, cashierId: null }) });
         }
 
         // Item Name
         if (filterItemName.trim()) {
-            chips.push({ id: 'item-name', label: `Item: "${filterItemName.trim()}"`, onRemove: () => setFilterItemName('') });
+            chips.push({ id: 'item-name', label: `Item: "${filterItemName.trim()}"`, onRemove: () => updateFilterParams({ itemName: null }) });
         }
 
         // Total Amount
         if (filterMinTotal || filterMaxTotal) {
-            chips.push({ id: 'order-total', label: `Total: ₦${filterMinTotal || '0'} - ₦${filterMaxTotal || '∞'}`, onRemove: () => { setFilterMinTotal(''); setFilterMaxTotal(''); } });
+            chips.push({ id: 'order-total', label: `Total: ₦${filterMinTotal || '0'} - ₦${filterMaxTotal || '∞'}`, onRemove: () => updateFilterParams({ minTotal: null, maxTotal: null }) });
         }
 
         return chips;
@@ -378,19 +388,39 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     // Handle Date Preset Select Change
     const handleDateSelectChange = (val: string) => {
         if (val === 'single_day') {
-            setDateMode('single');
-            setDatePreset('single_day');
-            if (!singleDate) {
-                const now = new Date();
-                const dStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-                setSingleDate(dStr);
-            }
+            const now = new Date();
+            const dStr = singleDate || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            updateFilterParams({
+                dateMode: 'single',
+                datePreset: 'single_day',
+                singleDate: dStr,
+                startDate: null,
+                endDate: null,
+                rangeStartDate: null,
+                rangeEndDate: null
+            });
         } else if (val === 'custom_range') {
-            setDateMode('range');
-            setDatePreset('custom_range');
+            updateFilterParams({
+                dateMode: 'range',
+                datePreset: 'custom_range',
+                singleDate: null,
+                exactTime: null,
+                customStartTime: null,
+                customEndTime: null
+            });
         } else {
-            setDateMode('preset');
-            setDatePreset(val);
+            updateFilterParams({
+                dateMode: 'preset',
+                datePreset: val,
+                singleDate: null,
+                startDate: null,
+                endDate: null,
+                rangeStartDate: null,
+                rangeEndDate: null,
+                exactTime: null,
+                customStartTime: null,
+                customEndTime: null
+            });
         }
     };
 
@@ -713,14 +743,14 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                     {/* Main Tab Switcher */}
                     <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-2xl">
                         <button
-                            onClick={() => setMainTab('all')}
+                            onClick={() => updateFilterParams({ tab: 'all' })}
                             className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'all' ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                         >
                             <Tag size={14} />
                             All Sales ({(orders || []).length})
                         </button>
                         <button
-                            onClick={() => setMainTab('drafts')}
+                            onClick={() => updateFilterParams({ tab: 'drafts' })}
                             className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 ${mainTab === 'drafts' ? 'bg-amber-500 text-white shadow-md' : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
                         >
                             <Clock size={14} />
@@ -768,12 +798,12 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 <input
                                     type="date"
                                     value={singleDate}
-                                    onChange={(e) => setSingleDate(e.target.value)}
+                                    onChange={(e) => updateFilterParams({ singleDate: e.target.value })}
                                     className="h-10 px-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
                                 />
                                 <select
                                     value={singleTimeMode}
-                                    onChange={(e) => setSingleTimeMode(e.target.value as SingleTimeMode)}
+                                    onChange={(e) => updateFilterParams({ singleTimeMode: e.target.value })}
                                     className="h-10 px-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
                                 >
                                     <option value="fullday">Full 24h</option>
@@ -784,7 +814,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                     <input
                                         type="time"
                                         value={exactTime}
-                                        onChange={(e) => setExactTime(e.target.value)}
+                                        onChange={(e) => updateFilterParams({ exactTime: e.target.value })}
                                         className="h-10 px-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
                                     />
                                 )}
@@ -793,14 +823,14 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                         <input
                                             type="time"
                                             value={customStartTime}
-                                            onChange={(e) => setCustomStartTime(e.target.value)}
+                                            onChange={(e) => updateFilterParams({ customStartTime: e.target.value })}
                                             className="h-10 px-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
                                         />
                                         <span className="text-xs text-gray-400 font-bold">-</span>
                                         <input
                                             type="time"
                                             value={customEndTime}
-                                            onChange={(e) => setCustomEndTime(e.target.value)}
+                                            onChange={(e) => updateFilterParams({ customEndTime: e.target.value })}
                                             className="h-10 px-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none"
                                         />
                                     </div>
@@ -815,7 +845,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                     type="date"
                                     value={rangeStartDate}
                                     placeholder="Start Date"
-                                    onChange={(e) => setRangeStartDate(e.target.value)}
+                                    onChange={(e) => updateFilterParams({ startDate: e.target.value, rangeStartDate: null })}
                                     className="h-10 px-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
                                 />
                                 <span className="text-xs text-gray-400 font-bold">to</span>
@@ -823,7 +853,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                     type="date"
                                     value={rangeEndDate}
                                     placeholder="End Date"
-                                    onChange={(e) => setRangeEndDate(e.target.value)}
+                                    onChange={(e) => updateFilterParams({ endDate: e.target.value, rangeEndDate: null })}
                                     className="h-10 px-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-gray-900"
                                 />
                             </div>
@@ -837,11 +867,11 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 placeholder="Search by keyword, ID..."
                                 className="w-full h-10 pl-9 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-900 dark:text-white placeholder-gray-400 outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm transition-all"
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onChange={(e) => updateFilterParams({ q: e.target.value, search: null })}
                             />
                             {searchQuery && (
                                 <button
-                                    onClick={() => setSearchQuery('')}
+                                    onClick={() => updateFilterParams({ q: null, search: null })}
                                     className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-gray-400 hover:text-gray-600 rounded-md"
                                 >
                                     <X size={14} />
@@ -855,9 +885,12 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 <select
                                     value={selectedOrderStatus}
                                     onChange={(e) => {
-                                        setSelectedOrderStatus(e.target.value);
-                                        // Mutual exclusion: clear fulfillment status if setting order status
-                                        if (e.target.value !== 'ALL') setSelectedFulfillmentStatus('ALL');
+                                        const val = e.target.value;
+                                        updateFilterParams({
+                                            orderStatus: val,
+                                            status: null,
+                                            fulfillmentStatus: val !== 'ALL' ? null : undefined
+                                        });
                                     }}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
                                 >
@@ -877,9 +910,12 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 <select
                                     value={selectedFulfillmentStatus}
                                     onChange={(e) => {
-                                        setSelectedFulfillmentStatus(e.target.value);
-                                        // Mutual exclusion: clear order lifecycle status if setting fulfillment status
-                                        if (e.target.value !== 'ALL') setSelectedOrderStatus('ALL');
+                                        const val = e.target.value;
+                                        updateFilterParams({
+                                            fulfillmentStatus: val,
+                                            orderStatus: val !== 'ALL' ? null : undefined,
+                                            status: null
+                                        });
                                     }}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
                                 >
@@ -899,7 +935,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <div className="relative">
                                 <select
                                     value={selectedPaymentStatus}
-                                    onChange={(e) => setSelectedPaymentStatus(e.target.value)}
+                                    onChange={(e) => updateFilterParams({ paymentStatus: e.target.value })}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
                                 >
                                     <option value="ALL">Payment Status</option>
@@ -918,7 +954,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <div className="relative">
                                 <select
                                     value={selectedPaymentMethod}
-                                    onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+                                    onChange={(e) => updateFilterParams({ paymentMethod: e.target.value })}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
                                 >
                                     <option value="ALL">Payment Method</option>
@@ -938,12 +974,12 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <div className="relative">
                                 <select
                                     value={filterCategoryId}
-                                    onChange={(e) => setFilterCategoryId(e.target.value)}
+                                    onChange={(e) => updateFilterParams({ categoryId: e.target.value })}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 max-w-[160px] truncate"
                                 >
                                     <option value="">Product Category</option>
                                     {availableCategories.map(category => (
-                                        <option key={category.id} value={category.id}>
+                                         <option key={category.id} value={category.id}>
                                             {category.name || 'Unnamed Category'}
                                         </option>
                                     ))}
@@ -957,12 +993,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <div className="relative">
                                 <select
                                     value={filterProductId}
-                                    onChange={(e) => {
-                                        const selectedId = e.target.value;
-                                        const selectedProduct = availableProducts.find(p => p.id === selectedId);
-                                        setFilterProductId(selectedId);
-                                        setFilterProductName(selectedProduct?.name || '');
-                                    }}
+                                    onChange={(e) => updateFilterParams({ productId: e.target.value })}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 max-w-[180px] truncate"
                                 >
                                     <option value="">Filter by Product</option>
@@ -981,7 +1012,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <div className="relative">
                                 <select
                                     value={selectedBranchId}
-                                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                                    onChange={(e) => updateFilterParams({ branchId: e.target.value, storeId: null })}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 max-w-[150px] truncate"
                                 >
                                     <option value="">All Branches</option>
@@ -998,7 +1029,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <div className="relative">
                                 <select
                                     value={selectedCashierId}
-                                    onChange={(e) => setSelectedCashierId(e.target.value)}
+                                    onChange={(e) => updateFilterParams({ staffId: e.target.value, cashierId: null })}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 max-w-[140px] truncate"
                                 >
                                     <option value="">All Staff</option>
