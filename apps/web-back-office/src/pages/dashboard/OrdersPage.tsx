@@ -884,14 +884,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <div className="relative">
                                 <select
                                     value={selectedOrderStatus}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        updateFilterParams({
-                                            orderStatus: val,
-                                            status: null,
-                                            fulfillmentStatus: val !== 'ALL' ? null : undefined
-                                        });
-                                    }}
+                                    onChange={(e) => updateFilterParams({ orderStatus: e.target.value, status: null })}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
                                 >
                                     <option value="ALL">Order Status</option>
@@ -909,14 +902,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <div className="relative">
                                 <select
                                     value={selectedFulfillmentStatus}
-                                    onChange={(e) => {
-                                        const val = e.target.value;
-                                        updateFilterParams({
-                                            fulfillmentStatus: val,
-                                            orderStatus: val !== 'ALL' ? null : undefined,
-                                            status: null
-                                        });
-                                    }}
+                                    onChange={(e) => updateFilterParams({ fulfillmentStatus: e.target.value })}
                                     className="h-10 pl-3 pr-8 bg-white dark:bg-slate-800 border border-gray-200 dark:border-gray-700 rounded-xl font-bold text-xs text-gray-900 dark:text-white outline-none focus:border-gray-900 dark:focus:border-gray-400 shadow-sm appearance-none cursor-pointer hover:border-gray-300 dark:hover:border-gray-600"
                                 >
                                     <option value="ALL">Fulfillment Status</option>
