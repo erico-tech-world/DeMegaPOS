@@ -35,6 +35,7 @@ export const POSView = ({
     const [isSavingDraft, setIsSavingDraft] = useState(false);
     const [isDraftGuardOpen, setIsDraftGuardOpen] = useState(false);
     const [isDraftWidgetCollapsed, setIsDraftWidgetCollapsed] = useState(false);
+    const [activeDraftId, setActiveDraftId] = useState<string | null>(resumedDraft?.id || null);
     // Checkout idempotency: ref guards against re-entrant async calls; state drives button UI
     const isCheckingOutRef = useRef(false);
     const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
@@ -53,6 +54,9 @@ export const POSView = ({
             setCart(draftCart);
             if (resumedDraft.customer) {
                 setSelectedCustomer(resumedDraft.customer);
+            }
+            if (resumedDraft.id) {
+                setActiveDraftId(resumedDraft.id);
             }
         }
     }, [resumedDraft]);
@@ -99,6 +103,7 @@ export const POSView = ({
         }
 
         const orderData = {
+            draftId: activeDraftId || undefined,
             items: cart.map(item => ({
                 productId: item.id,
                 quantity: item.quantity,
@@ -176,6 +181,7 @@ export const POSView = ({
             setIsMonnifyMappingModalOpen(false);
             setCompletedOrder(mapRes.data.order || mapRes.data);
             setCreatedPendingOrder(null);
+            setActiveDraftId(null);
             setCart([]);
             setSelectedCustomer(null);
             setPaymentMethod('CASH');
@@ -183,6 +189,7 @@ export const POSView = ({
             setAmountCard(0);
             setAmountTransfer(0);
             if (refresh) refresh();
+            if (fetchDraftOrders) fetchDraftOrders();
         } catch (err: any) {
             console.error('Failed to map terminal transaction:', err);
             setCustomAlert({
@@ -219,6 +226,7 @@ export const POSView = ({
             setIsManualPosModalOpen(false);
             setPosDeviceTypeInput('');
             setCompletedOrder(res.data);
+            setActiveDraftId(null);
             setCart([]);
             setSelectedCustomer(null);
             setPaymentMethod('CASH');
@@ -226,6 +234,7 @@ export const POSView = ({
             setAmountCard(0);
             setAmountTransfer(0);
             if (refresh) refresh();
+            if (fetchDraftOrders) fetchDraftOrders();
         } catch (err: any) {
             console.error('Error completing manual payment:', err);
             setCustomAlert({
@@ -275,6 +284,7 @@ export const POSView = ({
                                 console.log('PAYMENT_SUCCESS match found! Resolving terminal standby.');
                                 setIsWaitingForTerminal(false);
                                 setCompletedOrder(message.payload);
+                                setActiveDraftId(null);
                                 setCart([]);
                                 setSelectedCustomer(null);
                                 setPaymentMethod('CASH');
@@ -283,6 +293,7 @@ export const POSView = ({
                                 setAmountTransfer(0);
                                 setPendingTerminalOrderId(null);
                                 if (refresh) refresh();
+                                if (fetchDraftOrders) fetchDraftOrders();
                             }
                         }
                     } catch (err) {
@@ -426,6 +437,7 @@ export const POSView = ({
                 seatNumber: item.seatNumber || undefined
             }));
             setCart(draftCart);
+            setActiveDraftId(draftOrder.id);
             if (draftOrder.customer) {
                 setSelectedCustomer(draftOrder.customer);
             } else {
@@ -537,6 +549,7 @@ export const POSView = ({
             }
 
             const orderData = {
+                draftId: activeDraftId || undefined,
                 items: cart.map(item => ({
                     productId: item.id,
                     quantity: item.quantity,
@@ -582,6 +595,7 @@ export const POSView = ({
                             paymentStatus: 'SUCCESS'
                         });
                         setCompletedOrder(bypassRes.data);
+                        setActiveDraftId(null);
                         setCart([]);
                         setSelectedCustomer(null);
                         setPaymentMethod('CASH');
@@ -590,6 +604,7 @@ export const POSView = ({
                     }
                 } else {
                     setCompletedOrder(res);
+                    setActiveDraftId(null);
                     setCart([]);
                     setSelectedCustomer(null);
                     setPaymentMethod('CASH');
@@ -647,6 +662,7 @@ export const POSView = ({
 
             setCart([]);
             setSelectedCustomer(null);
+            setActiveDraftId(null);
             if (fetchDraftOrders) {
                 try { await fetchDraftOrders(); } catch {}
             }
@@ -1059,7 +1075,14 @@ export const POSView = ({
                             </div>
                             Active Cart
                         </h3>
-                        <button onClick={() => cart.length > 0 ? setIsDraftGuardOpen(true) : setCart([])} className="p-2 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl text-red-500 transition-colors" title="Clear/Draft Cart">
+                        <button onClick={() => {
+                            if (cart.length > 0) {
+                                setIsDraftGuardOpen(true);
+                            } else {
+                                setCart([]);
+                                setActiveDraftId(null);
+                            }
+                        }} className="p-2 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl text-red-500 transition-colors" title="Clear/Draft Cart">
                             <Trash2 size={18} />
                         </button>
                     </div>
@@ -1364,6 +1387,7 @@ export const POSView = ({
                                     setIsDraftGuardOpen(false);
                                     setCart([]);
                                     setSelectedCustomer(null);
+                                    setActiveDraftId(null);
                                 }}
                                 className="w-full bg-red-50 text-red-600 border border-red-100 py-3 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-red-100 transition-all flex items-center justify-center gap-2"
                             >

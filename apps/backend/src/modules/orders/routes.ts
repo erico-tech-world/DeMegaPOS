@@ -7,6 +7,7 @@ import {
     getOrderAggregates,
     updateOrderStatus,
     updateOrderPaymentStatus,
+    payOrder,
     getDraftOrders,
     lockDraftOrder,
     cancelDraftOrder,
@@ -317,6 +318,32 @@ export default async function orderRoutes(app: FastifyInstance) {
                 }
             }
             return updatedOrder
+        }
+    )
+
+    server.put(
+        '/:id/pay',
+        {
+            schema: {
+                params: z.object({
+                    id: z.string(),
+                }),
+                body: z.object({
+                    paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'WALLET', 'SPLIT', 'CREDIT']).optional(),
+                    paymentStatus: z.string().optional(),
+                    status: z.string().optional(),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { id } = request.params as { id: string }
+            const body = request.body as any
+            const updatedOrder = await payOrder(id, body)
+            if (updatedOrder) {
+                app.broadcast('ORDER_UPDATED', updatedOrder)
+                app.broadcast('PAYMENT_SUCCESS', updatedOrder)
+            }
+            return reply.send(updatedOrder)
         }
     )
 

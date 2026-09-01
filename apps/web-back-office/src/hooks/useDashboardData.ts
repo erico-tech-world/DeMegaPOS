@@ -272,13 +272,20 @@ export const useDashboardData = () => {
     const handleCreateOrder = async (orderData: any) => {
         try {
             const res = await axios.post(`${API_URL}/orders`, orderData);
-            // Optimistically prepend new order into local state for instant 0ms UI update
+            // Optimistically prepend new/completed order into local state for instant 0ms UI update
             if (res.data && res.data.id) {
                 setOrders(prev => {
                     const exists = prev.some(o => o.id === res.data.id);
-                    if (exists) return prev;
+                    if (exists) {
+                        return prev.map(o => o.id === res.data.id ? res.data : o);
+                    }
                     return [res.data, ...prev];
                 });
+            }
+            // If checking out a draft order, optimistically remove it from draftOrders
+            const completedDraftId = orderData.draftId || (orderData.paymentStatus !== 'DRAFT' && res.data?.id);
+            if (completedDraftId && orderData.paymentStatus !== 'DRAFT') {
+                setDraftOrders(prev => prev.filter(d => d.id !== completedDraftId && d.id !== orderData.draftId));
             }
             await fetchData();
             return res.data;

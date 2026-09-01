@@ -39,37 +39,119 @@ export async function createOrder(data: CreateOrderInput) {
         }
     }
 
-    // ── 2. Create the order with items and split payments ─────────────────────
-    const order = await prisma.order.create({
-        data: {
-            storeId: finalStoreId,
-            cashierId: data.cashierId,
-            customerId: data.customerId,
-            totalAmount: data.totalAmount.toString(),
-            paymentMethod: data.paymentMethod,
-            paymentStatus: data.paymentStatus || 'PENDING',
-            items: {
-                create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
-                    productId: item.productId,
-                    variantId: item.variantId,
-                    quantity: item.quantity,
-                    price: item.price.toString(),
-                    seatNumber: item.seatNumber,
-                })),
+    // ── 2. Create or Update (if completing an existing draft order) ─────────
+    let existingDraft = data.draftId ? await prisma.order.findUnique({
+        where: { id: data.draftId },
+        include: { items: true, splitPayments: true }
+    }) : null
+
+    let order: any
+
+    if (existingDraft) {
+        // Delete old items & split payments to replace with final cart state
+        await prisma.orderItem.deleteMany({ where: { orderId: existingDraft.id } })
+        await prisma.splitPayment.deleteMany({ where: { orderId: existingDraft.id } })
+
+        order = await prisma.order.update({
+            where: { id: existingDraft.id },
+            data: {
+                storeId: finalStoreId,
+                cashierId: data.cashierId,
+                customerId: data.customerId,
+                totalAmount: data.totalAmount.toString(),
+                paymentMethod: data.paymentMethod,
+                paymentStatus: data.paymentStatus || 'PAID',
+                status: data.paymentStatus === 'DRAFT' ? 'DRAFT' : 'COMPLETED',
+                items: {
+                    create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
+                        productId: item.productId,
+                        variantId: item.variantId,
+                        quantity: item.quantity,
+                        price: item.price.toString(),
+                        seatNumber: item.seatNumber,
+                    })),
+                },
+                splitPayments: data.splitPayments ? {
+                    create: data.splitPayments.map((sp: z.infer<typeof splitPaymentSchema>) => ({
+                        method: sp.method,
+                        amount: sp.amount.toString(),
+                        reference: sp.reference
+                    }))
+                } : undefined
             },
-            splitPayments: data.splitPayments ? {
-                create: data.splitPayments.map((sp: z.infer<typeof splitPaymentSchema>) => ({
-                    method: sp.method,
-                    amount: sp.amount.toString(),
-                    reference: sp.reference
-                }))
-            } : undefined
-        },
-        include: {
-            items: true,
-            splitPayments: true
-        },
-    })
+            include: {
+                items: {
+                    include: {
+                        product: true
+                    }
+                },
+                customer: true,
+                cashier: true,
+                store: true,
+                splitPayments: true
+            }
+        })
+
+        // Adjust stock difference if quantities changed
+        const oldItemMap = new Map<string, number>()
+        for (const item of existingDraft.items) {
+            oldItemMap.set(item.productId, (oldItemMap.get(item.productId) || 0) + item.quantity)
+        }
+        for (const item of data.items) {
+            const oldQty = oldItemMap.get(item.productId) || 0
+            const diff = item.quantity - oldQty
+            if (diff > 0) {
+                await prisma.product.update({
+                    where: { id: item.productId },
+                    data: { stock: { decrement: diff } }
+                }).catch(() => {})
+            } else if (diff < 0) {
+                await prisma.product.update({
+                    where: { id: item.productId },
+                    data: { stock: { increment: Math.abs(diff) } }
+                }).catch(() => {})
+            }
+            oldItemMap.delete(item.productId)
+        }
+        for (const [prodId, removedQty] of oldItemMap.entries()) {
+            await prisma.product.update({
+                where: { id: prodId },
+                data: { stock: { increment: removedQty } }
+            }).catch(() => {})
+        }
+    } else {
+        order = await prisma.order.create({
+            data: {
+                storeId: finalStoreId,
+                cashierId: data.cashierId,
+                customerId: data.customerId,
+                totalAmount: data.totalAmount.toString(),
+                paymentMethod: data.paymentMethod,
+                paymentStatus: data.paymentStatus || 'PENDING',
+                status: data.paymentStatus === 'DRAFT' ? 'DRAFT' : 'COMPLETED',
+                items: {
+                    create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
+                        productId: item.productId,
+                        variantId: item.variantId,
+                        quantity: item.quantity,
+                        price: item.price.toString(),
+                        seatNumber: item.seatNumber,
+                    })),
+                },
+                splitPayments: data.splitPayments ? {
+                    create: data.splitPayments.map((sp: z.infer<typeof splitPaymentSchema>) => ({
+                        method: sp.method,
+                        amount: sp.amount.toString(),
+                        reference: sp.reference
+                    }))
+                } : undefined
+            },
+            include: {
+                items: true,
+                splitPayments: true
+            },
+        })
+    }
 
     // ── 3. Handle Credit Sales ────────────────────────────────────────────────
     if (data.paymentMethod === 'CREDIT' && data.customerId) {
@@ -510,10 +592,39 @@ export async function updateOrderStatus(id: string, status: string) {
 export async function updateOrderPaymentStatus(id: string, paymentStatus: string) {
     await prisma.order.update({
         where: { id },
-        data: { paymentStatus },
+        data: { 
+            paymentStatus,
+            status: paymentStatus === 'SUCCESS' || paymentStatus === 'PAID' ? 'COMPLETED' : undefined
+        },
     })
     return getOrderById(id)
 }
+
+export async function payOrder(id: string, data: { paymentMethod?: any; paymentStatus?: string; status?: string; splitPayments?: any[] }) {
+    if (data.splitPayments && data.splitPayments.length > 0) {
+        await prisma.splitPayment.deleteMany({ where: { orderId: id } })
+        await prisma.splitPayment.createMany({
+            data: data.splitPayments.map(sp => ({
+                orderId: id,
+                method: sp.method,
+                amount: sp.amount.toString(),
+                reference: sp.reference
+            }))
+        })
+    }
+
+    await prisma.order.update({
+        where: { id },
+        data: {
+            paymentStatus: data.paymentStatus || 'PAID',
+            status: data.status || 'COMPLETED',
+            paymentMethod: data.paymentMethod || undefined
+        }
+    })
+
+    return getOrderById(id)
+}
+
 
 export async function getDraftOrders(storeId?: string, cashierId?: string, filters?: { q?: string; search?: string; seatNumber?: string; limit?: number }) {
     const isAllBranches = !storeId || storeId === 'ALL' || storeId === 'all' || storeId.trim() === ''

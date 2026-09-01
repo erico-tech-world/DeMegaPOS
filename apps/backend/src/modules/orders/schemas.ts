@@ -15,6 +15,7 @@ export const createOrderItemSchema = z.object({
 })
 
 export const createOrderSchema = z.object({
+    draftId: z.string().optional(),
     storeId: z.string(),
     cashierId: z.string().optional(),
     customerId: z.string().optional(),

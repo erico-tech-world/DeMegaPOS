@@ -719,6 +719,17 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             }
         });
 
+        // When in drafts tab, dynamically compute paid vs pending counts across branch context
+        if (mainTab === 'drafts') {
+            const paidFromOrders = filteredOrders.filter(o => {
+                const p = (o.paymentStatus || '').toUpperCase();
+                const s = (o.status || '').toUpperCase();
+                return p === 'SUCCESS' || p === 'PAID' || s === 'COMPLETED';
+            }).length;
+            paidCount = paidFromOrders;
+            pendingCount = displayList.length;
+        }
+
         const avgTicket = totalCount > 0 ? totalRevenue / totalCount : 0;
 
         return {
@@ -732,7 +743,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             productRevenue,
             isProductFiltered: Boolean(targetProdId || targetItemText)
         };
-    }, [displayList, filterProductId, filterItemName]);
+    }, [mainTab, displayList, filteredOrders, filterProductId, filterItemName]);
 
     return (
         <div className="space-y-4 animate-in fade-in duration-500">
