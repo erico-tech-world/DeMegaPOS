@@ -1097,10 +1097,18 @@ export const POSView = ({
                                     <div className="w-5 h-5 rounded-md bg-amber-500 text-white flex items-center justify-center">
                                         <Clock size={12} strokeWidth={3} />
                                     </div>
-                                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-300">
-                                        Recent Drafts ({draftOrders.length})
-                                    </span>
+                                    <div className="flex flex-col leading-none">
+                                        <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-300">
+                                            Recent Drafts ({draftOrders.length})
+                                        </span>
+                                        {draftOrders.length > 3 && (
+                                            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                                                Showing {recentDrafts.length} most recent
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
+
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => navigate('/orders?tab=drafts')}

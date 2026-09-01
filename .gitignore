@@ -56,4 +56,30 @@ seed_output.txt
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Agent, Skill, Task & Implementation Planning Artifacts
+[Tt][Aa][Ss][Kk]*.md
+*[Tt][Aa][Ss][Kk]*.md
+[Ii][Mm][Pp][Ll][Ee][Mm][Ee][Nn][Tt][Aa][Tt][Ii][Oo][Nn]*.md
+*[Ii][Mm][Pp][Ll][Ee][Mm][Ee][Nn][Tt][Aa][Tt][Ii][Oo][Nn]*.md
+[Ss][Kk][Ii][Ll][Ll]*.md
+*[Ss][Kk][Ii][Ll][Ll]*.md
+TASK.md
+TASKS.md
+task.md
+tasks.md
+SKILL.md
+SKILLS.md
+skill.md
+skills.md
+IMPLEMENTATION.md
+IMPLEMENTATION_PLAN.md
+implementation.md
+implementation_plan.md
+
+# Antigravity Skills directory and all its contents
 antigravity-skills/
+antigravity-skills/**
+**/antigravity-skills/**
+.agents/
+.agents/**

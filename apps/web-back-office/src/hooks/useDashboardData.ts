@@ -98,7 +98,10 @@ export const useDashboardData = () => {
     const fetchDraftOrders = useCallback(async () => {
         if (!token) return [];
         try {
-            const res = await axios.get(`${API_URL}/orders/drafts`);
+            const storeId = localStorage.getItem('selectedBranchId') || undefined;
+            const res = await axios.get(`${API_URL}/orders/drafts`, {
+                params: storeId ? { storeId } : undefined
+            });
             setDraftOrders(res.data || []);
             return res.data;
         } catch (err) {
@@ -106,6 +109,7 @@ export const useDashboardData = () => {
             return [];
         }
     }, [token]);
+
 
     const createDraftOrder = async (orderData: any) => {
         try {
