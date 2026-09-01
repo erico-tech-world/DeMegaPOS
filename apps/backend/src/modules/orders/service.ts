@@ -717,6 +717,58 @@ export async function cancelDraftOrder(id: string) {
     })
 }
 
+export async function cancelAllDraftOrders(storeId?: string, cashierId?: string) {
+    const isAllBranches = !storeId || storeId === 'ALL' || storeId === 'all' || storeId.trim() === ''
+    const isAllCashiers = !cashierId || cashierId === 'ALL' || cashierId === 'all' || cashierId.trim() === ''
+
+    const drafts = await prisma.order.findMany({
+        where: {
+            ...(!isAllBranches ? { storeId } : {}),
+            ...(!isAllCashiers ? { cashierId } : {}),
+            paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+        },
+        include: { items: true }
+    })
+
+    if (drafts.length === 0) {
+        return { success: true, count: 0 }
+    }
+
+    const orderIds = drafts.map(d => d.id)
+
+    // 1. Restore product stock in aggregate
+    const stockRestorations = new Map<string, number>()
+    for (const draft of drafts) {
+        if (draft.items && draft.items.length > 0) {
+            for (const item of draft.items) {
+                if (item.productId) {
+                    stockRestorations.set(
+                        item.productId,
+                        (stockRestorations.get(item.productId) || 0) + item.quantity
+                    )
+                }
+            }
+        }
+    }
+
+    for (const [productId, qty] of stockRestorations.entries()) {
+        await prisma.product.update({
+            where: { id: productId },
+            data: { stock: { increment: qty } }
+        }).catch(() => {})
+    }
+
+    // 2. Delete relational items
+    await prisma.orderItem.deleteMany({ where: { orderId: { in: orderIds } } })
+    await prisma.splitPayment.deleteMany({ where: { orderId: { in: orderIds } } })
+    await prisma.terminalTransaction.deleteMany({ where: { orderId: { in: orderIds } } }).catch(() => {})
+
+    // 3. Delete orders
+    await prisma.order.deleteMany({ where: { id: { in: orderIds } } })
+
+    return { success: true, count: orderIds.length }
+}
+
 export async function sendDigitalReceiptEmail(
     orderId: string,
     recipientEmail: string,

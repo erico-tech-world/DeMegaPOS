@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
     BarChart2, TrendingUp, DollarSign, ShoppingBag,
     Clock, AlertTriangle, Calendar, ChevronDown,
-    Award, ArrowUpRight, ArrowDownRight, Activity
+    Award, ArrowUpRight, ArrowDownRight, Activity, PieChart
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { API_URL } from '../../lib/apiConfig';
@@ -127,6 +128,340 @@ const RevenueBarChart = ({ dailyRevenue }: { dailyRevenue: any[] }) => {
     );
 };
 
+// ─── Revenue Line Chart ──────────────────────────────────────────────────────
+const RevenueLineChart = ({ dailyRevenue }: { dailyRevenue: any[] }) => {
+    const [tooltip, setTooltip] = useState<{ x: number; y: number; revenue: number; date: string } | null>(null);
+    const maxRevenue = dailyRevenue.reduce((m, d) => Math.max(m, d.revenue), 0) || 1;
+    const CHART_HEIGHT = 200;
+    const itemWidth = 36;
+    const chartWidth = Math.max(dailyRevenue.length * itemWidth, 500);
+
+    const points = useMemo(() => {
+        return dailyRevenue.map((d, i) => {
+            const x = (i + 0.5) * (chartWidth / dailyRevenue.length);
+            const y = CHART_HEIGHT - 20 - ((d.revenue / maxRevenue) * (CHART_HEIGHT - 40));
+            return { x, y, ...d };
+        });
+    }, [dailyRevenue, chartWidth, maxRevenue]);
+
+    const polylinePoints = points.map(p => `${p.x},${p.y}`).join(' ');
+
+    return (
+        <div className="relative">
+            {tooltip && (
+                <div
+                    className="fixed pointer-events-none z-[9999] bg-gray-900 text-white text-xs font-black px-3 py-2 rounded-xl shadow-xl whitespace-nowrap"
+                    style={{ left: tooltip.x + 12, top: tooltip.y - 48 }}
+                >
+                    <div className="text-[10px] text-gray-400 font-bold mb-0.5">{tooltip.date}</div>
+                    ₦{Number(tooltip.revenue).toLocaleString()}
+                    <div className="absolute left-3 bottom-[-5px] w-2.5 h-2.5 bg-gray-900 rotate-45" />
+                </div>
+            )}
+            <div className="overflow-x-auto overflow-y-visible" style={{ paddingBottom: '32px' }}>
+                <div style={{ minWidth: `${chartWidth}px`, height: `${CHART_HEIGHT}px`, position: 'relative' }}>
+                    {[0.25, 0.5, 0.75, 1].map((ratio) => (
+                        <div
+                            key={ratio}
+                            className="absolute left-0 right-0 border-t border-dashed border-gray-100 dark:border-gray-700 pointer-events-none"
+                            style={{ bottom: `${ratio * (CHART_HEIGHT - 20)}px` }}
+                        >
+                            <span className="absolute right-full pr-2 text-[9px] text-gray-300 dark:text-gray-600 font-bold -translate-y-1/2">
+                                {ratio === 1 ? `₦${(maxRevenue / 1000).toFixed(0)}k` : ''}
+                            </span>
+                        </div>
+                    ))}
+                    <svg className="w-full h-full overflow-visible">
+                        <polyline
+                            fill="none"
+                            stroke="#7C3AED"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            points={polylinePoints}
+                        />
+                        {points.map((p, i) => {
+                            const dateLabel = new Date(p.date).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' });
+                            return (
+                                <g key={i}>
+                                    <circle
+                                        cx={p.x}
+                                        cy={p.y}
+                                        r="4"
+                                        className="fill-purple-600 stroke-white dark:stroke-slate-900 stroke-2 hover:r-6 transition-all cursor-pointer"
+                                        onMouseEnter={(e) => {
+                                            setTooltip({ x: e.clientX, y: e.clientY, revenue: p.revenue, date: dateLabel });
+                                        }}
+                                        onMouseMove={(e) => {
+                                            setTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null);
+                                        }}
+                                        onMouseLeave={() => setTooltip(null)}
+                                    />
+                                </g>
+                            );
+                        })}
+                    </svg>
+                    <div className="flex justify-between absolute bottom-0 left-0 right-0 pointer-events-none">
+                        {dailyRevenue.map((d, i) => {
+                            const dateLabel = new Date(d.date).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' });
+                            return (
+                                <div key={i} className="flex-1 text-center">
+                                    <span
+                                        className="text-[7.5px] text-gray-400 dark:text-gray-500 font-bold whitespace-nowrap block"
+                                        style={{
+                                            writingMode: dailyRevenue.length > 20 ? 'vertical-rl' : 'horizontal-tb',
+                                            transform: dailyRevenue.length > 20 ? 'rotate(180deg)' : 'none',
+                                        }}
+                                    >
+                                        {dailyRevenue.length > 30 ? (i % 3 === 0 ? dateLabel : '') : dateLabel}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Revenue Area Chart ──────────────────────────────────────────────────────
+const RevenueAreaChart = ({ dailyRevenue }: { dailyRevenue: any[] }) => {
+    const [tooltip, setTooltip] = useState<{ x: number; y: number; revenue: number; date: string } | null>(null);
+    const maxRevenue = dailyRevenue.reduce((m, d) => Math.max(m, d.revenue), 0) || 1;
+    const CHART_HEIGHT = 200;
+    const itemWidth = 36;
+    const chartWidth = Math.max(dailyRevenue.length * itemWidth, 500);
+
+    const points = useMemo(() => {
+        return dailyRevenue.map((d, i) => {
+            const x = (i + 0.5) * (chartWidth / dailyRevenue.length);
+            const y = CHART_HEIGHT - 20 - ((d.revenue / maxRevenue) * (CHART_HEIGHT - 40));
+            return { x, y, ...d };
+        });
+    }, [dailyRevenue, chartWidth, maxRevenue]);
+
+    const polylinePoints = points.map(p => `${p.x},${p.y}`).join(' ');
+    const polygonPoints = points.length > 0
+        ? `${points[0].x},${CHART_HEIGHT - 20} ${polylinePoints} ${points[points.length - 1].x},${CHART_HEIGHT - 20}`
+        : '';
+
+    return (
+        <div className="relative">
+            {tooltip && (
+                <div
+                    className="fixed pointer-events-none z-[9999] bg-gray-900 text-white text-xs font-black px-3 py-2 rounded-xl shadow-xl whitespace-nowrap"
+                    style={{ left: tooltip.x + 12, top: tooltip.y - 48 }}
+                >
+                    <div className="text-[10px] text-gray-400 font-bold mb-0.5">{tooltip.date}</div>
+                    ₦{Number(tooltip.revenue).toLocaleString()}
+                    <div className="absolute left-3 bottom-[-5px] w-2.5 h-2.5 bg-gray-900 rotate-45" />
+                </div>
+            )}
+            <div className="overflow-x-auto overflow-y-visible" style={{ paddingBottom: '32px' }}>
+                <div style={{ minWidth: `${chartWidth}px`, height: `${CHART_HEIGHT}px`, position: 'relative' }}>
+                    {[0.25, 0.5, 0.75, 1].map((ratio) => (
+                        <div
+                            key={ratio}
+                            className="absolute left-0 right-0 border-t border-dashed border-gray-100 dark:border-gray-700 pointer-events-none"
+                            style={{ bottom: `${ratio * (CHART_HEIGHT - 20)}px` }}
+                        >
+                            <span className="absolute right-full pr-2 text-[9px] text-gray-300 dark:text-gray-600 font-bold -translate-y-1/2">
+                                {ratio === 1 ? `₦${(maxRevenue / 1000).toFixed(0)}k` : ''}
+                            </span>
+                        </div>
+                    ))}
+                    <svg className="w-full h-full overflow-visible">
+                        <defs>
+                            <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#7C3AED" stopOpacity="0.4" />
+                                <stop offset="100%" stopColor="#7C3AED" stopOpacity="0.02" />
+                            </linearGradient>
+                        </defs>
+                        <polygon
+                            fill="url(#areaGradient)"
+                            points={polygonPoints}
+                        />
+                        <polyline
+                            fill="none"
+                            stroke="#7C3AED"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            points={polylinePoints}
+                        />
+                        {points.map((p, i) => {
+                            const dateLabel = new Date(p.date).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' });
+                            return (
+                                <g key={i}>
+                                    <circle
+                                        cx={p.x}
+                                        cy={p.y}
+                                        r="4"
+                                        className="fill-purple-600 stroke-white dark:stroke-slate-900 stroke-2 hover:r-6 transition-all cursor-pointer"
+                                        onMouseEnter={(e) => {
+                                            setTooltip({ x: e.clientX, y: e.clientY, revenue: p.revenue, date: dateLabel });
+                                        }}
+                                        onMouseMove={(e) => {
+                                            setTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null);
+                                        }}
+                                        onMouseLeave={() => setTooltip(null)}
+                                    />
+                                </g>
+                            );
+                        })}
+                    </svg>
+                    <div className="flex justify-between absolute bottom-0 left-0 right-0 pointer-events-none">
+                        {dailyRevenue.map((d, i) => {
+                            const dateLabel = new Date(d.date).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' });
+                            return (
+                                <div key={i} className="flex-1 text-center">
+                                    <span
+                                        className="text-[7.5px] text-gray-400 dark:text-gray-500 font-bold whitespace-nowrap block"
+                                        style={{
+                                            writingMode: dailyRevenue.length > 20 ? 'vertical-rl' : 'horizontal-tb',
+                                            transform: dailyRevenue.length > 20 ? 'rotate(180deg)' : 'none',
+                                        }}
+                                    >
+                                        {dailyRevenue.length > 30 ? (i % 3 === 0 ? dateLabel : '') : dateLabel}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Revenue Pie Chart ───────────────────────────────────────────────────────
+const PIE_COLORS = ['#7C3AED', '#2563EB', '#059669', '#D97706', '#DC2626', '#DB2777', '#4F46E5', '#6B7280'];
+
+const RevenuePieChart = ({ dailyRevenue }: { dailyRevenue: any[] }) => {
+    const [tooltip, setTooltip] = useState<{ x: number; y: number; revenue: number; label: string; pct: number } | null>(null);
+
+    const totalRevenue = useMemo(() => {
+        return dailyRevenue.reduce((sum, d) => sum + Number(d.revenue || 0), 0) || 1;
+    }, [dailyRevenue]);
+
+    const pieSlices = useMemo(() => {
+        const sorted = [...dailyRevenue].sort((a, b) => b.revenue - a.revenue);
+        const top = sorted.slice(0, 7);
+        const others = sorted.slice(7);
+        const othersRevenue = others.reduce((s, d) => s + Number(d.revenue || 0), 0);
+
+        const items = top.map((d, i) => ({
+            label: new Date(d.date).toLocaleDateString('en-NG', { month: 'short', day: 'numeric' }),
+            revenue: Number(d.revenue),
+            color: PIE_COLORS[i % PIE_COLORS.length]
+        }));
+
+        if (othersRevenue > 0) {
+            items.push({
+                label: `Other (${others.length} days)`,
+                revenue: othersRevenue,
+                color: PIE_COLORS[7]
+            });
+        }
+
+        let cumulativeAngle = 0;
+        return items.map(item => {
+            const pct = (item.revenue / totalRevenue);
+            const angle = pct * 360;
+            const startAngle = cumulativeAngle;
+            cumulativeAngle += angle;
+            return {
+                ...item,
+                pct: Math.round(pct * 100),
+                startAngle,
+                angle
+            };
+        });
+    }, [dailyRevenue, totalRevenue]);
+
+    const getCoordinatesForPercent = (percent: number) => {
+        const x = Math.cos(2 * Math.PI * percent);
+        const y = Math.sin(2 * Math.PI * percent);
+        return [x, y];
+    };
+
+    return (
+        <div className="relative flex flex-col md:flex-row items-center justify-around gap-8 py-4">
+            {tooltip && (
+                <div
+                    className="fixed pointer-events-none z-[9999] bg-gray-900 text-white text-xs font-black px-3 py-2 rounded-xl shadow-xl whitespace-nowrap"
+                    style={{ left: tooltip.x + 12, top: tooltip.y - 48 }}
+                >
+                    <div className="text-[10px] text-gray-400 font-bold mb-0.5">{tooltip.label}</div>
+                    ₦{tooltip.revenue.toLocaleString()} ({tooltip.pct}%)
+                    <div className="absolute left-3 bottom-[-5px] w-2.5 h-2.5 bg-gray-900 rotate-45" />
+                </div>
+            )}
+
+            {/* Donut Chart SVG */}
+            <div className="relative w-52 h-52 shrink-0">
+                <svg viewBox="-1 -1 2 2" className="w-full h-full -rotate-90">
+                    {pieSlices.map((slice, i) => {
+                        const startPct = slice.startAngle / 360;
+                        const endPct = (slice.startAngle + slice.angle) / 360;
+                        const [startX, startY] = getCoordinatesForPercent(startPct);
+                        const [endX, endY] = getCoordinatesForPercent(endPct);
+                        const largeArcFlag = slice.angle > 180 ? 1 : 0;
+                        const pathData = slice.angle >= 359.9
+                            ? 'M 0.999 0 A 1 1 0 1 1 -0.999 0 A 1 1 0 1 1 0.999 0'
+                            : `M ${startX} ${startY} A 1 1 0 ${largeArcFlag} 1 ${endX} ${endY} L 0 0`;
+
+                        return (
+                            <path
+                                key={i}
+                                d={pathData}
+                                fill={slice.color}
+                                className="transition-all hover:opacity-80 cursor-pointer"
+                                onMouseEnter={(e) => {
+                                    setTooltip({ x: e.clientX, y: e.clientY, revenue: slice.revenue, label: slice.label, pct: slice.pct });
+                                }}
+                                onMouseMove={(e) => {
+                                    setTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null);
+                                }}
+                                onMouseLeave={() => setTooltip(null)}
+                            />
+                        );
+                    })}
+                    <circle cx="0" cy="0" r="0.6" className="fill-white dark:fill-slate-900" />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Total</span>
+                    <span className="text-sm font-black text-gray-900 dark:text-white">₦{Math.round(totalRevenue / 1000)}k</span>
+                </div>
+            </div>
+
+            {/* Legend & Breakdown */}
+            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
+                {pieSlices.map((slice, i) => (
+                    <div
+                        key={i}
+                        className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-slate-800/60 rounded-xl border border-gray-100 dark:border-gray-800 hover:border-purple-200 transition-colors"
+                        onMouseEnter={(e) => {
+                            setTooltip({ x: e.clientX, y: e.clientY, revenue: slice.revenue, label: slice.label, pct: slice.pct });
+                        }}
+                        onMouseLeave={() => setTooltip(null)}
+                    >
+                        <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-3 h-3 rounded-md shrink-0" style={{ backgroundColor: slice.color }} />
+                            <span className="text-xs font-bold text-gray-700 dark:text-gray-300 truncate">{slice.label}</span>
+                        </div>
+                        <div className="text-right shrink-0 ml-2">
+                            <span className="text-xs font-black text-gray-900 dark:text-white">₦{slice.revenue.toLocaleString()}</span>
+                            <span className="text-[10px] text-gray-400 font-bold block">{slice.pct}%</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 // ─── Date Range Calendar Picker ───────────────────────────────────────────────
 const DateRangePicker = ({ onApply, isActive }: { onApply: (from: string, to: string) => void; isActive: boolean }) => {
     const [from, setFrom] = useState('');
@@ -222,9 +557,24 @@ const PRESETS = [
 
 const AnalyticsPage = () => {
     const { user } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    const chartType = (searchParams.get('chartType') as 'bar' | 'line' | 'area' | 'pie') || 'bar';
+
+    const setChartType = (type: 'bar' | 'line' | 'area' | 'pie') => {
+        setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            if (type === 'bar') {
+                next.delete('chartType');
+            } else {
+                next.set('chartType', type);
+            }
+            return next;
+        }, { replace: true });
+    };
 
     // Period state — either preset ms-based or explicit ISO date range
     const [activePreset, setActivePreset] = useState('This Month');
@@ -390,19 +740,77 @@ const AnalyticsPage = () => {
                         />
                     </div>
 
-                    {/* ── Daily Revenue Timeline (fixed tooltip) ── */}
+                    {/* ── Daily Revenue Timeline (Interactive Chart Switcher) ── */}
                     {data.dailyRevenue?.length > 0 && (
                         <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm p-8">
-                            <div className="flex items-center justify-between mb-6">
-                                <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
-                                    <div className="w-1.5 h-5 bg-purple-600 rounded-full" />
-                                    Daily Net Revenue Timeline
-                                </h3>
-                                <div className="text-xs font-bold text-gray-400 dark:text-gray-500">
-                                    {data.dailyRevenue.length} days
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                                <div>
+                                    <h3 className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-widest flex items-center gap-2">
+                                        <div className="w-1.5 h-5 bg-purple-600 rounded-full" />
+                                        Daily Net Revenue Timeline
+                                    </h3>
+                                    <div className="text-xs font-bold text-gray-400 dark:text-gray-500 mt-0.5">
+                                        {data.dailyRevenue.length} days recorded
+                                    </div>
+                                </div>
+
+                                {/* Chart Type Switcher Pills */}
+                                <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 p-1 rounded-xl shrink-0 self-start sm:self-auto">
+                                    <button
+                                        onClick={() => setChartType('bar')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+                                            chartType === 'bar'
+                                                ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                                        }`}
+                                        title="Bar Chart"
+                                    >
+                                        <BarChart2 size={13} />
+                                        <span>Bar</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setChartType('line')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+                                            chartType === 'line'
+                                                ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                                        }`}
+                                        title="Line Chart"
+                                    >
+                                        <TrendingUp size={13} />
+                                        <span>Line</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setChartType('area')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+                                            chartType === 'area'
+                                                ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                                        }`}
+                                        title="Area Chart"
+                                    >
+                                        <Activity size={13} />
+                                        <span>Area</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setChartType('pie')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+                                            chartType === 'pie'
+                                                ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm'
+                                                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                                        }`}
+                                        title="Pie / Donut Chart"
+                                    >
+                                        <PieChart size={13} />
+                                        <span>Pie</span>
+                                    </button>
                                 </div>
                             </div>
-                            <RevenueBarChart dailyRevenue={data.dailyRevenue} />
+
+                            {chartType === 'bar' && <RevenueBarChart dailyRevenue={data.dailyRevenue} />}
+                            {chartType === 'line' && <RevenueLineChart dailyRevenue={data.dailyRevenue} />}
+                            {chartType === 'area' && <RevenueAreaChart dailyRevenue={data.dailyRevenue} />}
+                            {chartType === 'pie' && <RevenuePieChart dailyRevenue={data.dailyRevenue} />}
                         </div>
                     )}
 

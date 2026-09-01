@@ -72,6 +72,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
 
     // ── Confirmation Modal for Draft Deletion ──────────────────────────────────
     const [draftToDelete, setDraftToDelete] = useState<any>(null);
+    const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
     const [deleteLoading, setDeleteLoading] = useState(false);
 
     // ── Toast Notification ─────────────────────────────────────────────────────
@@ -642,6 +643,25 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         }
     };
 
+    const handleClearAllDrafts = async () => {
+        setDeleteLoading(true);
+        try {
+            const token = localStorage.getItem('token');
+            const storeId = selectedBranchId || undefined;
+            await axios.delete(`${API_URL}/orders/drafts/all`, {
+                params: { storeId, branchId: storeId },
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (refresh) refresh();
+            showToast('All draft orders cleared and stock restored successfully.', 'success');
+        } catch {
+            showToast('Failed to clear all drafts. Please try again.', 'error');
+        } finally {
+            setDeleteLoading(false);
+            setBulkDeleteConfirm(false);
+        }
+    };
+
     const handleRefundOrder = async () => {
         if (!refundTarget || !refundReason.trim()) return;
         setRefundLoading(true);
@@ -1106,7 +1126,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
 
             {/* ── Draft Tab: Dedicated Search Bar ── */}
             {mainTab === 'drafts' && (
-                <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl">
+                <div className="flex flex-wrap items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl">
                     <div className="w-8 h-8 flex items-center justify-center bg-amber-100 dark:bg-amber-900/50 rounded-xl text-amber-600 dark:text-amber-400 shrink-0">
                         <Search size={15} />
                     </div>
@@ -1115,7 +1135,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                         value={searchQuery}
                         onChange={(e) => updateFilterParams({ q: e.target.value || null })}
                         placeholder="Search drafts by ID, customer, cashier, item name, or seat #..."
-                        className="flex-1 bg-transparent text-sm font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-amber-700/60 outline-none"
+                        className="flex-1 min-w-[200px] bg-transparent text-sm font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-amber-700/60 outline-none"
                     />
                     {searchQuery && (
                         <button
@@ -1129,6 +1149,16 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                     <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 shrink-0">
                         {displayList.length} Draft{displayList.length !== 1 ? 's' : ''}
                     </span>
+                    {(draftOrders || []).length > 0 && (
+                        <button
+                            onClick={() => setBulkDeleteConfirm(true)}
+                            className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm shrink-0 ml-auto sm:ml-0"
+                            title="Clear all active drafts"
+                        >
+                            <Trash2 size={13} />
+                            <span>Clear All ({(draftOrders || []).length})</span>
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -1567,6 +1597,44 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 className="flex-1 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-2xl font-black transition-all"
                             >
                                 {deleteLoading ? 'Cancelling...' : 'Yes, Cancel Draft'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Bulk Drafts Delete Confirmation Modal ── */}
+            {bulkDeleteConfirm && (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-md mx-4 p-8 space-y-6 border border-gray-100 dark:border-gray-800">
+                        <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 bg-red-50 dark:bg-red-950/30 rounded-2xl flex items-center justify-center shrink-0">
+                                <Trash2 size={24} className="text-red-500" />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-black text-gray-900 dark:text-white">Clear All Draft Orders?</h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                    Permanently delete {(draftOrders || []).length} active hold order{(draftOrders || []).length !== 1 ? 's' : ''}.
+                                </p>
+                            </div>
+                        </div>
+                        <p className="text-sm text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-800 rounded-2xl p-4">
+                            ⚠️ All items from all held drafts will be immediately returned to inventory stock. This action cannot be undone.
+                        </p>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setBulkDeleteConfirm(false)}
+                                disabled={deleteLoading}
+                                className="flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl font-black text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleClearAllDrafts}
+                                disabled={deleteLoading}
+                                className="flex-1 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-2xl font-black transition-all"
+                            >
+                                {deleteLoading ? 'Clearing...' : `Clear ${(draftOrders || []).length} Drafts`}
                             </button>
                         </div>
                     </div>

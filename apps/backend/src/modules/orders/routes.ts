@@ -11,6 +11,7 @@ import {
     getDraftOrders,
     lockDraftOrder,
     cancelDraftOrder,
+    cancelAllDraftOrders,
     resetFinancialRecords,
     refundOrder,
     getAnalyticsData,
@@ -401,6 +402,26 @@ export default async function orderRoutes(app: FastifyInstance) {
                 app.broadcast('ORDER_UPDATED', lockedOrder)
             }
             return lockedOrder
+        }
+    )
+
+    server.delete(
+        '/drafts/all',
+        {
+            schema: {
+                querystring: z.object({
+                    storeId: z.string().optional(),
+                    branchId: z.string().optional(),
+                    cashierId: z.string().optional(),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { storeId, branchId, cashierId } = request.query as { storeId?: string; branchId?: string; cashierId?: string }
+            const effectiveStoreId = storeId || branchId
+            const result = await cancelAllDraftOrders(effectiveStoreId, cashierId)
+            app.broadcast('ORDER_UPDATED', { bulkDeleted: true, count: result.count })
+            return reply.send(result)
         }
     )
 
