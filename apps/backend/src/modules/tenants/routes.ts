@@ -457,5 +457,64 @@ export default async function tenantRoutes(app: FastifyInstance) {
             return reply.send(updated)
         }
     )
+
+    // -------------------------------------------------------------------------
+    // Executive Automated & On-Demand Report Dispatch — POST /tenants/reports/dispatch
+    // Production-ready endpoint allowing administrators and branch managers to trigger reports
+    // -------------------------------------------------------------------------
+    server.post(
+        '/reports/dispatch',
+        {
+            schema: {
+                body: z.object({
+                    period: z.enum(['weekly', 'monthly', 'yearly']).default('weekly'),
+                    storeId: z.string().optional(),
+                    targetEmail: z.string().email().optional(),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { tenantId, role, branchId: userBranchId, hasMultiBranchAccess } = request.user as any
+            const isElevated = ['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER', 'ADMIN'].includes(role) || Boolean(hasMultiBranchAccess)
+            const isBranchManager = role === 'BRANCH_MANAGER'
+
+            if (!isElevated && !isBranchManager) {
+                return reply.code(403).send({ message: 'Forbidden: Insufficient privileges to dispatch performance reports.' } as any)
+            }
+
+            const body = request.body as { period: 'weekly' | 'monthly' | 'yearly'; storeId?: string; targetEmail?: string }
+            let effectiveStoreId = body.storeId
+
+            // Branch Manager is restricted strictly to their own branch
+            if (isBranchManager && !isElevated) {
+                if (effectiveStoreId && effectiveStoreId !== userBranchId) {
+                    return reply.code(403).send({ message: 'Forbidden: Branch Managers may only dispatch reports for their assigned branch.' } as any)
+                }
+                effectiveStoreId = userBranchId || undefined
+                if (!effectiveStoreId) {
+                    return reply.code(400).send({ message: 'Error: No branch assigned to your manager account.' } as any)
+                }
+            }
+
+            try {
+                const { executeReportDispatch } = await import('../../lib/scheduler.js')
+                const result = await executeReportDispatch({
+                    tenantId,
+                    period: body.period,
+                    storeId: effectiveStoreId,
+                    targetEmail: body.targetEmail,
+                    requestedBy: (request.user as any)?.email || (request.user as any)?.id || 'ADMIN_API'
+                })
+
+                return reply.code(result.success ? 200 : 400).send(result)
+            } catch (err: any) {
+                request.log.error(err, 'Failed to dispatch report')
+                return reply.code(500).send({
+                    success: false,
+                    error: err.message || 'Internal server error dispatching report.'
+                } as any)
+            }
+        }
+    )
 }
 

@@ -243,6 +243,14 @@ async function main() {
         const port = process.env.PORT ? parseInt(process.env.PORT) : 3000
         await server.listen({ port, host: '0.0.0.0' })
         console.log(`Server listening at http://localhost:${port}`)
+
+        // Initialize Automated Reporting Cron Engine (Weekly, Monthly, Yearly)
+        try {
+            const { initScheduler } = await import('./lib/scheduler.js')
+            initScheduler()
+        } catch (schedErr: any) {
+            console.error('[SCHEDULER] Failed to start reporting scheduler:', schedErr.message)
+        }
     } catch (err) {
         server.log.error(err)
         process.exit(1)

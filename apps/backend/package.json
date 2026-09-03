@@ -22,12 +22,14 @@
         "fastify": "latest",
         "fastify-type-provider-zod": "latest",
         "ioredis": "latest",
+        "node-cron": "^4.6.0",
         "nodemailer": "^8.0.8",
         "zod": "latest"
     },
     "devDependencies": {
         "@types/bcrypt": "latest",
         "@types/node": "latest",
+        "@types/node-cron": "^3.0.11",
         "@types/nodemailer": "^8.0.0",
         "tsx": "latest",
         "typescript": "latest"

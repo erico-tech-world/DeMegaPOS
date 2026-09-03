@@ -77,6 +77,9 @@ export const productResponseSchema = z.object({
     category: categoryResponseSchema.nullable().optional(),
     variants: z.array(z.any()).optional(),
     bundleItems: z.array(z.any()).optional(),
+    branchStock: z.number().optional().nullable(),
+    isActiveAtBranch: z.boolean().optional().nullable(),
+    branchInventories: z.array(z.any()).optional(),
     createdAt: z.date(),
     updatedAt: z.date(),
 })
@@ -84,12 +87,19 @@ export const productResponseSchema = z.object({
 export const stockAdjustmentSchema = z.object({
     productId: z.string(),
     variantId: z.string().optional(),
+    storeId: z.string().optional().nullable(),
     type: z.enum(['IN', 'OUT', 'ADJUST', 'RETURN']),
     quantity: z.number().int().positive(),
     reason: z.string().optional(),
+})
+
+export const toggleBranchActiveSchema = z.object({
+    storeId: z.string().min(1),
+    isActive: z.boolean(),
 })
 
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>
 export type CreateProductInput = z.infer<typeof createProductSchema>
 export type UpdateProductInput = z.infer<typeof updateProductSchema>
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>
+export type ToggleBranchActiveInput = z.infer<typeof toggleBranchActiveSchema>

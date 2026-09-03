@@ -17,6 +17,7 @@ const InventoryPage = ({ products, isLoading, refresh }: InventoryPageProps) => 
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
+    const [selectedBranchId, setSelectedBranchId] = useState<string>(() => localStorage.getItem('selectedBranchId') || '');
     const [customConfirm, setCustomConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [customAlert, setCustomAlert] = useState<{ title?: string; message: string } | null>(null);
     const location = useLocation();
@@ -25,7 +26,14 @@ const InventoryPage = ({ products, isLoading, refresh }: InventoryPageProps) => 
         if (refresh) {
             refresh();
         }
-    }, []);
+        const handleBranchChange = (e: any) => {
+            const newBranch = e?.detail?.branchId || localStorage.getItem('selectedBranchId') || '';
+            setSelectedBranchId(newBranch);
+            if (refresh) refresh();
+        };
+        window.addEventListener('demega:branch-changed', handleBranchChange);
+        return () => window.removeEventListener('demega:branch-changed', handleBranchChange);
+    }, [refresh]);
 
     const queryParams = new URLSearchParams(location.search);
     const highlightId = queryParams.get('productId');
@@ -40,6 +48,26 @@ const InventoryPage = ({ products, isLoading, refresh }: InventoryPageProps) => 
     const handleEdit = (product: any) => {
         setSelectedProduct(product);
         setIsEditModalOpen(true);
+    };
+
+    const handleToggleBranchActive = async (productId: string, currentActive: boolean) => {
+        if (!selectedBranchId) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.patch(`${API_URL}/inventory/products/${productId}/branch-active`, {
+                storeId: selectedBranchId,
+                isActive: !currentActive
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            refresh();
+        } catch (error: any) {
+            console.error('Failed to toggle branch availability:', error);
+            setCustomAlert({
+                title: 'Update Failed',
+                message: error?.response?.data?.message || 'Failed to update branch item availability.'
+            });
+        }
     };
 
     const handleDelete = async (productId: string) => {
@@ -96,10 +124,12 @@ const InventoryPage = ({ products, isLoading, refresh }: InventoryPageProps) => 
                         isLoading={isLoading}
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
+                        selectedBranchId={selectedBranchId}
                         onAddItem={() => setIsAddModalOpen(true)}
                         onAdjustStock={handleAdjustStock}
                         onEdit={handleEdit}
                         onDelete={handleDelete}
+                        onToggleBranchActive={handleToggleBranchActive}
                         highlightId={highlightId}
                     />
 
@@ -120,6 +150,7 @@ const InventoryPage = ({ products, isLoading, refresh }: InventoryPageProps) => 
                         isOpen={isAdjustModalOpen}
                         onClose={() => setIsAdjustModalOpen(false)}
                         product={selectedProduct}
+                        selectedBranchId={selectedBranchId}
                         onSuccess={refresh}
                     />
                 </>

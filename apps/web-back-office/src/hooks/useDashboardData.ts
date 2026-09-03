@@ -13,10 +13,11 @@ export const useDashboardData = () => {
     const [isLoading, setIsLoading] = useState(false);
     const { logout, token } = useAuth();
 
-    const fetchProducts = useCallback(async () => {
+    const fetchProducts = useCallback(async (customStoreId?: string) => {
         if (!token) return;
+        const storeId = customStoreId !== undefined ? customStoreId : (localStorage.getItem('selectedBranchId') || undefined);
         try {
-            const res = await axios.get(`${API_URL}/inventory/products`);
+            const res = await axios.get(`${API_URL}/inventory/products`, { params: { storeId } });
             setProducts(res.data);
         } catch (err) {
             console.error('Failed to fetch products:', err);
@@ -154,7 +155,7 @@ export const useDashboardData = () => {
             // Fetch products independently so a failure in orders/staff/customers
             // does NOT prevent the product list from loading
             const [pRes, oRes, sRes, cRes, iRes, dRes, sumRes] = await Promise.allSettled([
-                axios.get(`${API_URL}/inventory/products`),
+                axios.get(`${API_URL}/inventory/products`, { params: { storeId } }),
                 axios.get(`${API_URL}/orders`, { params: { storeId } }),
                 axios.get(`${API_URL}/staff`, { params: { branchId: storeId } }),
                 axios.get(`${API_URL}/customers`),

@@ -8,7 +8,8 @@ import {
     createProductSchema,
     updateProductSchema,
     productResponseSchema,
-    stockAdjustmentSchema
+    stockAdjustmentSchema,
+    toggleBranchActiveSchema
 } from './schemas.js'
 import {
     createCategory,
@@ -20,7 +21,8 @@ import {
     getProducts,
     updateProduct,
     deleteProduct,
-    createStockAdjustment
+    createStockAdjustment,
+    setBranchProductActive
 } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 
@@ -128,18 +130,50 @@ export default async function inventoryRoutes(app: FastifyInstance) {
         }
     )
 
+    function resolveEffectiveStoreId(user: any, requestedStoreId?: string): { storeId?: string; isForbidden?: boolean } {
+        const userRole = user?.role || ''
+        const isElevated = ['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER'].includes(userRole) || Boolean(user?.hasMultiBranchAccess)
+        if (isElevated) {
+            if (requestedStoreId === 'ALL' || requestedStoreId === 'all' || requestedStoreId?.trim() === '') {
+                return { storeId: undefined }
+            }
+            return { storeId: requestedStoreId }
+        }
+        const userBranchId = user?.branchId
+        if (userBranchId) {
+            if (requestedStoreId && requestedStoreId !== 'ALL' && requestedStoreId !== 'all' && requestedStoreId.trim() !== '' && requestedStoreId !== userBranchId) {
+                return { storeId: userBranchId, isForbidden: true }
+            }
+            return { storeId: userBranchId }
+        }
+        return { storeId: requestedStoreId }
+    }
+
     server.get(
         '/products',
         {
             schema: {
+                querystring: z.object({
+                    storeId: z.string().optional(),
+                    branchId: z.string().optional(),
+                }),
                 response: {
                     200: z.array(productResponseSchema),
+                    403: z.object({ message: z.string() }),
                 },
             },
         },
-        async (request) => {
+        async (request, reply) => {
             const tenantId = (request.user as any).tenantId
-            return getProducts(tenantId)
+            const query = (request.query || {}) as { storeId?: string; branchId?: string }
+            const requestedStoreId = query.storeId || query.branchId
+
+            const { storeId, isForbidden } = resolveEffectiveStoreId(request.user, requestedStoreId)
+            if (isForbidden) {
+                return reply.code(403).send({ message: 'Forbidden: Cannot access inventory for another branch.' } as any)
+            }
+
+            return getProducts(tenantId, storeId)
         }
     )
 
@@ -189,14 +223,65 @@ export default async function inventoryRoutes(app: FastifyInstance) {
             schema: {
                 body: stockAdjustmentSchema,
                 response: {
-                    201: z.any(), // Simplified for now
+                    201: z.any(),
+                    403: z.object({ message: z.string() }),
                 },
             },
         },
         async (request, reply) => {
-            const { id: userId, tenantId } = request.user as any
-            const adjustment = await createStockAdjustment({ ...request.body, tenantId }, userId)
+            const { id: userId, tenantId, role, branchId: userBranchId, hasMultiBranchAccess } = request.user as any
+            const isElevated = ['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER'].includes(role) || Boolean(hasMultiBranchAccess)
+            const body = request.body as any
+
+            if (!isElevated && userBranchId) {
+                if (body.storeId && body.storeId !== userBranchId) {
+                    return reply.code(403).send({ message: 'Forbidden: Cannot adjust stock for another branch.' } as any)
+                }
+                body.storeId = userBranchId
+            }
+
+            const adjustment = await createStockAdjustment({ ...body, tenantId }, userId)
+            // @ts-ignore
+            server.broadcast('STOCK_ADJUSTED', adjustment)
             return reply.code(201).send(adjustment)
+        }
+    )
+
+    // Toggle product active status per branch
+    server.patch(
+        '/products/:id/branch-active',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+                body: toggleBranchActiveSchema,
+                response: {
+                    200: z.any(),
+                    403: z.object({ message: z.string() }),
+                },
+            },
+        },
+        async (request, reply) => {
+            const { tenantId, role, branchId: userBranchId, hasMultiBranchAccess } = request.user as any
+            const isElevated = ['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER', 'INVENTORY_MANAGER'].includes(role) || Boolean(hasMultiBranchAccess)
+            const isBranchManager = role === 'BRANCH_MANAGER'
+
+            if (!isElevated && !isBranchManager) {
+                return reply.code(403).send({ message: 'Forbidden: Insufficient privileges to toggle branch item availability.' } as any)
+            }
+
+            const { storeId, isActive } = request.body as { storeId: string; isActive: boolean }
+            if (isBranchManager && !isElevated && userBranchId && storeId !== userBranchId) {
+                return reply.code(403).send({ message: 'Forbidden: You may only toggle products for your assigned branch.' } as any)
+            }
+
+            const result = await setBranchProductActive(request.params.id, storeId, isActive, tenantId)
+            // @ts-ignore
+            server.broadcast('PRODUCT_BRANCH_STATUS_UPDATED', {
+                productId: request.params.id,
+                storeId,
+                isActive
+            })
+            return reply.code(200).send(result)
         }
     )
 }

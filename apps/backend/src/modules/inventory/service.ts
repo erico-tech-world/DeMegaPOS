@@ -109,8 +109,8 @@ export async function createProduct(data: CreateProductInput & { tenantId: strin
     })
 }
 
-export async function getProducts(tenantId: string) {
-    return prisma.product.findMany({
+export async function getProducts(tenantId: string, storeId?: string) {
+    const products = await prisma.product.findMany({
         where: { tenantId },
         include: {
             category: true,
@@ -119,9 +119,21 @@ export async function getProducts(tenantId: string) {
                 include: {
                     componentProduct: true
                 }
-            }
+            },
+            branchInventories: storeId ? {
+                where: { storeId }
+            } : true
         },
         orderBy: { createdAt: 'desc' }
+    })
+
+    return products.map(p => {
+        const bi = storeId && p.branchInventories ? p.branchInventories.find(b => b.storeId === storeId) : null
+        return {
+            ...p,
+            branchStock: bi ? bi.stock : (storeId ? 0 : null),
+            isActiveAtBranch: bi ? bi.isActive : true,
+        }
     })
 }
 
@@ -157,13 +169,14 @@ export async function deleteProduct(id: string, tenantId: string) {
 }
 
 export async function createStockAdjustment(data: StockAdjustmentInput & { tenantId: string }, userId: string) {
-    const { productId, variantId, type, quantity, reason } = data
+    const { productId, variantId, storeId, type, quantity, reason } = data
 
     // 1. Create the adjustment log (sequential — PgBouncer Transaction Pooler incompatible with interactive tx)
     const adjustment = await prisma.stockAdjustment.create({
         data: {
             productId,
             variantId,
+            storeId: storeId || null,
             type,
             quantity,
             reason,
@@ -172,7 +185,7 @@ export async function createStockAdjustment(data: StockAdjustmentInput & { tenan
         }
     })
 
-    // 2. Update stock level
+    // 2. Update global stock level
     const multiplier = (type === 'IN' || type === 'RETURN') ? 1 : -1
     const netQuantity = (type === 'ADJUST') ? (quantity) : (quantity * multiplier)
 
@@ -192,6 +205,67 @@ export async function createStockAdjustment(data: StockAdjustmentInput & { tenan
         })
     }
 
+    // 3. If storeId is provided, also upsert BranchInventory for this branch
+    if (storeId) {
+        const existingBi = await prisma.branchInventory.findUnique({
+            where: {
+                productId_storeId: {
+                    productId,
+                    storeId
+                }
+            }
+        })
+
+        if (existingBi) {
+            await prisma.branchInventory.update({
+                where: { id: existingBi.id },
+                data: {
+                    stock: (type === 'ADJUST') ? quantity : Math.max(0, existingBi.stock + netQuantity)
+                }
+            })
+        } else {
+            const initialStock = (type === 'ADJUST') ? quantity : Math.max(0, netQuantity)
+            await prisma.branchInventory.create({
+                data: {
+                    productId,
+                    storeId,
+                    stock: initialStock,
+                    isActive: true
+                }
+            })
+        }
+    }
+
     return adjustment
+}
+
+export async function setBranchProductActive(productId: string, storeId: string, isActive: boolean, tenantId: string) {
+    const product = await prisma.product.findFirst({
+        where: { id: productId, tenantId }
+    })
+    if (!product) throw new Error('Product not found for this tenant.')
+
+    const store = await prisma.store.findFirst({
+        where: { id: storeId, tenantId }
+    })
+    if (!store) throw new Error('Branch not found for this tenant.')
+
+    return prisma.branchInventory.upsert({
+        where: {
+            productId_storeId: {
+                productId,
+                storeId
+            }
+        },
+        update: {
+            isActive
+        },
+        create: {
+            productId,
+            storeId,
+            stock: product.stock,
+            isActive
+        }
+    })
 }
 
