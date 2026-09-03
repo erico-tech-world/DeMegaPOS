@@ -24,6 +24,22 @@ import { ZodTypeProvider } from 'fastify-type-provider-zod'
 export default async function orderRoutes(app: FastifyInstance) {
     const server = app.withTypeProvider<ZodTypeProvider>()
 
+    function resolveEffectiveStoreId(user: any, requestedStoreId?: string): { storeId?: string; isForbidden?: boolean } {
+        const userRole = user?.role || ''
+        const isElevated = ['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER'].includes(userRole) || Boolean(user?.hasMultiBranchAccess)
+        if (isElevated) {
+            return { storeId: requestedStoreId }
+        }
+        const userBranchId = user?.branchId
+        if (userBranchId) {
+            if (requestedStoreId && requestedStoreId !== 'ALL' && requestedStoreId !== 'all' && requestedStoreId.trim() !== '' && requestedStoreId !== userBranchId) {
+                return { storeId: userBranchId, isForbidden: true }
+            }
+            return { storeId: userBranchId }
+        }
+        return { storeId: requestedStoreId }
+    }
+
     server.post(
         '/',
         {
@@ -31,11 +47,21 @@ export default async function orderRoutes(app: FastifyInstance) {
                 body: createOrderSchema,
                 response: {
                     201: orderResponseSchema,
+                    403: z.object({ message: z.string() }),
                 },
             },
         },
         async (request, reply) => {
-            const order = await createOrder(request.body)
+            const body = request.body as any
+            const { role, branchId: userBranchId } = request.user as any
+            const isElevated = ['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER'].includes(role) || Boolean((request.user as any)?.hasMultiBranchAccess)
+            if (!isElevated && userBranchId && body.storeId && body.storeId !== userBranchId) {
+                return reply.code(403).send({ message: 'Forbidden: Cannot create orders for another branch.' })
+            }
+            if (!isElevated && userBranchId && !body.storeId) {
+                body.storeId = userBranchId
+            }
+            const order = await createOrder(body)
             // Broadcast the new order event
             app.broadcast('ORDER_CREATED', order)
             return reply.code(201).send(order)
@@ -93,13 +119,17 @@ export default async function orderRoutes(app: FastifyInstance) {
                             })
                         })
                     ]),
+                    403: z.object({ message: z.string() }),
                 },
             },
         },
         async (request, reply) => {
             const query = request.query as any
-            const effectiveStoreId = query.storeId || query.branchId
             const { tenantId } = request.user as any
+            const { storeId: effectiveStoreId, isForbidden } = resolveEffectiveStoreId(request.user, query.storeId || query.branchId)
+            if (isForbidden) {
+                return reply.code(403).send({ message: 'Forbidden: Access to other branches is restricted.' })
+            }
 
             const orderStatuses = query.orderStatuses ? query.orderStatuses.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
             const paymentStatuses = query.paymentStatuses ? query.paymentStatuses.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
@@ -205,13 +235,17 @@ export default async function orderRoutes(app: FastifyInstance) {
                         productUnitsSold: z.number(),
                         productRevenue: z.number(),
                     }),
+                    403: z.object({ message: z.string() }),
                 },
             },
         },
         async (request, reply) => {
             const query = request.query as any
-            const effectiveStoreId = query.storeId || query.branchId
             const { tenantId } = request.user as any
+            const { storeId: effectiveStoreId, isForbidden } = resolveEffectiveStoreId(request.user, query.storeId || query.branchId)
+            if (isForbidden) {
+                return reply.code(403).send({ message: 'Forbidden: Access to other branches is restricted.' })
+            }
 
             const orderStatuses = query.orderStatuses ? query.orderStatuses.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
             const paymentStatuses = query.paymentStatuses ? query.paymentStatuses.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined
@@ -266,7 +300,10 @@ export default async function orderRoutes(app: FastifyInstance) {
         },
         async (request, reply) => {
             const { storeId, branchId, cashierId } = request.query as { storeId?: string; branchId?: string; cashierId?: string }
-            const effectiveStoreId = storeId || branchId
+            const { storeId: effectiveStoreId, isForbidden } = resolveEffectiveStoreId(request.user, storeId || branchId)
+            if (isForbidden) {
+                return reply.code(403).send({ message: 'Forbidden: Access to other branches is restricted.' })
+            }
             const { tenantId, role, id: userId } = request.user as any
             
             // If cashier role, scope to their own transactions if not elevated
@@ -393,10 +430,11 @@ export default async function orderRoutes(app: FastifyInstance) {
                 }),
                 response: {
                     200: z.array(orderResponseSchema),
+                    403: z.object({ message: z.string() }),
                 },
             },
         },
-        async (request) => {
+        async (request, reply) => {
             const { storeId, branchId, cashierId, q, search, seatNumber, limit } = request.query as {
                 storeId?: string
                 branchId?: string
@@ -406,7 +444,10 @@ export default async function orderRoutes(app: FastifyInstance) {
                 seatNumber?: string
                 limit?: string
             }
-            const effectiveStoreId = storeId || branchId
+            const { storeId: effectiveStoreId, isForbidden } = resolveEffectiveStoreId(request.user, storeId || branchId)
+            if (isForbidden) {
+                return reply.code(403).send({ message: 'Forbidden: Access to other branches is restricted.' })
+            }
             return getDraftOrders(effectiveStoreId, cashierId, {
                 q: q || search,
                 seatNumber,
@@ -507,7 +548,10 @@ export default async function orderRoutes(app: FastifyInstance) {
         },
         async (request, reply) => {
             const { storeId, branchId, startDate, endDate } = request.query as { storeId?: string; branchId?: string; startDate?: string; endDate?: string }
-            const effectiveStoreId = storeId || branchId
+            const { storeId: effectiveStoreId, isForbidden } = resolveEffectiveStoreId(request.user, storeId || branchId)
+            if (isForbidden) {
+                return reply.code(403).send({ message: 'Forbidden: Multi-branch analytics access is restricted to elevated roles.' })
+            }
             const { tenantId } = request.user as any
             const start = startDate ? new Date(startDate) : undefined
             const end = endDate ? new Date(endDate) : undefined

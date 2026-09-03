@@ -33,6 +33,7 @@ const AppLayout: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { user, logout } = useAuth();
+    const userRole = (user as any)?.role || '';
     const { theme, toggleTheme } = useTheme();
 
     const activeTab = location.pathname.split('/')[1] || 'dashboard';
@@ -43,13 +44,17 @@ const AppLayout: React.FC = () => {
         axios.get(`${API_URL}/tenants/branches`, { headers: { Authorization: `Bearer ${token}` } })
             .then(res => {
                 setBranches(res.data);
-                if (!localStorage.getItem('selectedBranchId') && res.data.length > 0) {
+                const hasMultiBranch = ['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER'].includes(userRole) || Boolean((user as any)?.hasMultiBranchAccess);
+                if (!hasMultiBranch && (user as any)?.branchId) {
+                    setSelectedBranch((user as any).branchId);
+                    localStorage.setItem('selectedBranchId', (user as any).branchId);
+                } else if (!localStorage.getItem('selectedBranchId') && res.data.length > 0) {
                     setSelectedBranch(res.data[0].id);
                     localStorage.setItem('selectedBranchId', res.data[0].id);
                 }
             })
             .catch(() => {});
-    }, []);
+    }, [user, userRole]);
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -81,7 +86,6 @@ const AppLayout: React.FC = () => {
     }, []);
 
     const ADMIN_ROLES = ['SUPER_ADMIN', 'BRANCH_MANAGER', 'OWNER', 'ADMIN'];
-    const userRole = (user as any)?.role || '';
 
     const allMenuItems = [
         { id: 'dashboard', label: 'Overview', icon: LayoutDashboard, color: '#2D7A3E', path: '/dashboard', roles: null },
@@ -235,8 +239,8 @@ const AppLayout: React.FC = () => {
                             </span>
                         </button>
 
-                        {/* Branch Switcher (Strict RBAC: visible ONLY to SUPER_ADMIN and OWNER) */}
-                        {['SUPER_ADMIN', 'OWNER'].includes(userRole) ? (
+                        {/* Branch Switcher (Strict RBAC: visible ONLY to elevated roles or users with hasMultiBranchAccess) */}
+                        {((['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER'].includes(userRole)) || Boolean((user as any)?.hasMultiBranchAccess)) ? (
                             <div className="flex items-center gap-1.5 sm:gap-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-gray-700 px-2.5 sm:px-3 py-1.5 rounded-xl max-w-[135px] sm:max-w-[220px] md:max-w-none">
                                 <span className="hidden xs:inline text-[9px] sm:text-[10px] font-black uppercase text-gray-400 shrink-0">Branch:</span>
                                 <select

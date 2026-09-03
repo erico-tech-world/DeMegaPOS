@@ -56,6 +56,7 @@ export const authResponseSchema = z.object({
         tenantId: z.string(),
         branchId: z.string().nullable(),
         permissions: z.any().nullable(),
+        hasMultiBranchAccess: z.boolean().optional(),
     }),
     accessToken: z.string(),
 })

@@ -37,14 +37,16 @@ export default async function staffRoutes(app: FastifyInstance) {
             },
         },
         async (request, reply) => {
-            const { tenantId } = request.user
+            const { tenantId, role: userRole, branchId: userBranchId } = request.user as any
             const { search, role, status, branchId } = (request.query || {}) as {
                 search?: string
                 role?: string
                 status?: string
                 branchId?: string
             }
-            const staff = await getStaffList(tenantId, { search, role, status, branchId })
+            const isElevated = ['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER'].includes(userRole) || Boolean((request.user as any)?.hasMultiBranchAccess)
+            const effectiveBranchId = isElevated ? branchId : (userBranchId || branchId)
+            const staff = await getStaffList(tenantId, { search, role, status, branchId: effectiveBranchId })
             return reply.send(staff)
         }
     )

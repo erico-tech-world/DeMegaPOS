@@ -75,6 +75,7 @@ model Store {
   updatedAt      DateTime @updatedAt
   orders         Order[]
   users          User[]
+  customers      Customer[]
 }
 
 model User {
@@ -261,8 +262,11 @@ model Customer {
   email         String?
   phone         String?
   walletBalance Decimal     @default(0) @db.Decimal(10, 2)
+  isGlobal      Boolean     @default(false) // true = visible to all branches (e.g. "Regular Customer")
   tenantId      String
   tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  branchId      String?     // null = unassigned / global
+  branch        Store?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
   orders        Order[]
   creditSales   CreditSale[]
   createdAt     DateTime    @default(now())

@@ -10,6 +10,19 @@ import { prisma } from '../../lib/prisma.js'
 export default async function authRoutes(app: FastifyInstance) {
     const server = app.withTypeProvider<ZodTypeProvider>()
 
+    function computeMultiBranchAccess(user: any): boolean {
+        if (user.role === 'SUPER_ADMIN' || user.role === 'OWNER' || user.role === 'REGIONAL_MANAGER') {
+            return true
+        }
+        if (!user.branchId) {
+            return true
+        }
+        if (user.permissions && typeof user.permissions === 'object') {
+            return (user.permissions as any).hasMultiBranchAccess === true
+        }
+        return false
+    }
+
     // -------------------------------------------------------------------------
     // Register (standalone user)
     // -------------------------------------------------------------------------
@@ -23,14 +36,16 @@ export default async function authRoutes(app: FastifyInstance) {
         },
         async (request, reply) => {
             const user = await createUser(request.body)
+            const hasMultiBranchAccess = computeMultiBranchAccess(user)
             const accessToken = app.jwt.sign({
                 id: user.id, email: user.email, phone: user.phone,
-                tenantId: user.tenantId, role: user.role, branchId: user.branchId
+                tenantId: user.tenantId, role: user.role, branchId: user.branchId,
+                hasMultiBranchAccess
             })
             return reply.code(201).send({
                 user: { id: user.id, email: user.email, phone: user.phone, name: user.name,
                         role: user.role, tenantId: user.tenantId, branchId: user.branchId,
-                        permissions: user.permissions },
+                        permissions: user.permissions, hasMultiBranchAccess },
                 accessToken,
             })
         }
@@ -49,14 +64,16 @@ export default async function authRoutes(app: FastifyInstance) {
         },
         async (request, reply) => {
             const { tenant, user } = await registerBusiness(request.body)
+            const hasMultiBranchAccess = computeMultiBranchAccess(user)
             const accessToken = app.jwt.sign({
                 id: user.id, email: user.email, phone: user.phone,
-                tenantId: user.tenantId, role: user.role, branchId: user.branchId
+                tenantId: user.tenantId, role: user.role, branchId: user.branchId,
+                hasMultiBranchAccess
             })
             return reply.code(201).send({
                 user: { id: user.id, email: user.email, phone: user.phone, name: user.name,
                         role: user.role, tenantId: user.tenantId, branchId: user.branchId,
-                        permissions: user.permissions },
+                        permissions: user.permissions, hasMultiBranchAccess },
                 accessToken,
             })
         }
@@ -148,15 +165,17 @@ export default async function authRoutes(app: FastifyInstance) {
                 }
             })
 
+            const hasMultiBranchAccess = computeMultiBranchAccess(user)
             const accessToken = app.jwt.sign({
                 id: user.id, email: user.email, phone: user.phone,
-                tenantId: user.tenantId, role: user.role, branchId: user.branchId
+                tenantId: user.tenantId, role: user.role, branchId: user.branchId,
+                hasMultiBranchAccess
             })
 
             return reply.code(200).send({
                 user: { id: user.id, email: user.email, phone: user.phone, name: user.name,
                         role: user.role, tenantId: user.tenantId, branchId: user.branchId,
-                        permissions: user.permissions },
+                        permissions: user.permissions, hasMultiBranchAccess },
                 accessToken,
             })
         }
@@ -232,15 +251,17 @@ export default async function authRoutes(app: FastifyInstance) {
                 }
             })
 
+            const hasMultiBranchAccess = computeMultiBranchAccess(user)
             const accessToken = app.jwt.sign({
                 id: user.id, email: user.email, phone: user.phone,
-                tenantId: user.tenantId, role: user.role, branchId: user.branchId
+                tenantId: user.tenantId, role: user.role, branchId: user.branchId,
+                hasMultiBranchAccess
             })
 
             return reply.code(200).send({
                 user: { id: user.id, email: user.email, phone: user.phone, name: user.name,
                         role: user.role, tenantId: user.tenantId, branchId: user.branchId,
-                        permissions: user.permissions },
+                        permissions: user.permissions, hasMultiBranchAccess },
                 accessToken,
             })
         }
@@ -299,14 +320,16 @@ export default async function authRoutes(app: FastifyInstance) {
             const { token, name, password, pin } = request.body
             try {
                 const user = await acceptInvitation(token, name, password, pin)
+                const hasMultiBranchAccess = computeMultiBranchAccess(user)
                 const accessToken = app.jwt.sign({
                     id: user.id, email: user.email, phone: user.phone,
                     tenantId: user.tenantId, role: user.role, branchId: user.branchId,
+                    hasMultiBranchAccess
                 })
                 return reply.code(200).send({
                     user: { id: user.id, email: user.email, phone: user.phone, name: user.name,
                             role: user.role, tenantId: user.tenantId, branchId: user.branchId,
-                            permissions: user.permissions },
+                            permissions: user.permissions, hasMultiBranchAccess },
                     accessToken,
                 })
             } catch (err: any) {

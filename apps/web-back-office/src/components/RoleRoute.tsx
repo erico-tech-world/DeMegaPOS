@@ -19,8 +19,11 @@ export const ProtectedRoute: React.FC<{ allowedRoles?: string[] }> = ({ allowedR
         return <Navigate to="/auth/login" replace />;
     }
 
-    if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-        return <Navigate to="/dashboard" replace />;
+    if (allowedRoles && user) {
+        const hasElevatedAccess = allowedRoles.includes(user.role) || (user as any).hasMultiBranchAccess === true;
+        if (!hasElevatedAccess) {
+            return <Navigate to="/dashboard" replace />;
+        }
     }
 
     return <Outlet />;

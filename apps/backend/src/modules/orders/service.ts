@@ -1298,6 +1298,16 @@ export async function getDashboardSummary(storeId?: string, tenantId?: string, c
         ? (totalRefundCount / (totalOrdersCount + totalRefundCount)) * 100
         : 0
 
+    // Staff count for active branch
+    const staffWhere: any = {
+        isActive: true,
+    }
+    if (tenantId) staffWhere.tenantId = tenantId
+    if (!isAllBranches && storeId) {
+        staffWhere.branchId = storeId
+    }
+    const staffCount = await prisma.user.count({ where: staffWhere }).catch(() => 0)
+
     return {
         today: {
             grossSales: todayGrossSales,
@@ -1321,6 +1331,8 @@ export async function getDashboardSummary(storeId?: string, tenantId?: string, c
             refundCount: allRefunds.length
         },
         activeOrdersCount,
+        staffCount,
+        totalStaff: staffCount,
         refundSummary: {
             totalRefundedAmount: allTimeRefundedAmount,
             totalRefundCount: totalRefundCount,

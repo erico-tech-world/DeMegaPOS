@@ -84,7 +84,11 @@ const OverviewPage = ({ products, orders, staff, dashboardSummary, isLoading, re
 
     const inventoryGlance = Array.isArray(products) ? products.slice(0, 7) : [];
     const lowStockCount = Array.isArray(products) ? products.filter((p: any) => (p?.stock || 0) < 10).length : 0;
-    const staffCount = Array.isArray(staff) ? staff.length : 0;
+    const staffCount = dashboardSummary?.staffCount !== undefined
+        ? Number(dashboardSummary.staffCount)
+        : (dashboardSummary?.totalStaff !== undefined
+            ? Number(dashboardSummary.totalStaff)
+            : (Array.isArray(staff) ? staff.length : 0));
 
     // Scope recent activity for cashiers to their own orders only
     const scopedOrders = isElevated ? orders : cashierOrders;

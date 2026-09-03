@@ -156,7 +156,7 @@ export const useDashboardData = () => {
             const [pRes, oRes, sRes, cRes, iRes, dRes, sumRes] = await Promise.allSettled([
                 axios.get(`${API_URL}/inventory/products`),
                 axios.get(`${API_URL}/orders`, { params: { storeId } }),
-                axios.get(`${API_URL}/staff`),
+                axios.get(`${API_URL}/staff`, { params: { branchId: storeId } }),
                 axios.get(`${API_URL}/customers`),
                 axios.get(`${API_URL}/integrations`),
                 axios.get(`${API_URL}/orders/drafts`, { params: { storeId } }),
