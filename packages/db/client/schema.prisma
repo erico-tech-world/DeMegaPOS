@@ -1,61 +1,250 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../client"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  BRANCH_MANAGER
+  INVENTORY_MANAGER
+  CASHIER
+}
+
+enum ProductType {
+  STANDARD
+  VARIANT
+  BUNDLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  WALLET
+  SPLIT
+  CREDIT
+}
+
+enum FulfillmentStatus {
+  NEW
+  PENDING
+  IN_PREPARATION
+  READY_FOR_PICKUP
+  DELIVERED
+  SHIPPED
 }
 
 model Tenant {
-  id         String     @id @default(cuid())
-  name       String
-  slug       String     @unique
-  domain     String?    @unique
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  stores     Store[]
-  users      User[]
-  products   Product[]
-  categories Category[]
-  settings   Json?
+  id                    String                @id @default(cuid())
+  name                  String
+  slug                  String                @unique
+  domain                String?               @unique
+  businessCode          String?               @unique // Public Code e.g. DM-BIZ-9011
+  universalPasswordHash String? // Super Admin Universal Access Engine (bcrypt hashed)
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  stores                Store[]
+  users                 User[]
+  products              Product[]
+  categories            Category[]
+  customers             Customer[]
+  activityLogs          ActivityLog[]
+  staffInvitations      StaffInvitation[]
+  stockAdjustments      StockAdjustment[]
+  settings              Json?
+  terminalIntegrations  TerminalIntegration[]
 }
 
 model Store {
-  id        String   @id @default(cuid())
-  name      String
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  orders    Order[]
+  id             String   @id @default(cuid())
+  name           String
+  location       String?
+  phone          String?
+  branchCode     String?  @unique // Public Code e.g. BR-LAG-01
+  status         String   @default("ACTIVE") // ACTIVE, DEACTIVATED
+  isActive       Boolean  @default(true)
+  branchSettings Json? // Custom per-branch settings (receipt header, footer, etc.)
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  orders         Order[]
+  users          User[]
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  name      String?
-  role      String   @default("STAFF") // ADMIN, OWNER, MANAGER, STAFF
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String            @id @default(cuid())
+  email             String?           @unique
+  phone             String?           @unique
+  password          String
+  name              String?
+  role              Role              @default(CASHIER)
+  staffCode         String?           @unique // Public Code e.g. EMP-2026-003
+  pin               String? // Hashed 4-6 digit POS Terminal PIN
+  status            String            @default("ACTIVE") // ACTIVE, PENDING_ACTIVATION, SUSPENDED, TERMINATED
+  isActive          Boolean           @default(true)
+  onboardedAt       DateTime?
+  terminationReason String?
+  terminatedAt      DateTime?
+  permissions       Json? // Granular toggles like 'Can Edit Prices'
+  tenantId          String
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
+  branchId          String? // References Store.id. null = Omni-Branch Access
+  branch            Store?            @relation(fields: [branchId], references: [id])
+  mfaEnabled        Boolean           @default(false)
+  mfaSecret         String?
+  themePreference   String            @default("light")
+  activity          ActivityLog[]
+  sessions          UserSession[]
+  stockAdjustments  StockAdjustment[]
+  orders            Order[]
+  refunds           Refund[]
+}
+
+model PlatformKey {
+  id          String    @id @default(cuid())
+  label       String
+  secretKey   String    @unique
+  isSingleUse Boolean   @default(false)
+  isUsed      Boolean   @default(false)
+  createdBy   String?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model UserSession {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceFingerprint String?
+  userAgent         String?
+  ipAddress         String?
+  lastActive        DateTime @default(now())
+  isMfaVerified     Boolean  @default(false)
+  createdAt         DateTime @default(now())
+}
+
+// ─── Terminal Integration ──────────────────────────────────────────────────────
+
+model TerminalIntegration {
+  id           String   @id @default(cuid())
+  tenantId     String
+  provider     String   @default("MONNIFY")
+  label        String
+  apiKey       String
+  secretKey    String
+  contractCode String
+  baseUrl      String   @default("https://sandbox.monnify.com")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  terminalTransactions TerminalTransaction[]
+}
+
+// ─── Terminal Transaction ──────────────────────────────────────────────────────
+
+model TerminalTransaction {
+  id             String    @id @default(cuid())
+  orderId        String    @unique
+  integrationId  String
+  transactionRef String
+  paymentRef     String?
+  amount         Decimal   @db.Decimal(10, 2)
+  settledAt      DateTime?
+  rawResponse    Json?
+  createdAt      DateTime  @default(now())
+
+  order       Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  integration TerminalIntegration @relation(fields: [integrationId], references: [id])
+}
+
+enum StockAdjustmentType {
+  IN
+  OUT
+  ADJUST
+  RETURN
 }
 
 model Product {
-  id         String    @id @default(cuid())
-  name       String
-  sku        String?
-  barcode    String?
-  price      Decimal   @db.Decimal(10, 2)
-  stock      Int       @default(0)
-  tenantId   String
-  tenant     Tenant    @relation(fields: [tenantId], references: [id])
-  categoryId String?
-  category   Category? @relation(fields: [categoryId], references: [id])
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id               String            @id @default(cuid())
+  name             String
+  sku              String?
+  barcode          String?
+  price            Decimal           @db.Decimal(10, 2)
+  costPrice        Decimal?          @db.Decimal(10, 2)
+  vipPrice         Decimal?          @db.Decimal(10, 2)
+  unit             String? // e.g. "pcs", "kg", "carton"
+  stock            Int               @default(0)
+  minStock         Int               @default(5)
+  type             ProductType       @default(STANDARD)
+  expiryDate       DateTime?
+  batchNumber      String?
+  isBundle         Boolean           @default(false)
+  imageUrl         String?
+  tenantId         String
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  categoryId       String?
+  category         Category?         @relation(fields: [categoryId], references: [id])
+  variants         ProductVariant[]
+  bundleItems      BundleItem[]      @relation("BundleToComponent")
+  asComponentOf    BundleItem[]      @relation("ComponentToBundle")
+  stockAdjustments StockAdjustment[]
+  orderItems       OrderItem[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([sku, tenantId])
+}
+
+model ProductVariant {
+  id               String            @id @default(cuid())
+  productId        String
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name             String // e.g. "Red / XL"
+  sku              String?
+  price            Decimal           @db.Decimal(10, 2)
+  costPrice        Decimal?          @db.Decimal(10, 2)
+  vipPrice         Decimal?          @db.Decimal(10, 2)
+  unit             String? // e.g. "pcs", "kg", "carton"
+  stock            Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  orderItems       OrderItem[]
+  stockAdjustments StockAdjustment[]
+
+  @@unique([sku, productId])
+}
+
+model BundleItem {
+  id                 String  @id @default(cuid())
+  bundleProductId    String
+  bundleProduct      Product @relation("BundleToComponent", fields: [bundleProductId], references: [id], onDelete: Cascade)
+  componentProductId String
+  componentProduct   Product @relation("ComponentToBundle", fields: [componentProductId], references: [id], onDelete: Cascade)
+  quantity           Int     @default(1)
+}
+
+model StockAdjustment {
+  id        String              @id @default(cuid())
+  type      StockAdjustmentType
+  quantity  Int
+  reason    String?
+  productId String
+  product   Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?
+  variant   ProductVariant?     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenantId  String
+  tenant    Tenant              @relation(fields: [tenantId], references: [id])
+  createdAt DateTime            @default(now())
 }
 
 model Category {
@@ -66,25 +255,114 @@ model Category {
   products Product[]
 }
 
+model Customer {
+  id            String       @id @default(cuid())
+  name          String
+  email         String?
+  phone         String?
+  walletBalance Decimal      @default(0) @db.Decimal(10, 2)
+  tenantId      String
+  tenant        Tenant       @relation(fields: [tenantId], references: [id])
+  orders        Order[]
+  creditSales   CreditSale[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
 model Order {
-  id            String      @id @default(cuid())
-  storeId       String
-  store         Store       @relation(fields: [storeId], references: [id])
-  totalAmount   Decimal     @db.Decimal(10, 2)
-  status        String      @default("NEW") // NEW, PREPARING, READY, COMPLETED, CANCELLED
-  paymentStatus String      @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED
-  items         OrderItem[]
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id                  String               @id @default(cuid())
+  storeId             String
+  store               Store                @relation(fields: [storeId], references: [id])
+  cashierId           String?
+  cashier             User?                @relation(fields: [cashierId], references: [id], onDelete: SetNull)
+  customerId          String?
+  customer            Customer?            @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  totalAmount         Decimal              @db.Decimal(10, 2)
+  paymentMethod       PaymentMethod        @default(CASH)
+  status              String               @default("NEW")
+  paymentStatus       String               @default("PENDING")
+  fulfillmentStatus   FulfillmentStatus    @default(NEW)
+  posDeviceType       String?
+  items               OrderItem[]
+  splitPayments       SplitPayment[]
+  creditSale          CreditSale?
+  terminalTransaction TerminalTransaction?
+  refund              Refund?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+}
+
+model Refund {
+  id          String   @id @default(cuid())
+  orderId     String   @unique
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount      Decimal  @db.Decimal(10, 2)
+  reason      String?
+  processedBy String?
+  user        User?    @relation(fields: [processedBy], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+}
+
+model CreditSale {
+  id         String    @id @default(cuid())
+  orderId    String    @unique
+  order      Order     @relation(fields: [orderId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  dueDate    DateTime
+  isPaid     Boolean   @default(false)
+  balance    Decimal   @db.Decimal(10, 2)
+  createdAt  DateTime  @default(now())
+}
+
+model SplitPayment {
+  id        String        @id @default(cuid())
+  orderId   String
+  order     Order         @relation(fields: [orderId], references: [id])
+  method    PaymentMethod
+  amount    Decimal       @db.Decimal(10, 2)
+  reference String?
+  createdAt DateTime      @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String // e.g., 'STOCK_ADJUSTMENT', 'PRICE_CHANGE'
+  entity    String // e.g., 'Product', 'Order'
+  entityId  String?
+  details   Json?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model StaffInvitation {
+  id         String    @id @default(cuid())
+  email      String?
+  phone      String?
+  role       Role
+  branchId   String?
+  token      String    @unique
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+  expiresAt  DateTime
+  acceptedAt DateTime? // Set when the invitee completes onboarding
+  createdAt  DateTime  @default(now())
 }
 
 model OrderItem {
-  id        String  @id @default(cuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id])
-  productId String
-  quantity  Int
-  price     Decimal @db.Decimal(10, 2)
+  id         String          @id @default(cuid())
+  orderId    String
+  order      Order           @relation(fields: [orderId], references: [id])
+  productId  String
+  product    Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId  String?
+  variant    ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity   Int
+  price      Decimal         @db.Decimal(10, 2)
+  seatNumber String?
 }
 
 model IntegrationApp {

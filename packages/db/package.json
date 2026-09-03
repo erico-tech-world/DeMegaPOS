@@ -13,8 +13,8 @@
         }
     },
     "scripts": {
-        "build": "prisma generate && tsc",
-        "db:generate": "prisma generate",
+        "build": "prisma generate && node sync-client.cjs && tsc",
+        "db:generate": "prisma generate && node sync-client.cjs",
         "db:push": "prisma db push",
         "db:seed": "tsx seed.ts",
         "studio": "prisma studio"
