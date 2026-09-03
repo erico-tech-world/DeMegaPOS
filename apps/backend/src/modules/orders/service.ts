@@ -1,4 +1,4 @@
-import { prisma } from '../../lib/prisma.js'
+import { prisma, FulfillmentStatus } from '../../lib/prisma.js'
 import { z } from 'zod'
 import { CreateOrderInput, createOrderItemSchema, splitPaymentSchema } from './schemas.js'
 
@@ -62,7 +62,7 @@ export async function createOrder(data: CreateOrderInput) {
                 paymentMethod: data.paymentMethod,
                 paymentStatus: data.paymentStatus || 'PAID',
                 status: data.paymentStatus === 'DRAFT' ? 'DRAFT' : 'COMPLETED',
-                fulfillmentStatus: (data.fulfillmentStatus as any) || (existingDraft as any).fulfillmentStatus || 'NEW',
+                fulfillmentStatus: (data.fulfillmentStatus as FulfillmentStatus) || existingDraft.fulfillmentStatus || FulfillmentStatus.NEW,
                 items: {
                     create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
                         productId: item.productId,
@@ -130,7 +130,7 @@ export async function createOrder(data: CreateOrderInput) {
                 paymentMethod: data.paymentMethod,
                 paymentStatus: data.paymentStatus || 'PENDING',
                 status: data.paymentStatus === 'DRAFT' ? 'DRAFT' : 'COMPLETED',
-                fulfillmentStatus: (data.fulfillmentStatus as any) || 'NEW',
+                fulfillmentStatus: (data.fulfillmentStatus as FulfillmentStatus) || FulfillmentStatus.NEW,
                 items: {
                     create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
                         productId: item.productId,
@@ -508,7 +508,7 @@ export async function checkAndTransitionIdleOrders(storeId?: string, tenantId?: 
         const isAllBranches = !storeId || storeId === 'ALL' || storeId === 'all' || storeId.trim() === ''
         await prisma.order.updateMany({
             where: {
-                fulfillmentStatus: 'NEW',
+                fulfillmentStatus: FulfillmentStatus.NEW,
                 createdAt: { lte: oneHourAgo },
                 NOT: {
                     paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
@@ -517,7 +517,7 @@ export async function checkAndTransitionIdleOrders(storeId?: string, tenantId?: 
                 ...(tenantId ? { store: { tenantId } } : {})
             },
             data: {
-                fulfillmentStatus: 'PENDING'
+                fulfillmentStatus: FulfillmentStatus.PENDING
             }
         })
     } catch (err) {
@@ -664,7 +664,7 @@ export async function updateOrderPaymentStatus(id: string, paymentStatus: string
     return getOrderById(id)
 }
 
-export async function updateOrderFulfillmentStatus(id: string, fulfillmentStatus: any) {
+export async function updateOrderFulfillmentStatus(id: string, fulfillmentStatus: FulfillmentStatus) {
     await prisma.order.update({
         where: { id },
         data: { fulfillmentStatus },
@@ -672,7 +672,7 @@ export async function updateOrderFulfillmentStatus(id: string, fulfillmentStatus
     return getOrderById(id)
 }
 
-export async function payOrder(id: string, data: { paymentMethod?: any; paymentStatus?: string; status?: string; fulfillmentStatus?: any; splitPayments?: any[] }) {
+export async function payOrder(id: string, data: { paymentMethod?: any; paymentStatus?: string; status?: string; fulfillmentStatus?: FulfillmentStatus; splitPayments?: any[] }) {
     if (data.splitPayments && data.splitPayments.length > 0) {
         await prisma.splitPayment.deleteMany({ where: { orderId: id } })
         await prisma.splitPayment.createMany({
