@@ -30,6 +30,15 @@ enum PaymentMethod {
   CREDIT
 }
 
+enum FulfillmentStatus {
+  NEW
+  PENDING
+  IN_PREPARATION
+  READY_FOR_PICKUP
+  DELIVERED
+  SHIPPED
+}
+
 model Tenant {
   id                    String   @id @default(cuid())
   name                  String
@@ -272,6 +281,7 @@ model Order {
   paymentMethod PaymentMethod @default(CASH)
   status              String        @default("NEW")
   paymentStatus       String        @default("PENDING")
+  fulfillmentStatus   FulfillmentStatus @default(NEW)
   posDeviceType       String?
   items               OrderItem[]
   splitPayments       SplitPayment[]

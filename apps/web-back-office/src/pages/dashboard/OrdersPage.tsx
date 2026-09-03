@@ -329,6 +329,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         if (selectedFulfillmentStatus && selectedFulfillmentStatus !== 'ALL') {
             const fulfillLabels: Record<string, string> = {
                 NEW: 'New',
+                PENDING: 'Pending (Idle)',
                 IN_PREPARATION: 'In Preparation',
                 READY_FOR_PICKUP: 'Ready for Pickup',
                 DELIVERED: 'Delivered',
@@ -519,17 +520,19 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 }
             }
 
-            // 4. Fulfillment Status filter (NEW, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
+            // 4. Fulfillment Status filter (NEW, PENDING, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
             if (selectedFulfillmentStatus && selectedFulfillmentStatus !== 'ALL') {
                 const targetFulfill = selectedFulfillmentStatus.toUpperCase();
-                const orderStatus = (order.status || '').toUpperCase();
+                const oFulfill = ((order.fulfillmentStatus || order.status) || '').toUpperCase();
 
                 if (targetFulfill === 'READY_FOR_PICKUP' || targetFulfill === 'READY') {
-                    if (orderStatus !== 'READY' && orderStatus !== 'READY_FOR_PICKUP') return false;
+                    if (oFulfill !== 'READY' && oFulfill !== 'READY_FOR_PICKUP') return false;
                 } else if (targetFulfill === 'IN_PREPARATION' || targetFulfill === 'PREPARING') {
-                    if (orderStatus !== 'IN_PREPARATION' && orderStatus !== 'PREPARING') return false;
+                    if (oFulfill !== 'IN_PREPARATION' && oFulfill !== 'PREPARING') return false;
+                } else if (targetFulfill === 'PENDING') {
+                    if (oFulfill !== 'PENDING') return false;
                 } else {
-                    if (orderStatus !== targetFulfill) return false;
+                    if (oFulfill !== targetFulfill) return false;
                 }
             }
 
@@ -695,6 +698,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     // ── Real-Time Dynamic Financial Summary Metrics ────────────────────────────
     const financialSummary = useMemo(() => {
         let totalRevenue = 0;
+        let totalRefund = 0;
         const totalCount = displayList.length;
         let paidCount = 0;
         let pendingCount = 0;
@@ -711,11 +715,14 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
 
             const pStatus = (order.paymentStatus || '').toUpperCase();
             const oStatus = (order.status || '').toUpperCase();
+            const isRefunded = pStatus === 'REFUNDED' || oStatus === 'REFUNDED' || Boolean(order.refund);
 
-            if (pStatus === 'SUCCESS' || pStatus === 'PAID' || oStatus === 'COMPLETED') {
-                paidCount++;
-            } else if (pStatus === 'REFUNDED' || oStatus === 'REFUNDED') {
+            if (isRefunded) {
                 refundedCount++;
+                const refundAmt = Number(order.refund?.amount || order.totalAmount || 0);
+                totalRefund += refundAmt;
+            } else if (pStatus === 'SUCCESS' || pStatus === 'PAID' || oStatus === 'COMPLETED') {
+                paidCount++;
             } else {
                 pendingCount++;
             }
@@ -750,10 +757,13 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             pendingCount = displayList.length;
         }
 
+        const netRevenue = Math.max(0, totalRevenue - totalRefund);
         const avgTicket = totalCount > 0 ? totalRevenue / totalCount : 0;
 
         return {
             totalRevenue,
+            totalRefund,
+            netRevenue,
             totalCount,
             paidCount,
             pendingCount,
@@ -942,6 +952,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 >
                                     <option value="ALL">Fulfillment Status</option>
                                     <option value="NEW">New</option>
+                                    <option value="PENDING">Pending (Idle &gt; 1h)</option>
                                     <option value="IN_PREPARATION">In Preparation</option>
                                     <option value="READY_FOR_PICKUP">Ready for Pickup</option>
                                     <option value="DELIVERED">Delivered</option>
@@ -1163,19 +1174,19 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
             )}
 
             {/* ── Context-Aware Financial Summary Strip ── */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {/* 1. Total Revenue / Pipeline Value */}
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+                {/* 1. Gross Revenue / Pipeline Value */}
                 <div className="bg-gradient-to-br from-emerald-50 to-teal-50/40 dark:from-emerald-950/20 dark:to-teal-950/10 border border-emerald-100 dark:border-emerald-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
                     <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">
-                            {mainTab === 'drafts' ? 'Draft Pipeline Value' : 'Total Revenue'}
+                            {mainTab === 'drafts' ? 'Draft Pipeline Value' : 'Gross Revenue'}
                         </span>
                         <div className="w-7 h-7 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                             <CreditCard size={14} />
                         </div>
                     </div>
                     <div className="mt-2">
-                        <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+                        <div className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight">
                             ₦{financialSummary.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5 flex items-center gap-1">
@@ -1184,70 +1195,90 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                     </div>
                 </div>
 
-                {/* 2. Order Volume & Breakdown */}
+                {/* 2. Total Refunds */}
+                <div className="bg-gradient-to-br from-red-50 to-rose-50/40 dark:from-red-950/20 dark:to-rose-950/10 border border-red-100 dark:border-red-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-red-700 dark:text-red-400">
+                            Total Refunds
+                        </span>
+                        <div className="w-7 h-7 rounded-xl bg-red-500/10 dark:bg-red-500/20 flex items-center justify-center text-red-600 dark:text-red-400">
+                            <RotateCcw size={14} />
+                        </div>
+                    </div>
+                    <div className="mt-2">
+                        <div className="text-lg sm:text-xl font-black text-red-700 dark:text-red-400 tracking-tight">
+                            ₦{financialSummary.totalRefund.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5">
+                            <span>{financialSummary.refundedCount} order{financialSummary.refundedCount !== 1 ? 's' : ''} refunded</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Net Revenue */}
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50/40 dark:from-green-950/20 dark:to-emerald-950/10 border border-green-200 dark:border-green-800/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between ring-1 ring-green-500/20 transition-all hover:shadow-md">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-green-800 dark:text-green-300">
+                            Net Revenue
+                        </span>
+                        <div className="w-7 h-7 rounded-xl bg-green-500/10 dark:bg-green-500/20 flex items-center justify-center text-green-600 dark:text-green-400">
+                            <CheckCircle size={14} />
+                        </div>
+                    </div>
+                    <div className="mt-2">
+                        <div className="text-lg sm:text-xl font-black text-green-900 dark:text-green-100 tracking-tight">
+                            ₦{financialSummary.netRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[10px] font-bold text-green-700 dark:text-green-400 mt-0.5">
+                            <span>Gross minus refunds</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 4. Order Volume & Breakdown */}
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50/40 dark:from-blue-950/20 dark:to-indigo-950/10 border border-blue-100 dark:border-blue-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
                     <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400">
-                            {mainTab === 'drafts' ? 'Hold Orders Count' : 'Total Order Volume'}
+                            {mainTab === 'drafts' ? 'Hold Orders Count' : 'Total Volume'}
                         </span>
                         <div className="w-7 h-7 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
                             <Package size={14} />
                         </div>
                     </div>
                     <div className="mt-2">
-                        <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+                        <div className="text-lg sm:text-xl font-black text-gray-900 dark:text-white tracking-tight">
                             {financialSummary.totalCount.toLocaleString()} {mainTab === 'drafts' ? 'Drafts' : 'Orders'}
                         </div>
-                        <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap items-center gap-1.5">
+                        <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap items-center gap-1">
                             <span className="text-green-600 dark:text-green-400 font-black">{financialSummary.paidCount} Paid</span>
-                            {financialSummary.pendingCount > 0 && <span className="text-amber-600 dark:text-amber-400 font-black">· {financialSummary.pendingCount} Pending</span>}
-                            {financialSummary.refundedCount > 0 && <span className="text-red-600 dark:text-red-400 font-black">· {financialSummary.refundedCount} Refunded</span>}
+                            {financialSummary.pendingCount > 0 && <span className="text-amber-600 dark:text-amber-400 font-black">· {financialSummary.pendingCount} Pend</span>}
+                            {financialSummary.refundedCount > 0 && <span className="text-red-600 dark:text-red-400 font-black">· {financialSummary.refundedCount} Ref</span>}
                         </div>
                     </div>
                 </div>
 
-                {/* 3. Average Order Value */}
-                <div className="bg-gradient-to-br from-purple-50 to-fuchsia-50/40 dark:from-purple-950/20 dark:to-fuchsia-950/10 border border-purple-100 dark:border-purple-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
-                    <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-widest text-purple-700 dark:text-purple-400">
-                            Average Ticket Size
-                        </span>
-                        <div className="w-7 h-7 rounded-xl bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
-                            <Tag size={14} />
-                        </div>
-                    </div>
-                    <div className="mt-2">
-                        <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-                            ₦{financialSummary.avgTicket.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                        <div className="text-[10px] font-bold text-gray-500 dark:text-gray-400 mt-0.5">
-                            <span>Per transaction average</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 4. Product Metric (Conditional if product/item filter active) OR Branch Context Pill */}
+                {/* 5. Product Metric (Conditional) OR Branch Context */}
                 {financialSummary.isProductFiltered ? (
-                    <div className="bg-gradient-to-br from-amber-50 to-orange-50/40 dark:from-amber-950/20 dark:to-orange-950/10 border border-amber-200 dark:border-amber-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between ring-2 ring-amber-400/30 transition-all hover:shadow-md">
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-50/40 dark:from-amber-950/20 dark:to-orange-950/10 border border-amber-200 dark:border-amber-900/40 rounded-2xl p-4 shadow-sm flex flex-col justify-between ring-2 ring-amber-400/30 transition-all hover:shadow-md col-span-2 md:col-span-1">
                         <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 truncate max-w-[130px]" title={filterProductName || filterItemName}>
-                                {filterProductName || filterItemName || 'Product Filter'}
+                            <span className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 truncate max-w-[120px]" title={filterProductName || filterItemName}>
+                                {filterProductName || filterItemName || 'Product'}
                             </span>
                             <div className="w-7 h-7 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
                                 <Package size={14} />
                             </div>
                         </div>
                         <div className="mt-2">
-                            <div className="text-xl sm:text-2xl font-black text-amber-900 dark:text-amber-200 tracking-tight">
+                            <div className="text-lg sm:text-xl font-black text-amber-900 dark:text-amber-200 tracking-tight">
                                 {financialSummary.productUnitsSold} Units Sold
                             </div>
                             <div className="text-[10px] font-bold text-amber-700 dark:text-amber-400 mt-0.5">
-                                <span>₦{financialSummary.productRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} product total</span>
+                                <span>₦{financialSummary.productRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             </div>
                         </div>
                     </div>
                 ) : (
-                    <div className="bg-gradient-to-br from-slate-50 to-gray-50/40 dark:from-slate-800/40 dark:to-slate-800/20 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+                    <div className="bg-gradient-to-br from-slate-50 to-gray-50/40 dark:from-slate-800/40 dark:to-slate-800/20 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-sm flex flex-col justify-between transition-all hover:shadow-md col-span-2 md:col-span-1">
                         <div className="flex items-center justify-between">
                             <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 dark:text-gray-400">
                                 Active Context
@@ -1343,16 +1374,28 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                     <td className="px-8 py-6">
                                         <div className="flex flex-wrap gap-2">
                                             {/* Fulfillment Status */}
-                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
-                                                    order.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-400' :
-                                                        'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
-                                                }`}>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${order.status === 'COMPLETED' ? 'bg-green-500' :
-                                                        order.status === 'READY' ? 'bg-blue-500' :
-                                                            'bg-amber-500'
-                                                    }`}></div>
-                                                FUL: {order.status}
-                                            </span>
+                                            {(() => {
+                                                const fStatus = order.fulfillmentStatus || order.status;
+                                                const isDelivered = fStatus === 'DELIVERED' || fStatus === 'COMPLETED';
+                                                const isReady = fStatus === 'READY' || fStatus === 'READY_FOR_PICKUP' || fStatus === 'SHIPPED';
+                                                const isPending = fStatus === 'PENDING';
+                                                return (
+                                                    <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${
+                                                        isDelivered ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
+                                                        isReady ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-400' :
+                                                        isPending ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-400' :
+                                                        'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800/40 dark:border-slate-700 dark:text-slate-300'
+                                                    }`}>
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${
+                                                            isDelivered ? 'bg-green-500' :
+                                                            isReady ? 'bg-blue-500' :
+                                                            isPending ? 'bg-amber-500 animate-pulse' :
+                                                            'bg-slate-400'
+                                                        }`}></div>
+                                                        FUL: {fStatus}
+                                                    </span>
+                                                );
+                                            })()}
                                             {/* Payment Status */}
                                             <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
                                                     order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-950/30 dark:border-purple-800 dark:text-purple-400' :
@@ -1530,12 +1573,28 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                 </div>
                                 <div>
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Fulfillment</p>
-                                    <span className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${selectedOrder.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
-                                            selectedOrder.status === 'READY' ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-400' :
-                                                'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
-                                        }`}>
-                                        FUL: {selectedOrder.status}
-                                    </span>
+                                    {(() => {
+                                        const fStatus = selectedOrder.fulfillmentStatus || selectedOrder.status;
+                                        const isDelivered = fStatus === 'DELIVERED' || fStatus === 'COMPLETED';
+                                        const isReady = fStatus === 'READY' || fStatus === 'READY_FOR_PICKUP' || fStatus === 'SHIPPED';
+                                        const isPending = fStatus === 'PENDING';
+                                        return (
+                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-black rounded-full border uppercase tracking-widest ${
+                                                isDelivered ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
+                                                isReady ? 'bg-blue-50 text-blue-600 border-blue-100 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-400' :
+                                                isPending ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:border-amber-700 dark:text-amber-400' :
+                                                'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800/40 dark:border-slate-700 dark:text-slate-300'
+                                            }`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${
+                                                    isDelivered ? 'bg-green-500' :
+                                                    isReady ? 'bg-blue-500' :
+                                                    isPending ? 'bg-amber-500 animate-pulse' :
+                                                    'bg-slate-400'
+                                                }`}></div>
+                                                FUL: {fStatus}
+                                            </span>
+                                        );
+                                    })()}
                                 </div>
                                 <div className="text-right">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-1">Total Amount</p>

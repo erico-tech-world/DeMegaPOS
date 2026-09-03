@@ -62,6 +62,7 @@ export async function createOrder(data: CreateOrderInput) {
                 paymentMethod: data.paymentMethod,
                 paymentStatus: data.paymentStatus || 'PAID',
                 status: data.paymentStatus === 'DRAFT' ? 'DRAFT' : 'COMPLETED',
+                fulfillmentStatus: (data.fulfillmentStatus as any) || (existingDraft as any).fulfillmentStatus || 'NEW',
                 items: {
                     create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
                         productId: item.productId,
@@ -129,6 +130,7 @@ export async function createOrder(data: CreateOrderInput) {
                 paymentMethod: data.paymentMethod,
                 paymentStatus: data.paymentStatus || 'PENDING',
                 status: data.paymentStatus === 'DRAFT' ? 'DRAFT' : 'COMPLETED',
+                fulfillmentStatus: (data.fulfillmentStatus as any) || 'NEW',
                 items: {
                     create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
                         productId: item.productId,
@@ -363,16 +365,25 @@ export function buildOrderWhereClause(storeId?: string, tenantId?: string, filte
         }
     }
 
-    // 3. Fulfillment Status Filter (NEW, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
+    // 3. Fulfillment Status Filter (NEW, PENDING, IN_PREPARATION, READY_FOR_PICKUP, DELIVERED, SHIPPED)
     if (filters?.fulfillmentStatus && filters.fulfillmentStatus !== 'ALL') {
         const fulfill = filters.fulfillmentStatus.toUpperCase()
+        let mappedFulfill: any = fulfill
         if (fulfill === 'READY_FOR_PICKUP' || fulfill === 'READY') {
-            andConditions.push({ status: { in: ['READY', 'READY_FOR_PICKUP', 'ready', 'ready_for_pickup'] } })
+            mappedFulfill = 'READY_FOR_PICKUP'
         } else if (fulfill === 'IN_PREPARATION' || fulfill === 'PREPARING') {
-            andConditions.push({ status: { in: ['IN_PREPARATION', 'PREPARING', 'in_preparation', 'preparing'] } })
-        } else {
-            andConditions.push({ status: { equals: fulfill, mode: 'insensitive' } })
+            mappedFulfill = 'IN_PREPARATION'
         }
+
+        const validFulfillmentEnums = ['NEW', 'PENDING', 'IN_PREPARATION', 'READY_FOR_PICKUP', 'DELIVERED', 'SHIPPED']
+        const isEnum = validFulfillmentEnums.includes(mappedFulfill)
+
+        andConditions.push({
+            OR: [
+                ...(isEnum ? [{ fulfillmentStatus: mappedFulfill }] : []),
+                { status: { in: [fulfill, mappedFulfill, fulfill.toLowerCase()] } }
+            ]
+        })
     }
 
     // 4. Payment Status Filters
@@ -486,7 +497,36 @@ export function buildOrderWhereClause(storeId?: string, tenantId?: string, filte
     return whereClause
 }
 
+/**
+ * Automated 1-hour Idle/Pending Fulfillment Logic:
+ * If fulfillmentStatus == 'NEW' for >60 minutes without manual staff updates,
+ * automatically transition the fulfillmentStatus to 'PENDING'.
+ */
+export async function checkAndTransitionIdleOrders(storeId?: string, tenantId?: string) {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+    try {
+        const isAllBranches = !storeId || storeId === 'ALL' || storeId === 'all' || storeId.trim() === ''
+        await prisma.order.updateMany({
+            where: {
+                fulfillmentStatus: 'NEW',
+                createdAt: { lte: oneHourAgo },
+                NOT: {
+                    paymentStatus: { in: ['DRAFT', 'IN_CHECKOUT'] }
+                },
+                ...(!isAllBranches ? { storeId } : {}),
+                ...(tenantId ? { store: { tenantId } } : {})
+            },
+            data: {
+                fulfillmentStatus: 'PENDING'
+            }
+        })
+    } catch (err) {
+        console.error('[FULFILLMENT] Failed to transition idle orders to PENDING:', err)
+    }
+}
+
 export async function getOrders(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
+    await checkAndTransitionIdleOrders(storeId, tenantId)
     const whereClause = buildOrderWhereClause(storeId, tenantId, filters)
 
     const take = filters?.limit && filters.limit > 0 ? filters.limit : undefined
@@ -521,19 +561,41 @@ export async function getOrders(storeId?: string, tenantId?: string, filters?: G
 }
 
 export async function getOrderAggregates(storeId?: string, tenantId?: string, filters?: GetOrdersFilters) {
+    await checkAndTransitionIdleOrders(storeId, tenantId)
     const whereClause = buildOrderWhereClause(storeId, tenantId, filters)
 
-    const [totalCount, totalRevenueResult] = await Promise.all([
+    const [totalCount, totalRevenueResult, refundAggregate, refundedOrdersAggregate] = await Promise.all([
         prisma.order.count({ where: whereClause }),
         prisma.order.aggregate({
             where: whereClause,
             _sum: {
                 totalAmount: true
             }
-        })
+        }),
+        prisma.refund.aggregate({
+            where: {
+                order: whereClause
+            },
+            _sum: {
+                amount: true
+            }
+        }).catch(() => ({ _sum: { amount: null } })),
+        prisma.order.aggregate({
+            where: {
+                ...whereClause,
+                OR: [{ status: 'REFUNDED' }, { paymentStatus: 'REFUNDED' }]
+            },
+            _sum: {
+                totalAmount: true
+            }
+        }).catch(() => ({ _sum: { totalAmount: null } }))
     ])
 
     const totalRevenue = Number(totalRevenueResult._sum.totalAmount || 0)
+    const refundFromTable = Number(refundAggregate._sum?.amount || 0)
+    const refundFromOrders = Number(refundedOrdersAggregate._sum?.totalAmount || 0)
+    const totalRefund = Math.max(refundFromTable, refundFromOrders)
+    const netRevenue = Math.max(0, totalRevenue - totalRefund)
 
     let productUnitsSold = 0
     let productRevenue = 0
@@ -559,6 +621,8 @@ export async function getOrderAggregates(storeId?: string, tenantId?: string, fi
     return {
         totalCount,
         totalRevenue,
+        totalRefund,
+        netRevenue,
         productUnitsSold,
         productRevenue
     }
@@ -600,7 +664,15 @@ export async function updateOrderPaymentStatus(id: string, paymentStatus: string
     return getOrderById(id)
 }
 
-export async function payOrder(id: string, data: { paymentMethod?: any; paymentStatus?: string; status?: string; splitPayments?: any[] }) {
+export async function updateOrderFulfillmentStatus(id: string, fulfillmentStatus: any) {
+    await prisma.order.update({
+        where: { id },
+        data: { fulfillmentStatus },
+    })
+    return getOrderById(id)
+}
+
+export async function payOrder(id: string, data: { paymentMethod?: any; paymentStatus?: string; status?: string; fulfillmentStatus?: any; splitPayments?: any[] }) {
     if (data.splitPayments && data.splitPayments.length > 0) {
         await prisma.splitPayment.deleteMany({ where: { orderId: id } })
         await prisma.splitPayment.createMany({
@@ -618,6 +690,7 @@ export async function payOrder(id: string, data: { paymentMethod?: any; paymentS
         data: {
             paymentStatus: data.paymentStatus || 'PAID',
             status: data.status || 'COMPLETED',
+            ...(data.fulfillmentStatus ? { fulfillmentStatus: data.fulfillmentStatus } : {}),
             paymentMethod: data.paymentMethod || undefined
         }
     })

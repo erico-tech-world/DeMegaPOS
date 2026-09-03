@@ -237,8 +237,8 @@ const AppLayout: React.FC = () => {
 
                         {/* Branch Switcher (Strict RBAC: visible ONLY to SUPER_ADMIN and OWNER) */}
                         {['SUPER_ADMIN', 'OWNER'].includes(userRole) ? (
-                            <div className="hidden sm:flex items-center gap-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-xl">
-                                <span className="text-[10px] font-black uppercase text-gray-400">Branch:</span>
+                            <div className="flex items-center gap-1.5 sm:gap-2 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-gray-700 px-2.5 sm:px-3 py-1.5 rounded-xl max-w-[135px] sm:max-w-[220px] md:max-w-none">
+                                <span className="hidden xs:inline text-[9px] sm:text-[10px] font-black uppercase text-gray-400 shrink-0">Branch:</span>
                                 <select
                                     value={selectedBranch}
                                     onChange={(e) => {
@@ -247,19 +247,20 @@ const AppLayout: React.FC = () => {
                                         localStorage.setItem('selectedBranchId', newBranchId);
                                         window.dispatchEvent(new CustomEvent('demega:branch-changed', { detail: { branchId: newBranchId } }));
                                     }}
-                                    className="bg-transparent text-xs font-black text-gray-800 dark:text-white outline-none cursor-pointer"
+                                    className="bg-transparent text-[11px] sm:text-xs font-black text-gray-800 dark:text-white outline-none cursor-pointer truncate w-full"
+                                    title="Switch Active Branch"
                                 >
                                     {branches.map(b => (
-                                        <option key={b.id} value={b.id} className="dark:bg-slate-900">
+                                        <option key={b.id} value={b.id} className="dark:bg-slate-900 text-gray-900 dark:text-white">
                                             {b.name} ({b.branchCode || 'HQ'})
                                         </option>
                                     ))}
                                 </select>
                             </div>
                         ) : (
-                            <div className="hidden sm:flex items-center gap-2 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-gray-700 px-3.5 py-1.5 rounded-xl text-xs font-black text-gray-700 dark:text-gray-300">
-                                <span className="text-[10px] font-black uppercase text-gray-400">Branch:</span>
-                                <span>{branches.find(b => b.id === selectedBranch)?.name || (user as any)?.storeName || 'HQ Branch'}</span>
+                            <div className="flex items-center gap-1.5 sm:gap-2 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-gray-700 px-2.5 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-black text-gray-700 dark:text-gray-300 max-w-[135px] sm:max-w-[220px] md:max-w-none">
+                                <span className="hidden xs:inline text-[9px] sm:text-[10px] font-black uppercase text-gray-400 shrink-0">Branch:</span>
+                                <span className="truncate">{branches.find(b => b.id === selectedBranch)?.name || (user as any)?.storeName || 'HQ Branch'}</span>
                             </div>
                         )}
 

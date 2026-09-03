@@ -7,6 +7,7 @@ import {
     getOrderAggregates,
     updateOrderStatus,
     updateOrderPaymentStatus,
+    updateOrderFulfillmentStatus,
     payOrder,
     getDraftOrders,
     lockDraftOrder,
@@ -143,6 +144,8 @@ export default async function orderRoutes(app: FastifyInstance) {
 
             reply.header('X-Total-Count', aggregates.totalCount.toString())
             reply.header('X-Total-Revenue', aggregates.totalRevenue.toString())
+            reply.header('X-Total-Refund', aggregates.totalRefund.toString())
+            reply.header('X-Net-Revenue', aggregates.netRevenue.toString())
             reply.header('X-Product-Units-Sold', aggregates.productUnitsSold.toString())
             reply.header('X-Product-Revenue', aggregates.productRevenue.toString())
 
@@ -197,6 +200,8 @@ export default async function orderRoutes(app: FastifyInstance) {
                     200: z.object({
                         totalCount: z.number(),
                         totalRevenue: z.number(),
+                        totalRefund: z.number().optional(),
+                        netRevenue: z.number().optional(),
                         productUnitsSold: z.number(),
                         productRevenue: z.number(),
                     }),
@@ -322,6 +327,29 @@ export default async function orderRoutes(app: FastifyInstance) {
         }
     )
 
+    server.patch(
+        '/:id/fulfillment-status',
+        {
+            schema: {
+                params: z.object({
+                    id: z.string(),
+                }),
+                body: z.object({
+                    fulfillmentStatus: z.enum(['NEW', 'PENDING', 'IN_PREPARATION', 'READY_FOR_PICKUP', 'DELIVERED', 'SHIPPED']),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { id } = request.params as { id: string }
+            const { fulfillmentStatus } = request.body as { fulfillmentStatus: any }
+            const updatedOrder = await updateOrderFulfillmentStatus(id, fulfillmentStatus)
+            if (updatedOrder) {
+                app.broadcast('ORDER_UPDATED', updatedOrder)
+            }
+            return reply.send(updatedOrder)
+        }
+    )
+
     server.put(
         '/:id/pay',
         {
@@ -333,6 +361,7 @@ export default async function orderRoutes(app: FastifyInstance) {
                     paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'WALLET', 'SPLIT', 'CREDIT']).optional(),
                     paymentStatus: z.string().optional(),
                     status: z.string().optional(),
+                    fulfillmentStatus: z.enum(['NEW', 'PENDING', 'IN_PREPARATION', 'READY_FOR_PICKUP', 'DELIVERED', 'SHIPPED']).optional(),
                 }),
             },
         },

@@ -23,6 +23,7 @@ export const createOrderSchema = z.object({
     totalAmount: z.number().positive(),
     paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'WALLET', 'SPLIT', 'CREDIT']),
     paymentStatus: z.string().optional(),
+    fulfillmentStatus: z.enum(['NEW', 'PENDING', 'IN_PREPARATION', 'READY_FOR_PICKUP', 'DELIVERED', 'SHIPPED']).optional(),
     splitPayments: z.array(splitPaymentSchema).optional(),
     dueDate: z.string().optional(), // For credit sales (ISO date string)
 })
@@ -39,6 +40,7 @@ export const orderResponseSchema = z.object({
     paymentMethod: z.string(),
     status: z.string(),
     paymentStatus: z.string(),
+    fulfillmentStatus: z.string().optional(),
     posDeviceType: z.string().nullable().optional(),
     items: z.array(z.any()),
     splitPayments: z.array(z.any()).optional(),
