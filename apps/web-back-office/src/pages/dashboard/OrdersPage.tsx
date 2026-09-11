@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
     Search, Download, Calendar, ArrowRight, User as UserIcon, Tag, CreditCard,
     ChevronDown, X, Package, Clock, Play, Trash2, RotateCcw,
-    AlertTriangle, CheckCircle, Filter
+    AlertTriangle, CheckCircle, Filter, Loader2
 } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -74,6 +74,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     const [draftToDelete, setDraftToDelete] = useState<any>(null);
     const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
     const [deleteLoading, setDeleteLoading] = useState(false);
+    const isDeleteLoadingRef = useRef(false);
 
     // ── Toast Notification ─────────────────────────────────────────────────────
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -86,6 +87,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     const [refundTarget, setRefundTarget] = useState<any>(null);
     const [refundReason, setRefundReason] = useState('');
     const [refundLoading, setRefundLoading] = useState(false);
+    const isRefundLoadingRef = useRef(false);
 
     // ── Atomic URL Search Parameter Updater ────────────────────────────────────
     const updateFilterParams = useCallback((updates: Record<string, string | null | undefined>) => {
@@ -633,6 +635,8 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     };
 
     const handleCancelDraft = async (draftId: string) => {
+        if (isDeleteLoadingRef.current) return;
+        isDeleteLoadingRef.current = true;
         setDeleteLoading(true);
         try {
             if (cancelDraftOrder) await cancelDraftOrder(draftId);
@@ -641,12 +645,15 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         } catch {
             showToast('Failed to cancel draft. Please try again.', 'error');
         } finally {
+            isDeleteLoadingRef.current = false;
             setDeleteLoading(false);
             setDraftToDelete(null);
         }
     };
 
     const handleClearAllDrafts = async () => {
+        if (isDeleteLoadingRef.current) return;
+        isDeleteLoadingRef.current = true;
         setDeleteLoading(true);
         try {
             const token = localStorage.getItem('token');
@@ -660,13 +667,15 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         } catch {
             showToast('Failed to clear all drafts. Please try again.', 'error');
         } finally {
+            isDeleteLoadingRef.current = false;
             setDeleteLoading(false);
             setBulkDeleteConfirm(false);
         }
     };
 
     const handleRefundOrder = async () => {
-        if (!refundTarget || !refundReason.trim()) return;
+        if (!refundTarget || !refundReason.trim() || isRefundLoadingRef.current) return;
+        isRefundLoadingRef.current = true;
         setRefundLoading(true);
         try {
             const token = localStorage.getItem('token');
@@ -682,6 +691,7 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
         } catch (err: any) {
             showToast(err?.response?.data?.message || 'Failed to process refund.', 'error');
         } finally {
+            isRefundLoadingRef.current = false;
             setRefundLoading(false);
         }
     };
@@ -1646,16 +1656,28 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setDraftToDelete(null)}
-                                className="flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl font-black text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-all"
+                                disabled={deleteLoading}
+                                className={`flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl font-black text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-all ${
+                                    deleteLoading ? 'pointer-events-none opacity-50 cursor-not-allowed' : ''
+                                }`}
                             >
                                 Keep Draft
                             </button>
                             <button
                                 onClick={() => handleCancelDraft(draftToDelete.id)}
                                 disabled={deleteLoading}
-                                className="flex-1 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-2xl font-black transition-all"
+                                className={`flex-1 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-2xl font-black transition-all flex items-center justify-center gap-2 ${
+                                    deleteLoading ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                                }`}
                             >
-                                {deleteLoading ? 'Cancelling...' : 'Yes, Cancel Draft'}
+                                {deleteLoading ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        <span>Cancelling...</span>
+                                    </>
+                                ) : (
+                                    'Yes, Cancel Draft'
+                                )}
                             </button>
                         </div>
                     </div>
@@ -1684,16 +1706,27 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             <button
                                 onClick={() => setBulkDeleteConfirm(false)}
                                 disabled={deleteLoading}
-                                className="flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl font-black text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-all"
+                                className={`flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl font-black text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-all ${
+                                    deleteLoading ? 'pointer-events-none opacity-50 cursor-not-allowed' : ''
+                                }`}
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleClearAllDrafts}
                                 disabled={deleteLoading}
-                                className="flex-1 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-2xl font-black transition-all"
+                                className={`flex-1 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-2xl font-black transition-all flex items-center justify-center gap-2 ${
+                                    deleteLoading ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                                }`}
                             >
-                                {deleteLoading ? 'Clearing...' : `Clear ${(draftOrders || []).length} Drafts`}
+                                {deleteLoading ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        <span>Clearing...</span>
+                                    </>
+                                ) : (
+                                    `Clear ${(draftOrders || []).length} Drafts`
+                                )}
                             </button>
                         </div>
                     </div>
@@ -1734,16 +1767,28 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                         <div className="flex gap-3">
                             <button
                                 onClick={() => { setRefundTarget(null); setRefundReason(''); }}
-                                className="flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl font-black text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-all"
+                                disabled={refundLoading}
+                                className={`flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl font-black text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-all ${
+                                    refundLoading ? 'pointer-events-none opacity-50 cursor-not-allowed' : ''
+                                }`}
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleRefundOrder}
                                 disabled={refundLoading || !refundReason.trim()}
-                                className="flex-1 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-2xl font-black transition-all"
+                                className={`flex-1 py-3 bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white rounded-2xl font-black transition-all flex items-center justify-center gap-2 ${
+                                    refundLoading ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                                }`}
                             >
-                                {refundLoading ? 'Processing...' : 'Confirm Refund'}
+                                {refundLoading ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        <span>Processing...</span>
+                                    </>
+                                ) : (
+                                    'Confirm Refund'
+                                )}
                             </button>
                         </div>
                     </div>

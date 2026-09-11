@@ -179,6 +179,113 @@ async function main() {
         }
     })
 
+    // Global Error Handler — Maps Prisma & runtime errors to human-friendly HTTP responses
+    server.setErrorHandler((error, request, reply) => {
+        server.log.error(error)
+
+        // Prisma unique constraint violation (P2002)
+        if ((error as any).code === 'P2002') {
+            const target = ((error as any).meta?.target as string[]) || []
+            const targetStr = Array.isArray(target) ? target.join(', ') : String(target || '')
+            let message = 'A record with this identifier already exists.'
+            if (targetStr.includes('sku')) {
+                message = 'A product with this SKU already exists. Please verify the SKU ID.'
+            } else if (targetStr.includes('email')) {
+                message = 'A record with this email already exists.'
+            } else if (targetStr.includes('phone')) {
+                message = 'A record with this phone number already exists.'
+            }
+            return reply.status(409).send({
+                statusCode: 409,
+                error: 'Conflict',
+                message,
+                target: targetStr
+            })
+        }
+
+        // Prisma foreign key constraint violation (P2003)
+        if ((error as any).code === 'P2003') {
+            return reply.status(400).send({
+                statusCode: 400,
+                error: 'Bad Request',
+                message: 'Referenced record could not be found or is currently in use.'
+            })
+        }
+
+        // Prisma record not found (P2025)
+        if ((error as any).code === 'P2025') {
+            return reply.status(404).send({
+                statusCode: 404,
+                error: 'Not Found',
+                message: 'The requested record was not found.'
+            })
+        }
+
+        // Fastify validation errors
+        if ((error as any).validation) {
+            return reply.status(400).send({
+                statusCode: 400,
+                error: 'Bad Request',
+                message: error.message || 'Validation failed. Please verify required fields.'
+            })
+        }
+
+        const statusCode = error.statusCode || 500
+        const message = statusCode >= 500
+            ? 'An internal error occurred while processing your request. Please try again.'
+            : (error.message || 'Operation failed.')
+
+        return reply.status(statusCode).send({
+            statusCode,
+            error: error.name || 'Error',
+            message
+        })
+    })
+
+    // ── Direct /drafts & /api/drafts Alias Router ──────────────────────────────
+    const draftAliasHandler = async (subServer: any) => {
+        const { getDraftOrders, updateDraftOrder, cancelDraftOrder, createOrder } = await import('./modules/orders/service.js')
+
+        subServer.get('/', async (req: any) => {
+            const query = req.query as any
+            return getDraftOrders(query.storeId || query.branchId, query.cashierId, query)
+        })
+
+        subServer.post('/', async (req: any, reply: any) => {
+            const body = req.body as any
+            const created = await createOrder({ ...body, paymentStatus: 'DRAFT' })
+            server.broadcast('ORDER_UPDATED', created)
+            return reply.status(201).send(created)
+        })
+
+        subServer.put('/:id', async (req: any, reply: any) => {
+            const { id } = req.params as { id: string }
+            const body = req.body as any
+            const updated = await updateDraftOrder(id, body)
+            server.broadcast('ORDER_UPDATED', updated)
+            return reply.send(updated)
+        })
+
+        subServer.patch('/:id', async (req: any, reply: any) => {
+            const { id } = req.params as { id: string }
+            const body = req.body as any
+            const updated = await updateDraftOrder(id, body)
+            server.broadcast('ORDER_UPDATED', updated)
+            return reply.send(updated)
+        })
+
+        subServer.delete('/:id', async (req: any, reply: any) => {
+            const { id } = req.params as { id: string }
+            await cancelDraftOrder(id)
+            server.broadcast('ORDER_UPDATED', { id, deleted: true })
+            return reply.send({ success: true })
+        })
+    }
+
+    server.register(draftAliasHandler, { prefix: '/drafts' })
+    server.register(draftAliasHandler, { prefix: '/api/drafts' })
+    server.register(draftAliasHandler, { prefix: '/api/v1/drafts' })
+
     // ── Ultra-lightweight keep-alive health check endpoints (0ms response, zero database queries) ──
     server.get('/health', async () => ({ status: 'ok', timestamp: Date.now() }))
     server.get('/api/v1/health', async () => ({ status: 'ok', timestamp: Date.now() }))

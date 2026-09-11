@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Search, Plus, Filter, X, Edit, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Plus, Filter, X, Edit, Trash2, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../lib/apiConfig';
+import { formatErrorMessage } from '../utils/errorHandler';
 
 
 export const InventoryView = ({ items, isLoading, searchQuery, setSearchQuery, selectedBranchId, onAddItem, onAdjustStock, onEdit, onDelete, onToggleBranchActive, highlightId }: any) => {
@@ -255,6 +256,7 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
     });
     const [categories, setCategories] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [imageUploadMode, setImageUploadMode] = useState<'url' | 'file'>('url');
     const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -297,12 +299,15 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
 
     const handleSubmit = async (e: any) => {
         e.preventDefault();
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         setError(null);
 
         const token = localStorage.getItem('token');
         if (!token) {
             setError('Not authenticated. Please log in again.');
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
             return;
         }
@@ -341,9 +346,9 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
             setImagePreview(null);
         } catch (err: any) {
             console.error('Error adding item:', err);
-            const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to create product.';
-            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            setError(formatErrorMessage(err, 'Failed to create product.'));
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
@@ -545,9 +550,18 @@ export const AddItemModal = ({ isOpen, onClose, onSuccess }: any) => {
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                            className={`w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 ${
+                                isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                            }`}
                         >
-                            {isSubmitting ? 'Initializing...' : 'Deploy Product'}
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    <span>Deploying Product...</span>
+                                </>
+                            ) : (
+                                'Deploy Product'
+                            )}
                         </button>
                     </div>
                 </form>
@@ -573,6 +587,7 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
     });
     const [categories, setCategories] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [imageUploadMode, setImageUploadMode] = useState<'url' | 'file'>('url');
     const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -637,12 +652,15 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
 
     const handleSubmit = async (e: any) => {
         e.preventDefault();
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         setError(null);
 
         const token = localStorage.getItem('token');
         if (!token) {
             setError('Not authenticated. Please log in again.');
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
             return;
         }
@@ -670,9 +688,9 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
             setImagePreview(null);
         } catch (err: any) {
             console.error('Error updating item:', err);
-            const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update product.';
-            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            setError(formatErrorMessage(err, 'Failed to update product.'));
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
@@ -837,9 +855,18 @@ export const EditItemModal = ({ isOpen, onClose, product, onSuccess }: any) => {
                         <button
                             type="submit"
                             disabled={isSubmitting}
-                            className="w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                            className={`w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 ${
+                                isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                            }`}
                         >
-                            {isSubmitting ? 'Updating...' : 'Update Product'}
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    <span>Updating Product...</span>
+                                </>
+                            ) : (
+                                'Update Product'
+                            )}
                         </button>
                     </div>
                 </form>
@@ -856,12 +883,15 @@ export const StockAdjustmentModal = ({ isOpen, onClose, product, selectedBranchI
         variantId: ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
 
     if (!isOpen || !product) return null;
 
     const handleSubmit = async (e: any) => {
         e.preventDefault();
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         setError(null);
         const token = localStorage.getItem('token');
@@ -880,8 +910,9 @@ export const StockAdjustmentModal = ({ isOpen, onClose, product, selectedBranchI
             onClose();
         } catch (err: any) {
             console.error('Error adjusting stock:', err);
-            setError(err?.response?.data?.message || err?.message || 'Stock adjustment failed.');
+            setError(formatErrorMessage(err, 'Stock adjustment failed.'));
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
@@ -951,9 +982,18 @@ export const StockAdjustmentModal = ({ isOpen, onClose, product, selectedBranchI
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        className={`w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2 ${
+                            isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                        }`}
                     >
-                        {isSubmitting ? 'Updating...' : 'Update Stock'}
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 size={18} className="animate-spin" />
+                                <span>Updating Stock...</span>
+                            </>
+                        ) : (
+                            'Update Stock'
+                        )}
                     </button>
                 </form>
             </div>
@@ -982,27 +1022,55 @@ export const CustomAlertModal = ({ title = "Notification Alert", message, onClos
 
 // --- Reusable Custom Confirm Modal ---
 export const CustomConfirmModal = ({ message, onConfirm, onClose }: any) => {
+    const [isConfirming, setIsConfirming] = useState(false);
+    const isConfirmingRef = useRef(false);
+
+    const handleConfirm = async () => {
+        if (isConfirmingRef.current) return;
+        isConfirmingRef.current = true;
+        setIsConfirming(true);
+        try {
+            await onConfirm();
+            onClose();
+        } catch (err) {
+            console.error('Action failed:', err);
+        } finally {
+            isConfirmingRef.current = false;
+            setIsConfirming(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
+            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={!isConfirming ? onClose : undefined} />
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-sm relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-4 border border-gray-100 dark:border-gray-800">
                 <h3 className="text-lg font-black text-gray-900 dark:text-white tracking-tight">Security Check</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 font-bold leading-relaxed">{message}</p>
                 <div className="flex gap-3">
                     <button
                         onClick={onClose}
-                        className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                        disabled={isConfirming}
+                        className={`flex-1 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 dark:hover:bg-gray-700 transition-all ${
+                            isConfirming ? 'pointer-events-none opacity-50 cursor-not-allowed' : ''
+                        }`}
                     >
                         Cancel
                     </button>
                     <button
-                        onClick={() => {
-                            onConfirm();
-                            onClose();
-                        }}
-                        className="flex-1 bg-[#2D7A3E] text-white py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all shadow-lg shadow-green-900/10"
+                        onClick={handleConfirm}
+                        disabled={isConfirming}
+                        className={`flex-1 bg-[#2D7A3E] text-white py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all shadow-lg shadow-green-900/10 flex items-center justify-center gap-2 ${
+                            isConfirming ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                        }`}
                     >
-                        Confirm
+                        {isConfirming ? (
+                            <>
+                                <Loader2 size={14} className="animate-spin" />
+                                <span>Confirming...</span>
+                            </>
+                        ) : (
+                            'Confirm'
+                        )}
                     </button>
                 </div>
             </div>
@@ -1015,13 +1083,15 @@ export const InlineAddCategoryModal = ({ isOpen, onClose, onSuccess }: any) => {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
 
     if (!isOpen) return null;
 
     const handleSubmit = async (e: any) => {
         e.preventDefault();
-        if (!name.trim()) return;
+        if (!name.trim() || isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         setError(null);
         try {
@@ -1034,19 +1104,20 @@ export const InlineAddCategoryModal = ({ isOpen, onClose, onSuccess }: any) => {
             setDescription('');
             onClose();
         } catch (err: any) {
-            setError(err?.response?.data?.message || 'Failed to create category.');
+            setError(formatErrorMessage(err, 'Failed to create category.'));
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
 
     return (
         <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={onClose} />
+            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={!isSubmitting ? onClose : undefined} />
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-md relative z-[121] overflow-hidden p-8 space-y-5 border border-gray-100 dark:border-gray-800">
                 <div className="flex justify-between items-center">
                     <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-tight">Add New Category</h3>
-                    <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={18} /></button>
+                    <button onClick={onClose} disabled={isSubmitting} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 disabled:opacity-50"><X size={18} /></button>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-1">
@@ -1072,9 +1143,22 @@ export const InlineAddCategoryModal = ({ isOpen, onClose, onSuccess }: any) => {
                     </div>
                     {error && <div className="text-xs font-bold text-red-500">{error}</div>}
                     <div className="flex gap-3 pt-2">
-                        <button type="button" onClick={onClose} className="flex-1 py-3.5 border border-gray-200 dark:border-gray-700 rounded-2xl font-black text-xs text-gray-600 dark:text-gray-300 uppercase">Cancel</button>
-                        <button type="submit" disabled={isSubmitting || !name.trim()} className="flex-1 py-3.5 bg-[#2D7A3E] text-white rounded-2xl font-black text-xs uppercase shadow-md hover:bg-[#20502E] disabled:opacity-50">
-                            {isSubmitting ? 'Creating...' : 'Save Category'}
+                        <button type="button" onClick={onClose} disabled={isSubmitting} className={`flex-1 py-3.5 border border-gray-200 dark:border-gray-700 rounded-2xl font-black text-xs text-gray-600 dark:text-gray-300 uppercase ${isSubmitting ? 'pointer-events-none opacity-50 cursor-not-allowed' : ''}`}>Cancel</button>
+                        <button
+                            type="submit"
+                            disabled={isSubmitting || !name.trim()}
+                            className={`flex-1 py-3.5 bg-[#2D7A3E] text-white rounded-2xl font-black text-xs uppercase shadow-md hover:bg-[#20502E] disabled:opacity-50 flex items-center justify-center gap-2 ${
+                                isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                            }`}
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 size={14} className="animate-spin" />
+                                    <span>Creating...</span>
+                                </>
+                            ) : (
+                                'Save Category'
+                            )}
                         </button>
                     </div>
                 </form>
@@ -1093,6 +1177,7 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
     const [deletingCategory, setDeletingCategory] = useState<any>(null);
     const [targetCategoryId, setTargetCategoryId] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [alertMsg, setAlertMsg] = useState<string | null>(null);
 
     const token = localStorage.getItem('token');
@@ -1114,7 +1199,8 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
 
     const handleEditCategory = async (e: any) => {
         e.preventDefault();
-        if (!editingCategory?.name?.trim()) return;
+        if (!editingCategory?.name?.trim() || isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         try {
             await axios.put(`${API_URL}/inventory/categories/${editingCategory.id}`, {
@@ -1127,13 +1213,15 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
         } catch {
             setAlertMsg('Failed to update category.');
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
 
     const handleTransfer = async (e: any) => {
         e.preventDefault();
-        if (!targetCategoryId || !transferCategory) return;
+        if (!targetCategoryId || !transferCategory || isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         try {
             const itemsToTransfer = products.filter((p: any) => p.categoryId === transferCategory.id).map((p: any) => p.id);
@@ -1150,13 +1238,15 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
         } catch {
             setAlertMsg('Failed to transfer category products.');
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
 
     const handleDelete = async (e: any) => {
         e.preventDefault();
-        if (!deletingCategory) return;
+        if (!deletingCategory || isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         try {
             await axios.delete(`${API_URL}/inventory/categories/${deletingCategory.id}`, {
@@ -1170,6 +1260,7 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
         } catch {
             setAlertMsg('Failed to delete category.');
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
@@ -1278,8 +1369,23 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
                                 />
                             </div>
                             <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={() => setEditingCategory(null)} className="flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl text-xs font-black uppercase text-gray-600 dark:text-gray-300">Cancel</button>
-                                <button type="submit" disabled={isSubmitting} className="flex-1 py-3 bg-[#2D7A3E] text-white rounded-2xl text-xs font-black uppercase shadow-md hover:bg-[#20502E]">Save</button>
+                                <button type="button" onClick={() => setEditingCategory(null)} disabled={isSubmitting} className={`flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl text-xs font-black uppercase text-gray-600 dark:text-gray-300 ${isSubmitting ? 'pointer-events-none opacity-50 cursor-not-allowed' : ''}`}>Cancel</button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className={`flex-1 py-3 bg-[#2D7A3E] text-white rounded-2xl text-xs font-black uppercase shadow-md hover:bg-[#20502E] flex items-center justify-center gap-2 ${
+                                        isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                                    }`}
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 size={14} className="animate-spin" />
+                                            <span>Saving...</span>
+                                        </>
+                                    ) : (
+                                        'Save'
+                                    )}
+                                </button>
                             </div>
                         </form>
                     </div>
@@ -1289,7 +1395,7 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
             {/* Transfer Items Modal */}
             {transferCategory && (
                 <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 animate-in fade-in">
-                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setTransferCategory(null)} />
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={!isSubmitting ? () => setTransferCategory(null) : undefined} />
                     <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-md relative z-[121] p-8 space-y-5 border border-gray-100 dark:border-gray-800">
                         <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase">Transfer Products from "{transferCategory.name}"</h3>
                         <p className="text-xs text-gray-500 font-bold">Select target category to batch re-assign all {transferCategory.productCount || 0} products currently in this category.</p>
@@ -1309,8 +1415,23 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
                                 </select>
                             </div>
                             <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={() => setTransferCategory(null)} className="flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl text-xs font-black uppercase text-gray-600 dark:text-gray-300">Cancel</button>
-                                <button type="submit" disabled={isSubmitting || !targetCategoryId} className="flex-1 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase shadow-md hover:bg-blue-700 disabled:opacity-50">Transfer</button>
+                                <button type="button" onClick={() => setTransferCategory(null)} disabled={isSubmitting} className={`flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl text-xs font-black uppercase text-gray-600 dark:text-gray-300 ${isSubmitting ? 'pointer-events-none opacity-50 cursor-not-allowed' : ''}`}>Cancel</button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting || !targetCategoryId}
+                                    className={`flex-1 py-3 bg-blue-600 text-white rounded-2xl text-xs font-black uppercase shadow-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 ${
+                                        isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                                    }`}
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 size={14} className="animate-spin" />
+                                            <span>Transferring...</span>
+                                        </>
+                                    ) : (
+                                        'Transfer'
+                                    )}
+                                </button>
                             </div>
                         </form>
                     </div>
@@ -1320,7 +1441,7 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
             {/* Safe Delete Modal */}
             {deletingCategory && (
                 <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 animate-in fade-in">
-                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setDeletingCategory(null)} />
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={!isSubmitting ? () => setDeletingCategory(null) : undefined} />
                     <div className="bg-white dark:bg-slate-900 rounded-[2rem] shadow-2xl w-full max-w-md relative z-[121] p-8 space-y-5 border border-gray-100 dark:border-gray-800">
                         <h3 className="text-lg font-black text-gray-900 dark:text-white uppercase">Delete Category "{deletingCategory.name}"</h3>
                         {deletingCategory.productCount > 0 ? (
@@ -1348,8 +1469,23 @@ export const CategoriesView = ({ products, refreshProducts }: any) => {
                                 </div>
                             )}
                             <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={() => setDeletingCategory(null)} className="flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl text-xs font-black uppercase text-gray-600 dark:text-gray-300">Cancel</button>
-                                <button type="submit" disabled={isSubmitting} className="flex-1 py-3 bg-red-600 text-white rounded-2xl text-xs font-black uppercase shadow-md hover:bg-red-700">Delete Category</button>
+                                <button type="button" onClick={() => setDeletingCategory(null)} disabled={isSubmitting} className={`flex-1 py-3 border border-gray-200 dark:border-gray-700 rounded-2xl text-xs font-black uppercase text-gray-600 dark:text-gray-300 ${isSubmitting ? 'pointer-events-none opacity-50 cursor-not-allowed' : ''}`}>Cancel</button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className={`flex-1 py-3 bg-red-600 text-white rounded-2xl text-xs font-black uppercase shadow-md hover:bg-red-700 flex items-center justify-center gap-2 ${
+                                        isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                                    }`}
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 size={14} className="animate-spin" />
+                                            <span>Deleting...</span>
+                                        </>
+                                    ) : (
+                                        'Delete Category'
+                                    )}
+                                </button>
                             </div>
                         </form>
                     </div>

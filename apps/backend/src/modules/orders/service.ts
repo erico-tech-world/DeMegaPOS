@@ -750,6 +750,102 @@ export async function getDraftOrders(storeId?: string, cashierId?: string, filte
     })
 }
 
+export async function updateDraftOrder(id: string, data: any) {
+    const existingDraft = await prisma.order.findUnique({
+        where: { id },
+        include: { items: true, splitPayments: true }
+    })
+
+    if (!existingDraft) {
+        throw new Error('Draft order not found')
+    }
+
+    if (existingDraft.paymentStatus !== 'DRAFT' && existingDraft.paymentStatus !== 'IN_CHECKOUT' && existingDraft.status !== 'DRAFT') {
+        throw new Error('Order is not in draft status and cannot be modified as a draft')
+    }
+
+    // Delete old items & split payments to overwrite in place
+    await prisma.orderItem.deleteMany({ where: { orderId: existingDraft.id } })
+    if (existingDraft.splitPayments && existingDraft.splitPayments.length > 0) {
+        await prisma.splitPayment.deleteMany({ where: { orderId: existingDraft.id } })
+    }
+
+    const items = data.items || []
+    const totalAmount = data.totalAmount !== undefined
+        ? data.totalAmount.toString()
+        : items.reduce((sum: number, item: any) => sum + (Number(item.price) * item.quantity), 0).toString()
+
+    const order = await prisma.order.update({
+        where: { id: existingDraft.id },
+        data: {
+            storeId: data.storeId || existingDraft.storeId,
+            cashierId: data.cashierId !== undefined ? data.cashierId : existingDraft.cashierId,
+            customerId: data.customerId !== undefined ? data.customerId : existingDraft.customerId,
+            totalAmount,
+            paymentMethod: data.paymentMethod || existingDraft.paymentMethod,
+            paymentStatus: 'DRAFT',
+            status: 'DRAFT',
+            items: {
+                create: items.map((item: any) => ({
+                    productId: item.productId,
+                    variantId: item.variantId,
+                    quantity: item.quantity,
+                    price: item.price.toString(),
+                    seatNumber: item.seatNumber,
+                })),
+            },
+            splitPayments: data.splitPayments && data.splitPayments.length > 0 ? {
+                create: data.splitPayments.map((sp: any) => ({
+                    method: sp.method,
+                    amount: sp.amount.toString(),
+                    reference: sp.reference
+                }))
+            } : undefined
+        },
+        include: {
+            items: {
+                include: {
+                    product: true
+                }
+            },
+            customer: true,
+            cashier: true,
+            store: true,
+            splitPayments: true
+        }
+    })
+
+    // Adjust stock difference if quantities changed
+    const oldItemMap = new Map<string, number>()
+    for (const item of existingDraft.items) {
+        oldItemMap.set(item.productId, (oldItemMap.get(item.productId) || 0) + item.quantity)
+    }
+    for (const item of items) {
+        const oldQty = oldItemMap.get(item.productId) || 0
+        const diff = item.quantity - oldQty
+        if (diff > 0) {
+            await prisma.product.update({
+                where: { id: item.productId },
+                data: { stock: { decrement: diff } }
+            }).catch(() => {})
+        } else if (diff < 0) {
+            await prisma.product.update({
+                where: { id: item.productId },
+                data: { stock: { increment: Math.abs(diff) } }
+            }).catch(() => {})
+        }
+        oldItemMap.delete(item.productId)
+    }
+    for (const [prodId, removedQty] of oldItemMap.entries()) {
+        await prisma.product.update({
+            where: { id: prodId },
+            data: { stock: { increment: removedQty } }
+        }).catch(() => {})
+    }
+
+    return order
+}
+
 export async function lockDraftOrder(id: string) {
     await prisma.order.update({
         where: { id },

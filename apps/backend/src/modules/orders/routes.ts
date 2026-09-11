@@ -10,6 +10,7 @@ import {
     updateOrderFulfillmentStatus,
     payOrder,
     getDraftOrders,
+    updateDraftOrder,
     lockDraftOrder,
     cancelDraftOrder,
     cancelAllDraftOrders,
@@ -509,6 +510,43 @@ export default async function orderRoutes(app: FastifyInstance) {
             await cancelDraftOrder(id)
             app.broadcast('ORDER_UPDATED', { id, deleted: true })
             return { success: true }
+        }
+    )
+
+    // In-place atomic update for Draft Orders (PUT /drafts/:id)
+    server.put(
+        '/drafts/:id',
+        {
+            schema: {
+                params: z.object({
+                    id: z.string(),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { id } = request.params as { id: string }
+            const body = request.body as any
+            const updated = await updateDraftOrder(id, body)
+            app.broadcast('ORDER_UPDATED', updated)
+            return reply.send(updated)
+        }
+    )
+
+    server.patch(
+        '/drafts/:id',
+        {
+            schema: {
+                params: z.object({
+                    id: z.string(),
+                }),
+            },
+        },
+        async (request, reply) => {
+            const { id } = request.params as { id: string }
+            const body = request.body as any
+            const updated = await updateDraftOrder(id, body)
+            app.broadcast('ORDER_UPDATED', updated)
+            return reply.send(updated)
         }
     )
 

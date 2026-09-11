@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { UserPlus, Shield, X, Edit, Trash2, Search, Wallet, KeyRound } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { UserPlus, Shield, X, Edit, Trash2, Search, Wallet, KeyRound, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../lib/apiConfig';
 
@@ -346,6 +346,7 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
     });
     const [branches, setBranches] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
     const [warning, setWarning] = useState<string | null>(null);
@@ -363,6 +364,8 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
 
     const handleSubmit = async (e: any) => {
         e.preventDefault();
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         setError(null);
         setSuccess(null);
@@ -410,17 +413,18 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
             const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to send invite.';
             setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
+            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={!isSubmitting ? onClose : undefined} />
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95 border border-gray-100 dark:border-gray-800">
                 <div className="p-8 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                     <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter">Invite Personnel</h2>
-                    <button onClick={onClose} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400">
+                    <button onClick={onClose} disabled={isSubmitting} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400 disabled:opacity-50">
                         <X size={20} />
                     </button>
                 </div>
@@ -462,6 +466,7 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
                             ))}
                         </select>
                     </div>
+
                     {error && (
                         <div className="w-full px-4 py-3 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold animate-in fade-in duration-200">
                             ⚠️ {error}
@@ -482,9 +487,18 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
                         <button
                             disabled={isSubmitting}
                             type="submit"
-                            className="w-full bg-[#2D7A3E] text-white py-5 rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50"
+                            className={`w-full bg-[#2D7A3E] text-white py-5 rounded-[1.5rem] font-black uppercase tracking-widest shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${
+                                isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                            }`}
                         >
-                            {isSubmitting ? 'Transmitting...' : 'Authorize Invitation'}
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    <span>Authorizing Invitation...</span>
+                                </>
+                            ) : (
+                                'Authorize Invitation'
+                            )}
                         </button>
                     </div>
                 </form>
@@ -496,6 +510,7 @@ export const InviteStaffModal = ({ isOpen, onClose, onSuccess }: any) => {
 export const EditCustomerModal = ({ isOpen, onClose, onSuccess, customerData }: any) => {
     const [formData, setFormData] = useState({ name: '', phone: '', email: '', walletBalance: 0 });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -513,6 +528,8 @@ export const EditCustomerModal = ({ isOpen, onClose, onSuccess, customerData }: 
 
     const handleSubmit = async (e: any) => {
         e.preventDefault();
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         setError(null);
         try {
@@ -532,17 +549,18 @@ export const EditCustomerModal = ({ isOpen, onClose, onSuccess, customerData }: 
             const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update customer.';
             setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
+            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={!isSubmitting ? onClose : undefined} />
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95 border border-gray-100 dark:border-gray-800">
                 <div className="p-8 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                     <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter uppercase">Edit Customer</h2>
-                    <button onClick={onClose} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400">
+                    <button onClick={onClose} disabled={isSubmitting} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400 disabled:opacity-50">
                         <X size={20} />
                     </button>
                 </div>
@@ -571,9 +589,18 @@ export const EditCustomerModal = ({ isOpen, onClose, onSuccess, customerData }: 
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50"
+                        className={`w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${
+                            isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                        }`}
                     >
-                        {isSubmitting ? 'Saving...' : 'Save Changes'}
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 size={18} className="animate-spin" />
+                                <span>Saving Changes...</span>
+                            </>
+                        ) : (
+                            'Save Changes'
+                        )}
                     </button>
                 </form>
             </div>
@@ -592,6 +619,7 @@ export const EditStaffModal = ({ isOpen, onClose, onSuccess, staffData }: any) =
     });
     const [branches, setBranches] = useState<any[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -627,6 +655,8 @@ export const EditStaffModal = ({ isOpen, onClose, onSuccess, staffData }: any) =
 
     const handleSubmit = async (e: any) => {
         e.preventDefault();
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         setError(null);
         try {
@@ -652,17 +682,18 @@ export const EditStaffModal = ({ isOpen, onClose, onSuccess, staffData }: any) =
             const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to update staff.';
             setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
+            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={!isSubmitting ? onClose : undefined} />
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95 max-h-[90vh] flex flex-col border border-gray-100 dark:border-gray-800">
                 <div className="p-8 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0">
                     <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter uppercase">Edit Personnel</h2>
-                    <button onClick={onClose} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400">
+                    <button onClick={onClose} disabled={isSubmitting} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400 disabled:opacity-50">
                         <X size={20} />
                     </button>
                 </div>
@@ -738,9 +769,18 @@ export const EditStaffModal = ({ isOpen, onClose, onSuccess, staffData }: any) =
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50"
+                        className={`w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${
+                            isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                        }`}
                     >
-                        {isSubmitting ? 'Saving...' : 'Save Changes'}
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 size={18} className="animate-spin" />
+                                <span>Saving Changes...</span>
+                            </>
+                        ) : (
+                            'Save Changes'
+                        )}
                     </button>
                 </form>
             </div>

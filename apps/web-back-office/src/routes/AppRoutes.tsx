@@ -77,6 +77,7 @@ const AppRoutes = () => {
                             customers={dashboardData.customers}
                             onSubmitOrder={dashboardData.handleCreateOrder}
                             createDraftOrder={dashboardData.createDraftOrder}
+                            updateDraftOrder={dashboardData.updateDraftOrder}
                             draftOrders={dashboardData.draftOrders}
                             fetchDraftOrders={dashboardData.fetchDraftOrders}
                             cancelDraftOrder={dashboardData.cancelDraftOrder}

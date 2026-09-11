@@ -7,12 +7,14 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { API_URL, WS_URL } from '../lib/apiConfig';
+import { formatErrorMessage } from '../utils/errorHandler';
 
 export const POSView = ({
     products,
     customers,
     onSubmitOrder,
     createDraftOrder,
+    updateDraftOrder,
     draftOrders = [],
     fetchDraftOrders,
     lockDraftOrder,
@@ -33,6 +35,11 @@ export const POSView = ({
     const [customConfirm, setCustomConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null);
     const [activeTab, setActiveTab] = useState<'products' | 'cart'>('products');
     const [isSavingDraft, setIsSavingDraft] = useState(false);
+    const isSavingDraftRef = useRef(false);
+    const [isManualPaymentSubmitting, setIsManualPaymentSubmitting] = useState(false);
+    const isManualPaymentSubmittingRef = useRef(false);
+    const [isMappingPayment, setIsMappingPayment] = useState(false);
+    const isMappingPaymentRef = useRef(false);
     const [isDraftGuardOpen, setIsDraftGuardOpen] = useState(false);
     const [isDraftWidgetCollapsed, setIsDraftWidgetCollapsed] = useState(false);
     const [activeDraftId, setActiveDraftId] = useState<string | null>(resumedDraft?.id || null);
@@ -166,7 +173,9 @@ export const POSView = ({
 
     // Option A Map Action: Map selected transaction to createdPendingOrder
     const handleMapTransactionToOrder = async (tx: any) => {
-        if (!createdPendingOrder) return;
+        if (!createdPendingOrder || isMappingPaymentRef.current) return;
+        isMappingPaymentRef.current = true;
+        setIsMappingPayment(true);
         try {
             const mapRes = await axios.post(`${API_URL}/integrations/orders/${createdPendingOrder.id}/map-terminal`, {
                 transactionRef: tx.transactionReference,
@@ -194,8 +203,11 @@ export const POSView = ({
             console.error('Failed to map terminal transaction:', err);
             setCustomAlert({
                 title: "Mapping Failed",
-                message: err?.response?.data?.message || err?.message || "Failed to map terminal transaction to order."
+                message: formatErrorMessage(err, "Failed to map terminal transaction to order.")
             });
+        } finally {
+            isMappingPaymentRef.current = false;
+            setIsMappingPayment(false);
         }
     };
 
@@ -207,6 +219,7 @@ export const POSView = ({
 
     // Option B Submit Action: Complete manual payment with POS device type
     const handleSubmitManualPosPayment = async () => {
+        if (isManualPaymentSubmittingRef.current) return;
         if (!posDeviceTypeInput.trim()) {
             setCustomAlert({
                 title: "Device Type Required",
@@ -215,9 +228,16 @@ export const POSView = ({
             return;
         }
 
+        isManualPaymentSubmittingRef.current = true;
+        setIsManualPaymentSubmitting(true);
+
         try {
             const pendingOrder = await createPendingOrder();
-            if (!pendingOrder) return;
+            if (!pendingOrder) {
+                isManualPaymentSubmittingRef.current = false;
+                setIsManualPaymentSubmitting(false);
+                return;
+            }
 
             const res = await axios.post(`${API_URL}/integrations/orders/${pendingOrder.id}/manual-payment`, {
                 posDeviceType: posDeviceTypeInput.trim()
@@ -239,8 +259,11 @@ export const POSView = ({
             console.error('Error completing manual payment:', err);
             setCustomAlert({
                 title: "Payment Processing Failed",
-                message: err?.response?.data?.message || err?.message || "Failed to complete manual payment."
+                message: formatErrorMessage(err, "Failed to complete manual payment.")
             });
+        } finally {
+            isManualPaymentSubmittingRef.current = false;
+            setIsManualPaymentSubmitting(false);
         }
     };
 
@@ -359,7 +382,7 @@ export const POSView = ({
                     console.error('Error bypassing terminal payment:', err);
                     setCustomAlert({
                         title: "Bypass Failed",
-                        message: "Failed to mark order as paid manually."
+                        message: formatErrorMessage(err, "Failed to mark order as paid manually.")
                     });
                 }
             }
@@ -618,7 +641,7 @@ export const POSView = ({
                 console.error('Error during checkout:', err);
                 setCustomAlert({
                     title: "Checkout Failed",
-                    message: err?.response?.data?.message || err?.message || "Order checkout encountered an error."
+                    message: formatErrorMessage(err, "Order checkout encountered an error.")
                 });
             }
         };
@@ -636,7 +659,8 @@ export const POSView = ({
     };
 
     const handleSaveDraft = async () => {
-        if (cart.length === 0) return;
+        if (isSavingDraftRef.current || cart.length === 0) return;
+        isSavingDraftRef.current = true;
         setIsSavingDraft(true);
         try {
             const orderData = {
@@ -654,32 +678,45 @@ export const POSView = ({
                 storeId: localStorage.getItem('selectedBranchId') || (user as any)?.branchId || undefined
             };
 
-            if (createDraftOrder) {
-                await createDraftOrder(orderData);
-            } else if (onSubmitOrder) {
-                await onSubmitOrder(orderData);
+            // Atomic upsert: update existing draft in-place if activeDraftId is set;
+            // otherwise create a brand-new draft (avoids orphaned draft records).
+            if (activeDraftId && updateDraftOrder) {
+                // UPDATE path: persist changes to the existing draft without clearing the cart.
+                // The cashier stays on the same cart to continue editing or proceed to checkout.
+                await updateDraftOrder(activeDraftId, orderData);
+                if (fetchDraftOrders) { try { await fetchDraftOrders(); } catch {} }
+                if (refresh) { try { await refresh(); } catch {} }
+                setCustomAlert({
+                    title: "Draft Updated",
+                    message: "Your draft order has been updated. You can continue editing or complete payment anytime."
+                });
+            } else {
+                // CREATE path: save as a new draft, then clear the cart.
+                if (createDraftOrder) {
+                    const created = await createDraftOrder(orderData);
+                    // Capture new draft ID so any further "DRAFT" saves become updates
+                    if (created?.id) setActiveDraftId(created.id);
+                } else if (onSubmitOrder) {
+                    await onSubmitOrder(orderData);
+                }
+                setCart([]);
+                setSelectedCustomer(null);
+                setActiveDraftId(null);
+                if (fetchDraftOrders) { try { await fetchDraftOrders(); } catch {} }
+                if (refresh) { try { await refresh(); } catch {} }
+                setCustomAlert({
+                    title: "Order Drafted",
+                    message: "Current order has been saved as a Draft. You can resume and complete payment anytime from the Recent Drafts widget or Order History \u2192 Hold / Drafts."
+                });
             }
-
-            setCart([]);
-            setSelectedCustomer(null);
-            setActiveDraftId(null);
-            if (fetchDraftOrders) {
-                try { await fetchDraftOrders(); } catch {}
-            }
-            if (refresh) {
-                try { await refresh(); } catch {}
-            }
-            setCustomAlert({
-                title: "Order Drafted",
-                message: "Current order has been saved as a Draft. You can resume and complete payment anytime from the Recent Drafts widget or Order History → Hold / Drafts."
-            });
         } catch (err: any) {
             console.error('Failed to save draft order:', err);
             setCustomAlert({
                 title: "Draft Failed",
-                message: err?.response?.data?.message || err?.message || "Failed to save draft order."
+                message: formatErrorMessage(err, "Failed to save draft order.")
             });
         } finally {
+            isSavingDraftRef.current = false;
             setIsSavingDraft(false);
         }
     };
@@ -826,9 +863,21 @@ export const POSView = ({
                                         </div>
                                         <button
                                             onClick={() => handleMapTransactionToOrder(tx)}
-                                            className="px-4 py-2.5 bg-[#2D7A3E] text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-[#20502E] transition-all shadow-md shadow-green-900/10 active:scale-95 shrink-0"
+                                            disabled={isMappingPayment}
+                                            className={`px-4 py-2.5 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-green-900/10 shrink-0 flex items-center justify-center gap-1.5 ${
+                                                isMappingPayment
+                                                    ? 'bg-gray-400 opacity-60 cursor-not-allowed pointer-events-none'
+                                                    : 'bg-[#2D7A3E] hover:bg-[#20502E] active:scale-95'
+                                            }`}
                                         >
-                                            Map Payment
+                                            {isMappingPayment ? (
+                                                <>
+                                                    <Loader2 size={14} className="animate-spin" />
+                                                    <span>Mapping...</span>
+                                                </>
+                                            ) : (
+                                                <span>Map Payment</span>
+                                            )}
                                         </button>
                                     </div>
                                 ))
@@ -841,14 +890,18 @@ export const POSView = ({
             {/* Manual POS Device Type Capture Modal */}
             {isManualPosModalOpen && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsManualPosModalOpen(false)} />
+                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => { if (!isManualPaymentSubmitting) setIsManualPosModalOpen(false); }} />
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-6">
                         <div className="flex justify-between items-center border-b border-gray-100 pb-4">
                             <div>
                                 <h3 className="text-xl font-black text-gray-900 tracking-tight">Manual POS Device Type</h3>
                                 <p className="text-xs text-gray-400 font-bold">Record offline terminal device used for order (₦{total.toLocaleString()})</p>
                             </div>
-                            <button onClick={() => setIsManualPosModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400">
+                            <button
+                                onClick={() => setIsManualPosModalOpen(false)}
+                                disabled={isManualPaymentSubmitting}
+                                className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
                                 <X size={18} />
                             </button>
                         </div>
@@ -879,15 +932,28 @@ export const POSView = ({
                         <div className="flex gap-3 pt-2">
                             <button
                                 onClick={() => setIsManualPosModalOpen(false)}
-                                className="flex-1 py-3.5 bg-gray-100 text-gray-600 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all"
+                                disabled={isManualPaymentSubmitting}
+                                className="flex-1 py-3.5 bg-gray-100 text-gray-600 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleSubmitManualPosPayment}
-                                className="flex-1 py-3.5 bg-[#2D7A3E] text-white rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all shadow-lg shadow-green-900/10 active:scale-95"
+                                disabled={isManualPaymentSubmitting}
+                                className={`flex-1 py-3.5 text-white rounded-xl font-black uppercase text-xs tracking-wider transition-all shadow-lg shadow-green-900/10 flex items-center justify-center gap-2 ${
+                                    isManualPaymentSubmitting
+                                        ? 'bg-gray-400 opacity-60 cursor-not-allowed pointer-events-none'
+                                        : 'bg-[#2D7A3E] hover:bg-[#20502E] active:scale-95'
+                                }`}
                             >
-                                Complete Payment
+                                {isManualPaymentSubmitting ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        <span>Processing...</span>
+                                    </>
+                                ) : (
+                                    <span>Complete Payment</span>
+                                )}
                             </button>
                         </div>
                     </div>
@@ -1328,18 +1394,31 @@ export const POSView = ({
                             <button
                                 onClick={handleSaveDraft}
                                 disabled={cart.length === 0 || isSavingDraft}
-                                className="bg-amber-500 text-white px-4 py-3.5 rounded-2xl font-black uppercase text-xs tracking-wider hover:bg-amber-600 disabled:bg-gray-200 disabled:text-gray-400 transition-all active:scale-95 flex items-center gap-1.5 shadow-md flex-shrink-0"
-                                title="Draft/Hold order for payment later"
+                                className={`text-white px-4 py-3.5 rounded-2xl font-black uppercase text-xs tracking-wider transition-all flex items-center gap-1.5 shadow-md flex-shrink-0 ${
+                                    isSavingDraft
+                                        ? 'bg-amber-400 opacity-60 cursor-not-allowed pointer-events-none'
+                                        : 'bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 disabled:text-gray-400 active:scale-95'
+                                }`}
+                                title={isSavingDraft ? "Drafting order..." : "Draft/Hold order for payment later"}
                             >
-                                <Clock size={16} />
-                                <span>Draft</span>
+                                {isSavingDraft ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        <span>Drafting...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Clock size={16} />
+                                        <span>Draft</span>
+                                    </>
+                                )}
                             </button>
                             <button
                                 onClick={handleCheckout}
                                 disabled={cart.length === 0 || isCheckoutLoading}
                                 className={`text-white px-6 py-3.5 rounded-2xl font-black uppercase tracking-widest transition-all shadow-2xl shadow-green-900/10 active:scale-95 flex items-center space-x-2 flex-shrink-0 ${
                                     isCheckoutLoading
-                                        ? 'bg-gray-400 cursor-not-allowed opacity-80'
+                                        ? 'bg-gray-400 cursor-not-allowed opacity-80 pointer-events-none'
                                         : 'bg-[#2D7A3E] hover:bg-[#235E30] disabled:bg-gray-200 disabled:text-gray-400'
                                 }`}
                                 title={isCheckoutLoading ? "Processing order..." : `Proceed to checkout: ₦${total.toLocaleString()}`}
@@ -1361,7 +1440,7 @@ export const POSView = ({
             {/* Draft Order Exit Guard Modal */}
             {isDraftGuardOpen && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsDraftGuardOpen(false)} />
+                    <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => { if (!isSavingDraft) setIsDraftGuardOpen(false); }} />
                     <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-5 text-center">
                         <div className="w-14 h-14 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto border border-amber-100">
                             <Clock size={28} />
@@ -1378,9 +1457,24 @@ export const POSView = ({
                                     setIsDraftGuardOpen(false);
                                     await handleSaveDraft();
                                 }}
-                                className="w-full bg-[#2D7A3E] text-white py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all shadow-lg shadow-green-900/10 active:scale-95 flex items-center justify-center gap-2"
+                                disabled={isSavingDraft}
+                                className={`w-full text-white py-3.5 rounded-xl font-black uppercase text-xs tracking-wider transition-all shadow-lg shadow-green-900/10 flex items-center justify-center gap-2 ${
+                                    isSavingDraft
+                                        ? 'bg-gray-400 opacity-60 cursor-not-allowed pointer-events-none'
+                                        : 'bg-[#2D7A3E] hover:bg-[#20502E] active:scale-95'
+                                }`}
                             >
-                                <Clock size={16} /> Save as Draft Order
+                                {isSavingDraft ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        <span>Saving Draft...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Clock size={16} />
+                                        <span>Save as Draft Order</span>
+                                    </>
+                                )}
                             </button>
                             <button
                                 onClick={() => {
@@ -1411,10 +1505,13 @@ export const POSView = ({
 export const AddCustomerModal = ({ onClose, onSuccess }: any) => {
     const [formData, setFormData] = useState({ name: '', phone: '', email: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = async (e: any) => {
         e.preventDefault();
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         setError(null);
         try {
@@ -1430,20 +1527,24 @@ export const AddCustomerModal = ({ onClose, onSuccess }: any) => {
             onClose();
         } catch (err: any) {
             console.error('Error creating customer:', err);
-            const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Failed to register customer.';
-            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            setError(formatErrorMessage(err, 'Failed to register customer.'));
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
+            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => { if (!isSubmitting) onClose(); }} />
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl w-full max-w-md relative z-[101] overflow-hidden animate-in zoom-in-95 border border-gray-100 dark:border-gray-800">
                 <div className="p-8 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                     <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tighter uppercase">Add Customer</h2>
-                    <button onClick={onClose} className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400">
+                    <button
+                        onClick={onClose}
+                        disabled={isSubmitting}
+                        className="p-3 hover:bg-gray-50 dark:hover:bg-slate-800 rounded-2xl text-gray-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
                         <X size={20} />
                     </button>
                 </div>
@@ -1468,9 +1569,20 @@ export const AddCustomerModal = ({ onClose, onSuccess }: any) => {
                     <button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full bg-[#2D7A3E] text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 hover:bg-[#20502E] transition-all active:scale-95 disabled:opacity-50"
+                        className={`w-full text-white py-5 rounded-2xl font-black uppercase tracking-wide shadow-xl shadow-green-900/10 transition-all flex items-center justify-center gap-2 ${
+                            isSubmitting
+                                ? 'bg-gray-400 opacity-60 cursor-not-allowed pointer-events-none'
+                                : 'bg-[#2D7A3E] hover:bg-[#20502E] active:scale-95'
+                        }`}
                     >
-                        {isSubmitting ? 'Registering...' : 'Complete Registration'}
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 size={18} className="animate-spin" />
+                                <span>Registering...</span>
+                            </>
+                        ) : (
+                            <span>Complete Registration</span>
+                        )}
                     </button>
                 </form>
             </div>
@@ -1483,6 +1595,7 @@ export const ReceiptModal = ({ order, onClose }: any) => {
     const [recipientEmail, setRecipientEmail] = useState(order?.customer?.email || '');
     const [saveToCrm, setSaveToCrm] = useState(false);
     const [isSendingEmail, setIsSendingEmail] = useState(false);
+    const isSendingEmailRef = useRef(false);
     const [emailSuccessMsg, setEmailSuccessMsg] = useState<string | null>(null);
 
     const handlePrint = () => {
@@ -1494,7 +1607,8 @@ export const ReceiptModal = ({ order, onClose }: any) => {
     };
 
     const handleSendDigitalReceipt = async () => {
-        if (!recipientEmail || !recipientEmail.includes('@')) return;
+        if (!recipientEmail || !recipientEmail.includes('@') || isSendingEmailRef.current) return;
+        isSendingEmailRef.current = true;
         setIsSendingEmail(true);
         setEmailSuccessMsg(null);
         try {
@@ -1510,6 +1624,7 @@ export const ReceiptModal = ({ order, onClose }: any) => {
         } catch {
             setEmailSuccessMsg(`Digital receipt queued for delivery to ${recipientEmail}`);
         } finally {
+            isSendingEmailRef.current = false;
             setIsSendingEmail(false);
         }
     };
@@ -1620,9 +1735,20 @@ export const ReceiptModal = ({ order, onClose }: any) => {
                                     <button
                                         onClick={handleSendDigitalReceipt}
                                         disabled={isSendingEmail || !recipientEmail}
-                                        className="px-4 py-2 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all"
+                                        className={`px-4 py-2 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                                            isSendingEmail
+                                                ? 'bg-gray-400 opacity-60 cursor-not-allowed pointer-events-none'
+                                                : 'bg-gray-900 hover:bg-gray-800 disabled:bg-gray-300 active:scale-95'
+                                        }`}
                                     >
-                                        {isSendingEmail ? 'Sending...' : 'Dispatch'}
+                                        {isSendingEmail ? (
+                                            <>
+                                                <Loader2 size={12} className="animate-spin" />
+                                                <span>Sending...</span>
+                                            </>
+                                        ) : (
+                                            <span>Dispatch</span>
+                                        )}
                                     </button>
                                 </div>
                                 {order.customerId && (
@@ -1681,27 +1807,55 @@ export const CustomAlertModal = ({ title = "Alert Notification", message, onClos
 
 // --- Custom Confirm Modal ---
 export const CustomConfirmModal = ({ message, onConfirm, onClose }: any) => {
+    const [isConfirming, setIsConfirming] = useState(false);
+    const isConfirmingRef = useRef(false);
+
+    const handleConfirm = async () => {
+        if (isConfirmingRef.current) return;
+        isConfirmingRef.current = true;
+        setIsConfirming(true);
+        try {
+            await onConfirm();
+            onClose();
+        } catch (err) {
+            console.error('Confirmation action failed:', err);
+        } finally {
+            isConfirmingRef.current = false;
+            setIsConfirming(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={onClose} />
+            <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => { if (!isConfirming) onClose(); }} />
             <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-sm relative z-[111] overflow-hidden animate-in zoom-in-95 p-6 space-y-4">
                 <h3 className="text-lg font-black text-gray-900 tracking-tight">Security Check</h3>
                 <p className="text-sm text-gray-500 font-bold leading-relaxed">{message}</p>
                 <div className="flex gap-3">
                     <button
                         onClick={onClose}
-                        className="flex-1 bg-gray-100 text-gray-700 py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all"
+                        disabled={isConfirming}
+                        className="flex-1 bg-gray-100 text-gray-700 py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-gray-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Cancel
                     </button>
                     <button
-                        onClick={() => {
-                            onConfirm();
-                            onClose();
-                        }}
-                        className="flex-1 bg-[#2D7A3E] text-white py-3.5 rounded-xl font-black uppercase text-xs tracking-wider hover:bg-[#20502E] transition-all shadow-lg shadow-green-900/10"
+                        onClick={handleConfirm}
+                        disabled={isConfirming}
+                        className={`flex-1 text-white py-3.5 rounded-xl font-black uppercase text-xs tracking-wider transition-all shadow-lg shadow-green-900/10 flex items-center justify-center gap-2 ${
+                            isConfirming
+                                ? 'bg-gray-400 opacity-60 cursor-not-allowed pointer-events-none'
+                                : 'bg-[#2D7A3E] hover:bg-[#20502E] active:scale-95'
+                        }`}
                     >
-                        Confirm
+                        {isConfirming ? (
+                            <>
+                                <Loader2 size={16} className="animate-spin" />
+                                <span>Confirming...</span>
+                            </>
+                        ) : (
+                            <span>Confirm</span>
+                        )}
                     </button>
                 </div>
             </div>

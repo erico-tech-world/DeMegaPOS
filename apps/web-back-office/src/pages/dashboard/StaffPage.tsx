@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { StaffView, InviteStaffModal, EditStaffModal } from '../../components/PeopleComponents';
 import { CustomConfirmModal, CustomAlertModal } from '../../components/InventoryComponents';
 import { useAuth } from '../../context/AuthContext';
@@ -47,6 +47,7 @@ const UniversalAccessEngine = () => {
     const [newPassword, setNewPassword] = useState('');
     const [showPasswords, setShowPasswords] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -74,6 +75,8 @@ const UniversalAccessEngine = () => {
             setError('The universal password must be at least 12 characters for adequate strength.');
             return;
         }
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         try {
             const res = await axios.patch(
@@ -88,6 +91,7 @@ const UniversalAccessEngine = () => {
         } catch (err: any) {
             setError(err.response?.data?.message || 'Failed to update Universal Access Engine.');
         } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
@@ -179,7 +183,9 @@ const UniversalAccessEngine = () => {
                 <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.01] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer"
+                    className={`w-full bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:scale-[1.01] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center space-x-2 cursor-pointer ${
+                        isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                    }`}
                 >
                     {isSubmitting ? (<><Loader2 className="animate-spin" size={16} /><span>Synchronizing Encryption...</span></>) : <span>Deploy System Override Code</span>}
                 </button>
@@ -200,10 +206,13 @@ const ManageAccessModal = ({ staff, onClose, onSuccess }: ManageAccessModalProps
     const [status, setStatus] = useState<'SUSPENDED' | 'TERMINATED'>('SUSPENDED');
     const [reason, setReason] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const isSubmittingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = async () => {
         if (!reason.trim()) { setError('Please provide an offboarding reason.'); return; }
+        if (isSubmittingRef.current) return;
+        isSubmittingRef.current = true;
         setIsSubmitting(true);
         try {
             await axios.patch(`${API_URL}/staff/${staff.id}/status`,
@@ -214,6 +223,8 @@ const ManageAccessModal = ({ staff, onClose, onSuccess }: ManageAccessModalProps
             onClose();
         } catch (err: any) {
             setError(err.response?.data?.message || 'Failed to update staff access.');
+        } finally {
+            isSubmittingRef.current = false;
             setIsSubmitting(false);
         }
     };
@@ -221,7 +232,7 @@ const ManageAccessModal = ({ staff, onClose, onSuccess }: ManageAccessModalProps
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white dark:bg-gray-900 rounded-[2rem] shadow-2xl w-full max-w-md mx-4 p-8 space-y-6 relative border border-gray-100 dark:border-gray-800">
-                <button onClick={onClose} className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"><X size={20} /></button>
+                <button onClick={onClose} disabled={isSubmitting} className="absolute top-5 right-5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors disabled:opacity-50"><X size={20} /></button>
 
                 <div className="flex items-center gap-4">
                     <div className="w-14 h-14 bg-red-50 dark:bg-red-950/40 rounded-2xl flex items-center justify-center shrink-0">
@@ -261,11 +272,13 @@ const ManageAccessModal = ({ staff, onClose, onSuccess }: ManageAccessModalProps
                 )}
 
                 <div className="flex gap-3">
-                    <button onClick={onClose} className="flex-1 py-3 rounded-2xl border-2 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-black text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">Cancel</button>
+                    <button onClick={onClose} disabled={isSubmitting} className={`flex-1 py-3 rounded-2xl border-2 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-black text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-all ${isSubmitting ? 'pointer-events-none opacity-50 cursor-not-allowed' : ''}`}>Cancel</button>
                     <button onClick={handleSubmit} disabled={isSubmitting}
-                        className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                        className={`flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
+                            isSubmitting ? 'pointer-events-none opacity-60 cursor-not-allowed' : ''
+                        }`}>
                         {isSubmitting ? <Loader2 size={16} className="animate-spin" /> : <Ban size={16} />}
-                        Revoke Access
+                        {isSubmitting ? 'Revoking Access...' : 'Revoke Access'}
                     </button>
                 </div>
             </div>

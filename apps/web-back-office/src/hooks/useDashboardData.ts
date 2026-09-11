@@ -126,6 +126,20 @@ export const useDashboardData = () => {
         }
     };
 
+    const updateDraftOrder = async (draftId: string, orderData: any) => {
+        try {
+            const res = await axios.put(`${API_URL}/orders/drafts/${draftId}`, {
+                ...orderData,
+                paymentStatus: 'DRAFT'
+            });
+            await fetchData();
+            return res.data;
+        } catch (err) {
+            console.error('Error updating draft order:', err);
+            throw err;
+        }
+    };
+
     const lockDraftOrder = async (orderId: string) => {
         try {
             const res = await axios.patch(`${API_URL}/orders/drafts/${orderId}/lock`);
@@ -330,6 +344,7 @@ export const useDashboardData = () => {
         handleManualPayment,
         handleCreateOrder,
         createDraftOrder,
+        updateDraftOrder,
         lockDraftOrder,
         cancelDraftOrder,
         resetFinancials

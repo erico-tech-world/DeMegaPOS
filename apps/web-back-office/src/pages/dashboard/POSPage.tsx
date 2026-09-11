@@ -6,6 +6,7 @@ interface POSPageProps {
     customers: any[];
     onSubmitOrder: (orderData: any) => Promise<any>;
     createDraftOrder?: (orderData: any) => Promise<any>;
+    updateDraftOrder?: (id: string, orderData: any) => Promise<any>;
     draftOrders?: any[];
     fetchDraftOrders?: () => Promise<any>;
     cancelDraftOrder?: (id: string) => Promise<void>;
@@ -18,6 +19,7 @@ const POSPage = ({
     customers,
     onSubmitOrder,
     createDraftOrder,
+    updateDraftOrder,
     draftOrders = [],
     fetchDraftOrders,
     cancelDraftOrder,
@@ -34,6 +36,7 @@ const POSPage = ({
                 customers={customers}
                 onSubmitOrder={onSubmitOrder}
                 createDraftOrder={createDraftOrder}
+                updateDraftOrder={updateDraftOrder}
                 draftOrders={draftOrders}
                 fetchDraftOrders={fetchDraftOrders}
                 cancelDraftOrder={cancelDraftOrder}
