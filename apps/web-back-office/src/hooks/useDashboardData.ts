@@ -128,10 +128,21 @@ export const useDashboardData = () => {
 
     const updateDraftOrder = async (draftId: string, orderData: any) => {
         try {
-            const res = await axios.put(`${API_URL}/orders/drafts/${draftId}`, {
+            const payload = {
                 ...orderData,
                 paymentStatus: 'DRAFT'
-            });
+            };
+            let res;
+            try {
+                res = await axios.put(`${API_URL}/orders/drafts/${draftId}`, payload);
+            } catch (err: any) {
+                if (err?.response?.status === 404) {
+                    console.warn(`[DRAFT] PUT /orders/drafts/${draftId} returned 404, falling back to alias /drafts/${draftId}`);
+                    res = await axios.put(`${API_URL}/drafts/${draftId}`, payload);
+                } else {
+                    throw err;
+                }
+            }
             await fetchData();
             return res.data;
         } catch (err) {

@@ -107,6 +107,23 @@ function sanitizeMessage(msg: string, fallback: string, targetHint = ''): string
         return 'The server encountered an error processing your request. Please try again.';
     }
 
+    // ─── Route & 404 Not Found Errors ─────────────────────────────────────────
+    if (
+        (lower.includes('route ') && lower.includes('not found')) ||
+        lower.includes('cannot put') ||
+        lower.includes('cannot post') ||
+        lower.includes('cannot patch') ||
+        lower.includes('cannot get') ||
+        lower.includes('status code 404') ||
+        lower.includes('not found: route') ||
+        lower === 'not found'
+    ) {
+        if (combined.includes('draft')) {
+            return 'Unable to update draft order. Please try again.';
+        }
+        return fallback || 'The requested service endpoint could not be reached. Please try again.';
+    }
+
     // ─── Empty or Generic Defaults ────────────────────────────────────────────
     if (!msg || msg === '{}' || msg === 'null' || msg === 'undefined') {
         return fallback;

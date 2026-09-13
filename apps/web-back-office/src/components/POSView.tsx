@@ -713,7 +713,7 @@ export const POSView = ({
             console.error('Failed to save draft order:', err);
             setCustomAlert({
                 title: "Draft Failed",
-                message: formatErrorMessage(err, "Failed to save draft order.")
+                message: formatErrorMessage(err, activeDraftId ? "Unable to update draft order. Please try again." : "Unable to save draft order. Please try again.")
             });
         } finally {
             isSavingDraftRef.current = false;

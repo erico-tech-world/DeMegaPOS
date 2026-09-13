@@ -521,6 +521,7 @@ export default async function orderRoutes(app: FastifyInstance) {
                 params: z.object({
                     id: z.string(),
                 }),
+                body: z.any().optional(),
             },
         },
         async (request, reply) => {
@@ -528,7 +529,7 @@ export default async function orderRoutes(app: FastifyInstance) {
             const body = request.body as any
             const updated = await updateDraftOrder(id, body)
             app.broadcast('ORDER_UPDATED', updated)
-            return reply.send(updated)
+            return reply.code(200).send(updated)
         }
     )
 
@@ -539,6 +540,7 @@ export default async function orderRoutes(app: FastifyInstance) {
                 params: z.object({
                     id: z.string(),
                 }),
+                body: z.any().optional(),
             },
         },
         async (request, reply) => {
@@ -546,7 +548,7 @@ export default async function orderRoutes(app: FastifyInstance) {
             const body = request.body as any
             const updated = await updateDraftOrder(id, body)
             app.broadcast('ORDER_UPDATED', updated)
-            return reply.send(updated)
+            return reply.code(200).send(updated)
         }
     )
 

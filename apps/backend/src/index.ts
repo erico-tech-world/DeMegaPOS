@@ -121,25 +121,35 @@ async function main() {
     const platformRoutes = await import('./modules/platform/routes.js')
 
     server.register(authRoutes.default, { prefix: '/auth' })
+    server.register(authRoutes.default, { prefix: '/api/auth' })
     server.register(authRoutes.default, { prefix: '/api/v1/auth' })
     server.register(tenantRoutes.default, { prefix: '/tenants' })
+    server.register(tenantRoutes.default, { prefix: '/api/tenants' })
     server.register(tenantRoutes.default, { prefix: '/api/v1/tenants' })
     server.register(inventoryRoutes.default, { prefix: '/inventory' })
+    server.register(inventoryRoutes.default, { prefix: '/api/inventory' })
     server.register(inventoryRoutes.default, { prefix: '/api/v1/inventory' })
     server.register(orderRoutes.default, { prefix: '/orders' })
+    server.register(orderRoutes.default, { prefix: '/api/orders' })
     server.register(orderRoutes.default, { prefix: '/api/v1/orders' })
     server.register(staffRoutes.default, { prefix: '/staff' })
+    server.register(staffRoutes.default, { prefix: '/api/staff' })
     server.register(staffRoutes.default, { prefix: '/api/v1/staff' })
     server.register(webhookRoutes.default, { prefix: '/webhooks' })
     server.register(paymentRoutes.default, { prefix: '/payments' })
+    server.register(paymentRoutes.default, { prefix: '/api/payments' })
     server.register(paymentRoutes.default, { prefix: '/api/v1/payments' })
     server.register(syncRoutes.default, { prefix: '/sync' })
+    server.register(syncRoutes.default, { prefix: '/api/sync' })
     server.register(syncRoutes.default, { prefix: '/api/v1/sync' })
     server.register(customerRoutes.default, { prefix: '/customers' })
+    server.register(customerRoutes.default, { prefix: '/api/customers' })
     server.register(customerRoutes.default, { prefix: '/api/v1/customers' })
     server.register(integrationRoutes.default, { prefix: '/integrations' })
+    server.register(integrationRoutes.default, { prefix: '/api/integrations' })
     server.register(integrationRoutes.default, { prefix: '/api/v1/integrations' })
     server.register(platformRoutes.default, { prefix: '/platform' })
+    server.register(platformRoutes.default, { prefix: '/api/platform' })
     server.register(platformRoutes.default, { prefix: '/api/v1/platform' })
 
     // Helper for broadcasting WebSocket events safely
@@ -163,10 +173,14 @@ async function main() {
         }
         if (
             request.url.startsWith('/auth') ||
+            request.url.startsWith('/api/auth') ||
             request.url.startsWith('/api/v1/auth') ||
             request.url.startsWith('/platform') ||
+            request.url.startsWith('/api/platform') ||
+            request.url.startsWith('/api/v1/platform') ||
             request.url.startsWith('/docs') ||
             request.url.startsWith('/health') ||
+            request.url.startsWith('/api/health') ||
             request.url.startsWith('/api/v1/health') ||
             request.url.startsWith('/ws')
         ) {
@@ -180,7 +194,7 @@ async function main() {
     })
 
     // Global Error Handler — Maps Prisma & runtime errors to human-friendly HTTP responses
-    server.setErrorHandler((error, request, reply) => {
+    server.setErrorHandler((error: any, request, reply) => {
         server.log.error(error)
 
         // Prisma unique constraint violation (P2002)
