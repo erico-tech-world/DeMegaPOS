@@ -1153,6 +1153,41 @@ export const POSView = ({
                         </button>
                     </div>
 
+                    {/* ── Active Draft Indicator Badge ── */}
+                    {activeDraftId && (
+                        <div className="px-5 py-2.5 bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-900/40 flex items-center justify-between gap-3 animate-in slide-in-from-top-1 duration-200">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-4 h-4 rounded bg-amber-500 text-white flex items-center justify-center flex-shrink-0">
+                                    <Clock size={10} strokeWidth={3} />
+                                </div>
+                                <div className="min-w-0">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-900 dark:text-amber-300">
+                                        Editing Draft
+                                    </span>
+                                    <span className="ml-1.5 font-mono text-[10px] font-black text-amber-700 dark:text-amber-400">
+                                        ORD-{activeDraftId.slice(-5).toUpperCase()}
+                                    </span>
+                                </div>
+                                <span className="text-[9px] text-amber-600 dark:text-amber-500 font-bold hidden sm:inline">
+                                    · Save will overwrite existing draft
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setCustomConfirm({
+                                        message: "Detach this cart from the active draft? Your cart items will be kept, but the next \"Draft\" save will create a new draft instead of updating the existing one.",
+                                        onConfirm: () => setActiveDraftId(null)
+                                    });
+                                }}
+                                className="flex-shrink-0 flex items-center gap-1 px-2 py-1 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/50 dark:hover:bg-amber-900/80 text-amber-800 dark:text-amber-300 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all"
+                                title="Detach cart from this draft (keeps your cart items, next save creates a new draft)"
+                            >
+                                <X size={9} strokeWidth={3} />
+                                Detach
+                            </button>
+                        </div>
+                    )}
+
                     <div className="p-6 bg-blue-50/30 border-b border-blue-50">
                         <div className="flex flex-col space-y-3">
                             <div className="flex justify-between items-center">
@@ -1399,17 +1434,21 @@ export const POSView = ({
                                         ? 'bg-amber-400 opacity-60 cursor-not-allowed pointer-events-none'
                                         : 'bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 disabled:text-gray-400 active:scale-95'
                                 }`}
-                                title={isSavingDraft ? "Drafting order..." : "Draft/Hold order for payment later"}
+                                title={
+                                    isSavingDraft
+                                        ? (activeDraftId ? "Updating draft..." : "Drafting order...")
+                                        : (activeDraftId ? `Update draft ORD-${activeDraftId.slice(-5).toUpperCase()} in-place` : "Hold/Draft order for payment later")
+                                }
                             >
                                 {isSavingDraft ? (
                                     <>
                                         <Loader2 size={16} className="animate-spin" />
-                                        <span>Drafting...</span>
+                                        <span>{activeDraftId ? 'Updating...' : 'Drafting...'}</span>
                                     </>
                                 ) : (
                                     <>
                                         <Clock size={16} />
-                                        <span>Draft</span>
+                                        <span>{activeDraftId ? 'Update Draft' : 'Draft'}</span>
                                     </>
                                 )}
                             </button>
