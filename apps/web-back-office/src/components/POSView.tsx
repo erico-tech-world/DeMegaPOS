@@ -681,14 +681,17 @@ export const POSView = ({
             // Atomic upsert: update existing draft in-place if activeDraftId is set;
             // otherwise create a brand-new draft (avoids orphaned draft records).
             if (activeDraftId && updateDraftOrder) {
-                // UPDATE path: persist changes to the existing draft without clearing the cart.
-                // The cashier stays on the same cart to continue editing or proceed to checkout.
+                // UPDATE path: persist changes to the existing draft and reset cart/activeDraftId
+                // to return the terminal to idle, matching the CREATE path behavior.
                 await updateDraftOrder(activeDraftId, orderData);
+                setCart([]);
+                setSelectedCustomer(null);
+                setActiveDraftId(null);
                 if (fetchDraftOrders) { try { await fetchDraftOrders(); } catch {} }
                 if (refresh) { try { await refresh(); } catch {} }
                 setCustomAlert({
                     title: "Draft Updated",
-                    message: "Your draft order has been updated. You can continue editing or complete payment anytime."
+                    message: "Draft order updated and saved. You can resume it from Recent Drafts or Order History → Hold / Drafts anytime."
                 });
             } else {
                 // CREATE path: save as a new draft, then clear the cart.
