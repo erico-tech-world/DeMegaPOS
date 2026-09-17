@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
     Search, Download, Calendar, ArrowRight, User as UserIcon, Tag, CreditCard,
     ChevronDown, X, Package, Clock, Play, Trash2, RotateCcw,
-    AlertTriangle, CheckCircle, Filter, Loader2
+    AlertTriangle, CheckCircle, Filter, Loader2, RefreshCw
 } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -88,6 +88,28 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
     const [refundReason, setRefundReason] = useState('');
     const [refundLoading, setRefundLoading] = useState(false);
     const isRefundLoadingRef = useRef(false);
+
+    // ── Receipt Resend State & Handler ─────────────────────────────────────────
+    const [resendingReceiptId, setResendingReceiptId] = useState<string | null>(null);
+    const handleResendReceipt = async (order: any, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        if (resendingReceiptId) return;
+        setResendingReceiptId(order.id);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(
+                `${API_URL}/orders/${order.id}/resend-receipt`,
+                {},
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            showToast(`Digital receipt successfully resent for ORD-${order.id.slice(-5).toUpperCase()}`, 'success');
+            if (refresh) refresh();
+        } catch (err: any) {
+            showToast(err?.response?.data?.message || 'Failed to resend receipt. Check recipient email.', 'error');
+        } finally {
+            setResendingReceiptId(null);
+        }
+    };
 
     // ── Atomic URL Search Parameter Updater ────────────────────────────────────
     const updateFilterParams = useCallback((updates: Record<string, string | null | undefined>) => {
@@ -1383,6 +1405,85 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                     </td>
                                     <td className="px-8 py-6">
                                         <div className="flex flex-wrap gap-2">
+                                            {/* Order Status */}
+                                            {(() => {
+                                                const oStatus = (order.status || 'COMPLETED').toUpperCase();
+                                                const isCompleted = oStatus === 'COMPLETED';
+                                                const isDraft = oStatus === 'DRAFT';
+                                                const isCancelled = oStatus === 'CANCELLED';
+                                                return (
+                                                    <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${
+                                                        isCompleted ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 dark:text-emerald-400' :
+                                                        isDraft ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400' :
+                                                        isCancelled ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400' :
+                                                        'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800/40 dark:border-slate-700 dark:text-slate-300'
+                                                    }`}>
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${
+                                                            isCompleted ? 'bg-emerald-500' :
+                                                            isDraft ? 'bg-amber-500' :
+                                                            isCancelled ? 'bg-red-500' :
+                                                            'bg-slate-400'
+                                                        }`}></div>
+                                                        ORD: {oStatus}
+                                                    </span>
+                                                );
+                                            })()}
+
+                                            {/* Payment Status */}
+                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${
+                                                order.paymentStatus === 'SUCCESS' || order.paymentStatus === 'PAID' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
+                                                order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-950/30 dark:border-purple-800 dark:text-purple-400' :
+                                                order.paymentStatus === 'FAILED' ? 'bg-red-50 text-red-600 border-red-100 dark:bg-red-950/30 dark:border-red-800 dark:text-red-400' :
+                                                order.paymentStatus === 'DRAFT' ? 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400' :
+                                                'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
+                                            }`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${
+                                                    order.paymentStatus === 'SUCCESS' || order.paymentStatus === 'PAID' ? 'bg-green-500' :
+                                                    order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-500' :
+                                                    order.paymentStatus === 'FAILED' ? 'bg-red-500' :
+                                                    'bg-amber-500'
+                                                }`}></div>
+                                                PAY: {order.paymentStatus || 'PENDING'}
+                                            </span>
+
+                                            {/* Receipt Status & Resend Button */}
+                                            {mainTab !== 'drafts' && (() => {
+                                                const rStatus = (order.receiptStatus || 'PENDING').toUpperCase();
+                                                const isSent = rStatus === 'SENT';
+                                                const isFailed = rStatus === 'FAILED';
+                                                return (
+                                                    <div className="inline-flex items-center gap-1.5">
+                                                        <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${
+                                                            isSent ? 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/30 dark:border-teal-800 dark:text-teal-400' :
+                                                            isFailed ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-400' :
+                                                            'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-800/40 dark:border-slate-700 dark:text-slate-300'
+                                                        }`}>
+                                                            <div className={`w-1.5 h-1.5 rounded-full ${
+                                                                isSent ? 'bg-teal-500' :
+                                                                isFailed ? 'bg-rose-500 animate-pulse' :
+                                                                'bg-slate-400'
+                                                            }`}></div>
+                                                            Receipt: {isSent ? 'Sent' : isFailed ? 'Failed' : 'Pending'}
+                                                        </span>
+                                                        {isFailed && (
+                                                            <button
+                                                                onClick={(e) => handleResendReceipt(order, e)}
+                                                                disabled={resendingReceiptId === order.id}
+                                                                className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[9px] font-black uppercase tracking-wider flex items-center gap-1 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                                                                title={order.receiptError ? `Error: ${order.receiptError}. Click to retry.` : "Retry sending receipt"}
+                                                            >
+                                                                {resendingReceiptId === order.id ? (
+                                                                    <Loader2 size={10} className="animate-spin" />
+                                                                ) : (
+                                                                    <RefreshCw size={10} />
+                                                                )}
+                                                                <span>Resend Receipt</span>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })()}
+
                                             {/* Fulfillment Status */}
                                             {(() => {
                                                 const fStatus = order.fulfillmentStatus || order.status;
@@ -1406,18 +1507,6 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                                                     </span>
                                                 );
                                             })()}
-                                            {/* Payment Status */}
-                                            <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-full border inline-flex items-center gap-1 ${order.paymentStatus === 'SUCCESS' ? 'bg-green-50 text-green-600 border-green-100 dark:bg-green-950/30 dark:border-green-800 dark:text-green-400' :
-                                                    order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-50 text-purple-600 border-purple-100 dark:bg-purple-950/30 dark:border-purple-800 dark:text-purple-400' :
-                                                    order.paymentStatus === 'DRAFT' ? 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400' :
-                                                        'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400'
-                                                }`}>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${order.paymentStatus === 'SUCCESS' ? 'bg-green-500' :
-                                                        order.paymentStatus === 'IN_CHECKOUT' ? 'bg-purple-500' :
-                                                            'bg-amber-500'
-                                                    }`}></div>
-                                                PAY: {order.paymentStatus || 'PENDING'}
-                                            </span>
                                         </div>
                                     </td>
                                     <td className="px-8 py-6 text-right">

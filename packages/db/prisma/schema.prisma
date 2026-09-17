@@ -5,7 +5,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -307,6 +307,9 @@ model Order {
   paymentStatus       String        @default("PENDING")
   fulfillmentStatus   FulfillmentStatus @default(NEW)
   posDeviceType       String?
+  draftId             String?
+  receiptStatus       String        @default("PENDING")
+  receiptError        String?
   items               OrderItem[]
   splitPayments       SplitPayment[]
   creditSale          CreditSale?
@@ -314,6 +317,10 @@ model Order {
   refund              Refund?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
+
+  @@index([storeId, createdAt])
+  @@index([storeId, status])
+  @@index([draftId])
 }
 
 model Refund {

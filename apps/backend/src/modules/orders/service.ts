@@ -63,6 +63,9 @@ export async function createOrder(data: CreateOrderInput) {
                 paymentStatus: data.paymentStatus || 'PAID',
                 status: data.paymentStatus === 'DRAFT' ? 'DRAFT' : 'COMPLETED',
                 fulfillmentStatus: (data.fulfillmentStatus as FulfillmentStatus) || existingDraft.fulfillmentStatus || FulfillmentStatus.NEW,
+                draftId: existingDraft.id,
+                receiptStatus: 'PENDING',
+                receiptError: null,
                 items: {
                     create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
                         productId: item.productId,
@@ -131,6 +134,9 @@ export async function createOrder(data: CreateOrderInput) {
                 paymentStatus: data.paymentStatus || 'PENDING',
                 status: data.paymentStatus === 'DRAFT' ? 'DRAFT' : 'COMPLETED',
                 fulfillmentStatus: (data.fulfillmentStatus as FulfillmentStatus) || FulfillmentStatus.NEW,
+                draftId: data.draftId || undefined,
+                receiptStatus: 'PENDING',
+                receiptError: null,
                 items: {
                     create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
                         productId: item.productId,
@@ -149,7 +155,14 @@ export async function createOrder(data: CreateOrderInput) {
                 } : undefined
             },
             include: {
-                items: true,
+                items: {
+                    include: {
+                        product: true
+                    }
+                },
+                customer: true,
+                cashier: true,
+                store: true,
                 splitPayments: true
             },
         })
@@ -1035,14 +1048,46 @@ export async function sendDigitalReceiptEmail(
 </html>
     `
 
-    const { sendMail } = await import('../../lib/mail.js')
-    await sendMail({
-        to: recipientEmail,
-        subject: `Digital Receipt #${invoiceNumber} - ${businessName}`,
-        html
-    })
+    try {
+        const { sendMail } = await import('../../lib/mail.js')
+        await sendMail({
+            to: recipientEmail,
+            subject: `Digital Receipt #${invoiceNumber} - ${businessName}`,
+            html
+        })
 
-    return { success: true, message: `Digital receipt successfully sent to ${recipientEmail}` }
+        await prisma.order.update({
+            where: { id: orderId },
+            data: { receiptStatus: 'SENT', receiptError: null }
+        }).catch(() => {})
+
+        return { success: true, message: `Digital receipt successfully sent to ${recipientEmail}` }
+    } catch (err: any) {
+        await prisma.order.update({
+            where: { id: orderId },
+            data: { receiptStatus: 'FAILED', receiptError: err?.message || String(err) }
+        }).catch(() => {})
+        throw err
+    }
+}
+
+export async function resendOrderReceipt(orderId: string, emailOverride?: string) {
+    const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { customer: true }
+    })
+    if (!order) throw new Error('Order not found')
+
+    const targetEmail = (emailOverride || order.customer?.email || '').trim()
+    if (!targetEmail || !targetEmail.includes('@')) {
+        await prisma.order.update({
+            where: { id: orderId },
+            data: { receiptStatus: 'FAILED', receiptError: 'No customer email address on file. Please enter a valid recipient email.' }
+        }).catch(() => {})
+        throw new Error('No valid email address found for this order. Please provide a recipient email.')
+    }
+
+    return await sendDigitalReceiptEmail(orderId, targetEmail, false, order.customerId || undefined)
 }
 
 /**

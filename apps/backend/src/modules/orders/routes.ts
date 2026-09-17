@@ -18,7 +18,8 @@ import {
     refundOrder,
     getAnalyticsData,
     getDashboardSummary,
-    sendDigitalReceiptEmail
+    sendDigitalReceiptEmail,
+    resendOrderReceipt
 } from './service.js'
 import { ZodTypeProvider } from 'fastify-type-provider-zod'
 
@@ -65,6 +66,21 @@ export default async function orderRoutes(app: FastifyInstance) {
             const order = await createOrder(body)
             // Broadcast the new order event
             app.broadcast('ORDER_CREATED', order)
+
+            // Asynchronous Task Offloading: Non-blocking receipt dispatch to keep checkout latency <200ms
+            if (order.status !== 'DRAFT' && order.paymentStatus !== 'DRAFT') {
+                const customerEmail = (order.customer?.email || body.customerEmail || body.email)?.trim()
+                if (customerEmail && customerEmail.includes('@')) {
+                    setImmediate(async () => {
+                        try {
+                            await sendDigitalReceiptEmail(order.id, customerEmail, false, order.customerId || undefined)
+                        } catch (e: any) {
+                            console.error('[Receipt Outbox] Background dispatch failed:', e?.message || e)
+                        }
+                    })
+                }
+            }
+
             return reply.code(201).send(order)
         }
     )
@@ -647,6 +663,29 @@ export default async function orderRoutes(app: FastifyInstance) {
                 return reply.send(result)
             } catch (err: any) {
                 return reply.code(500).send({ message: err.message || 'Failed to send digital receipt.' })
+            }
+        }
+    )
+
+    // Resend / Retry Digital Receipt: POST /orders/:id/resend-receipt
+    server.post(
+        '/:id/resend-receipt',
+        {
+            schema: {
+                params: z.object({ id: z.string() }),
+                body: z.object({
+                    email: z.string().email().optional(),
+                }).optional(),
+            },
+        },
+        async (request, reply) => {
+            const { id } = request.params as { id: string }
+            const body = request.body as { email?: string } | undefined
+            try {
+                const result = await resendOrderReceipt(id, body?.email)
+                return reply.send(result)
+            } catch (err: any) {
+                return reply.code(400).send({ message: err.message || 'Failed to resend digital receipt.' })
             }
         }
     )

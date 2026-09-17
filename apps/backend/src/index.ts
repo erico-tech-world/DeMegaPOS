@@ -302,6 +302,7 @@ async function main() {
 
     // ── Ultra-lightweight keep-alive health check endpoints (0ms response, zero database queries) ──
     server.get('/health', async () => ({ status: 'ok', timestamp: Date.now() }))
+    server.get('/api/health', async () => ({ status: 'ok', timestamp: Date.now() }))
     server.get('/api/v1/health', async () => ({ status: 'ok', timestamp: Date.now() }))
 
     // ── Diagnostic Health check endpoint (for manual inspection of system config) ──
