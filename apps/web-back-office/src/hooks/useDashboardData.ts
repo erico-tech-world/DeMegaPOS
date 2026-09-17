@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { API_URL, WS_URL } from '../lib/apiConfig';
+import { formatErrorMessage } from '../utils/errorHandler';
 
 
 export const useDashboardData = () => {
@@ -10,6 +11,7 @@ export const useDashboardData = () => {
     const [dashboardSummary, setDashboardSummary] = useState<any>(null);
     const [staff, setStaff] = useState<any[]>([]);
     const [customers, setCustomers] = useState<any[]>([]);
+    const [connectionError, setConnectionError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const { logout, token } = useAuth();
 
@@ -189,14 +191,27 @@ export const useDashboardData = () => {
                 axios.get(`${API_URL}/orders/dashboard-summary`, { params: { storeId } }),
             ]);
 
+            let primaryError: any = null;
+
             if (pRes.status === 'fulfilled') setProducts(pRes.value.data);
             else {
                 console.error('Products fetch failed:', pRes.reason);
                 if (axios.isAxiosError(pRes.reason) && pRes.reason.response?.status === 401) { logout(); return; }
+                primaryError = primaryError || pRes.reason;
             }
 
-            if (oRes.status === 'fulfilled') setOrders(oRes.value.data);
-            else console.error('Orders fetch failed:', oRes.reason);
+            if (oRes.status === 'fulfilled') {
+                setOrders(oRes.value.data);
+            } else {
+                console.error('Orders fetch failed:', oRes.reason);
+                primaryError = primaryError || oRes.reason;
+            }
+
+            if (primaryError) {
+                setConnectionError(formatErrorMessage(primaryError));
+            } else {
+                setConnectionError(null);
+            }
 
             if (sRes.status === 'fulfilled') setStaff(sRes.value.data);
             else console.error('Staff fetch failed:', sRes.reason);
@@ -343,8 +358,10 @@ export const useDashboardData = () => {
         staff,
         customers,
         integrations,
+        connectionError,
         isLoading,
         refresh: fetchData,
+        refetch: fetchData,
         refreshProducts: fetchProducts,
         fetchIntegrations,
         fetchDraftOrders,

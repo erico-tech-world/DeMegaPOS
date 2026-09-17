@@ -99,6 +99,7 @@ const AppRoutes = () => {
                             orders={dashboardData.orders}
                             draftOrders={dashboardData.draftOrders}
                             isLoading={dashboardData.isLoading}
+                            connectionError={dashboardData.connectionError}
                             refresh={dashboardData.refresh}
                             fetchDraftOrders={dashboardData.fetchDraftOrders}
                             lockDraftOrder={dashboardData.lockDraftOrder}

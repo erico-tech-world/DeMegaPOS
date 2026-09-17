@@ -51,3 +51,31 @@ export const prisma = prismaBase.$extends({
 })
 
 export default prisma as unknown as PrismaClient
+
+export async function verifyDatabaseConnection(
+    client: any = prismaBase,
+    maxRetries = 5,
+    initialDelayMs = 1500
+): Promise<boolean> {
+    let attempt = 0
+    let delay = initialDelayMs
+
+    while (attempt < maxRetries) {
+        attempt++
+        try {
+            await client.$queryRaw`SELECT 1`
+            console.log(`[DB:Ready] Database connection established successfully (attempt ${attempt}/${maxRetries}).`)
+            return true
+        } catch (error: any) {
+            console.warn(`[DB:Retry] Database connection attempt ${attempt}/${maxRetries} failed: ${error?.message || error}`)
+            if (attempt >= maxRetries) {
+                console.error(`[DB:Error] Database connection failed after ${maxRetries} attempts.`)
+                throw error
+            }
+            console.log(`[DB:Wait] Retrying database connection in ${delay}ms...`)
+            await new Promise((resolve) => setTimeout(resolve, delay))
+            delay *= 1.5
+        }
+    }
+    return false
+}

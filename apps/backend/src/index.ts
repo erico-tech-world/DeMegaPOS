@@ -197,6 +197,23 @@ async function main() {
     server.setErrorHandler((error: any, request, reply) => {
         server.log.error(error)
 
+        // Prisma connection and pooler errors (P1000, P1001, P1002, P1008, P1017, PrismaClientInitializationError)
+        const errorCode = (error as any)?.code || '';
+        const errorName = (error as any)?.name || '';
+        const isConnError = 
+            ['P1000', 'P1001', 'P1002', 'P1008', 'P1017'].includes(errorCode) ||
+            errorName === 'PrismaClientInitializationError' ||
+            errorName === 'PrismaClientRustPanicError';
+
+        if (isConnError) {
+            return reply.status(503).send({
+                statusCode: 503,
+                error: 'DatabaseUnavailable',
+                message: 'Database service is temporarily reconnecting. Please retry in a few moments.',
+                code: errorCode || 'DB_UNAVAILABLE'
+            })
+        }
+
         // Prisma unique constraint violation (P2002)
         if ((error as any).code === 'P2002') {
             const target = ((error as any).meta?.target as string[]) || []
@@ -362,6 +379,14 @@ async function main() {
     })
 
     try {
+        // Preflight database connection with exponential retry
+        try {
+            const { verifyDatabaseConnection, prisma } = await import('./lib/prisma.js');
+            await verifyDatabaseConnection(prisma, 5, 2000);
+        } catch (dbErr: any) {
+            server.log.error({ err: dbErr }, '[DB:FATAL] Database connection failed during startup.');
+        }
+
         const port = process.env.PORT ? parseInt(process.env.PORT) : 3000
         await server.listen({ port, host: '0.0.0.0' })
         console.log(`Server listening at http://localhost:${port}`)

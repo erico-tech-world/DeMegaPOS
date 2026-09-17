@@ -12,6 +12,7 @@ interface OrdersPageProps {
     orders: any[];
     draftOrders?: any[];
     isLoading: boolean;
+    connectionError?: string | null;
     refresh?: () => void;
     fetchDraftOrders?: () => Promise<any>;
     cancelDraftOrder?: (id: string) => Promise<void>;
@@ -21,7 +22,7 @@ interface OrdersPageProps {
 type DateMode = 'preset' | 'single' | 'range';
 type SingleTimeMode = 'fullday' | 'exact' | 'custom';
 
-const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftOrder, lockDraftOrder }: OrdersPageProps) => {
+const OrdersPage = ({ orders, draftOrders = [], isLoading, connectionError, refresh, cancelDraftOrder, lockDraftOrder }: OrdersPageProps) => {
     const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
     const highlightId = searchParams.get('id');
@@ -1331,6 +1332,35 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                 )}
             </div>
 
+            {/* ── Database Connection Notice Banner ── */}
+            {connectionError && (
+                <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm animate-in fade-in">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+                            <AlertTriangle size={18} />
+                        </div>
+                        <div>
+                            <p className="text-xs font-black text-amber-900 dark:text-amber-200 uppercase tracking-wider">
+                                Database Service Notice
+                            </p>
+                            <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mt-0.5">
+                                {connectionError}
+                            </p>
+                        </div>
+                    </div>
+                    {refresh && (
+                        <button
+                            onClick={() => refresh()}
+                            disabled={isLoading}
+                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95 disabled:opacity-50"
+                        >
+                            {isLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                            Retry Connection
+                        </button>
+                    )}
+                </div>
+            )}
+
             {/* ── Main Data Table ── */}
             <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto custom-scrollbar">
@@ -1348,9 +1378,37 @@ const OrdersPage = ({ orders, draftOrders = [], isLoading, refresh, cancelDraftO
                             {isLoading ? (
                                 <tr><td colSpan={5} className="px-8 py-24 text-center text-gray-400 font-bold animate-pulse uppercase tracking-[0.2em]">Synchronizing Archives...</td></tr>
                             ) : displayList.length === 0 ? (
-                                <tr><td colSpan={5} className="px-8 py-24 text-center text-gray-400 font-bold italic">
-                                    {mainTab === 'drafts' ? 'No active hold or draft orders found.' : 'No matching records found.'}
-                                </td></tr>
+                                <tr>
+                                    <td colSpan={5} className="px-8 py-24 text-center">
+                                        {connectionError ? (
+                                            <div className="max-w-md mx-auto flex flex-col items-center justify-center space-y-3">
+                                                <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                                                    <AlertTriangle size={24} />
+                                                </div>
+                                                <div className="text-sm font-black text-gray-900 dark:text-white">
+                                                    Database Connection Interrupted
+                                                </div>
+                                                <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                                                    {connectionError}
+                                                </div>
+                                                {refresh && (
+                                                    <button
+                                                        onClick={() => refresh()}
+                                                        disabled={isLoading}
+                                                        className="mt-2 px-4 py-2 bg-[#2D7A3E] hover:bg-[#20502E] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                                                    >
+                                                        {isLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                                                        Retry Connection
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-400 font-bold italic">
+                                                {mainTab === 'drafts' ? 'No active hold or draft orders found.' : 'No matching records found.'}
+                                            </span>
+                                        )}
+                                    </td>
+                                </tr>
                             ) : displayList.map(order => (
                                 <tr
                                     key={order.id}

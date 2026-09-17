@@ -81,6 +81,24 @@ function sanitizeMessage(msg: string, fallback: string, targetHint = ''): string
         return 'The requested record was not found or has already been removed.';
     }
 
+    // ─── Database Connectivity / Pooler / Initialization Errors (P1000, P1001, P1002, P1008, P1017, 503) ───
+    if (
+        combined.includes('databaseunavailable') ||
+        combined.includes('p1001') ||
+        combined.includes('p1002') ||
+        combined.includes('p1008') ||
+        combined.includes('p1017') ||
+        combined.includes('p1000') ||
+        combined.includes("can't reach database") ||
+        combined.includes('cant reach database') ||
+        combined.includes('server has closed the connection') ||
+        combined.includes('database service is temporarily unavailable') ||
+        combined.includes('prismaclientinitializationerror') ||
+        combined.includes('prismaclientrustpanicerror')
+    ) {
+        return 'Database service is temporarily reconnecting. Please wait a moment and click Refresh.';
+    }
+
     // ─── Raw Prisma Client or SQL Stacks ──────────────────────────────────────
     if (lower.includes('prismaclient') || lower.includes('invocation') || lower.includes('syntax error') || lower.includes('database error')) {
         return 'A database constraint prevented this operation. Please verify your entries and try again.';
