@@ -10,7 +10,20 @@ export async function createOrder(data: CreateOrderInput) {
 
     // ── 1. Resolve storeId ────────────────────────────────────────────────────
     let finalStoreId = data.storeId
-    const storeExists = finalStoreId ? await prisma.store.findUnique({ where: { id: finalStoreId } }) : null
+    let storeExists = null
+    if (finalStoreId && finalStoreId !== 'ALL' && finalStoreId !== 'all' && finalStoreId.trim() !== '') {
+        storeExists = await prisma.store.findFirst({
+            where: {
+                OR: [
+                    { id: finalStoreId },
+                    { branchCode: finalStoreId }
+                ]
+            }
+        })
+        if (storeExists) {
+            finalStoreId = storeExists.id
+        }
+    }
     if (!storeExists) {
         if (data.cashierId) {
             const user = await prisma.user.findUnique({
@@ -22,7 +35,9 @@ export async function createOrder(data: CreateOrderInput) {
             }
         }
         const checkStore = finalStoreId ? await prisma.store.findUnique({ where: { id: finalStoreId } }) : null
-        if (!checkStore) {
+        if (checkStore) {
+            finalStoreId = checkStore.id
+        } else {
             let tenantId: string | undefined;
             if (data.cashierId) {
                 const user = await prisma.user.findUnique({ where: { id: data.cashierId }, select: { tenantId: true } });
@@ -39,9 +54,44 @@ export async function createOrder(data: CreateOrderInput) {
         }
     }
 
+    if (!finalStoreId) {
+        throw new Error('No store found in database to associate with this order.')
+    }
+    const resolvedStoreId: string = finalStoreId
+
+    // ── 1.1 Sanitize Relations (Customer, Cashier, Draft) ──────────────────────
+    let finalCustomerId: string | null = null
+    if (data.customerId && data.customerId.trim() !== '' && data.customerId !== 'null' && data.customerId !== 'undefined') {
+        const cust = await prisma.customer.findUnique({ where: { id: data.customerId.trim() } })
+        if (cust) {
+            finalCustomerId = cust.id
+        }
+    }
+
+    let finalCashierId: string | null = null
+    if (data.cashierId && data.cashierId.trim() !== '' && data.cashierId !== 'null' && data.cashierId !== 'undefined') {
+        const cashierUser = await prisma.user.findUnique({ where: { id: data.cashierId.trim() } })
+        if (cashierUser) {
+            finalCashierId = cashierUser.id
+        }
+    }
+
+    let cleanDraftId: string | null = null
+    if (data.draftId && data.draftId.trim() !== '' && data.draftId !== 'null' && data.draftId !== 'undefined') {
+        cleanDraftId = data.draftId.trim()
+    }
+
+    const sanitizedItems = data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
+        productId: item.productId,
+        variantId: item.variantId || undefined,
+        quantity: item.quantity,
+        price: item.price.toString(),
+        seatNumber: item.seatNumber && item.seatNumber.trim() !== '' ? item.seatNumber.trim() : null,
+    }))
+
     // ── 2. Create or Update (if completing an existing draft order) ─────────
-    let existingDraft = data.draftId ? await prisma.order.findUnique({
-        where: { id: data.draftId },
+    let existingDraft = cleanDraftId ? await prisma.order.findUnique({
+        where: { id: cleanDraftId },
         include: { items: true, splitPayments: true }
     }) : null
 
@@ -55,9 +105,9 @@ export async function createOrder(data: CreateOrderInput) {
         order = await prisma.order.update({
             where: { id: existingDraft.id },
             data: {
-                storeId: finalStoreId,
-                cashierId: data.cashierId,
-                customerId: data.customerId,
+                storeId: resolvedStoreId,
+                cashierId: finalCashierId,
+                customerId: finalCustomerId,
                 totalAmount: data.totalAmount.toString(),
                 paymentMethod: data.paymentMethod,
                 paymentStatus: data.paymentStatus || 'PAID',
@@ -67,13 +117,7 @@ export async function createOrder(data: CreateOrderInput) {
                 receiptStatus: 'PENDING',
                 receiptError: null,
                 items: {
-                    create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
-                        productId: item.productId,
-                        variantId: item.variantId,
-                        quantity: item.quantity,
-                        price: item.price.toString(),
-                        seatNumber: item.seatNumber,
-                    })),
+                    create: sanitizedItems,
                 },
                 splitPayments: data.splitPayments ? {
                     create: data.splitPayments.map((sp: z.infer<typeof splitPaymentSchema>) => ({
@@ -126,25 +170,19 @@ export async function createOrder(data: CreateOrderInput) {
     } else {
         order = await prisma.order.create({
             data: {
-                storeId: finalStoreId,
-                cashierId: data.cashierId,
-                customerId: data.customerId,
+                storeId: resolvedStoreId,
+                cashierId: finalCashierId,
+                customerId: finalCustomerId,
                 totalAmount: data.totalAmount.toString(),
                 paymentMethod: data.paymentMethod,
                 paymentStatus: data.paymentStatus || 'PENDING',
                 status: data.paymentStatus === 'DRAFT' ? 'DRAFT' : 'COMPLETED',
                 fulfillmentStatus: (data.fulfillmentStatus as FulfillmentStatus) || FulfillmentStatus.NEW,
-                draftId: data.draftId || undefined,
+                draftId: cleanDraftId || undefined,
                 receiptStatus: 'PENDING',
                 receiptError: null,
                 items: {
-                    create: data.items.map((item: z.infer<typeof createOrderItemSchema>) => ({
-                        productId: item.productId,
-                        variantId: item.variantId,
-                        quantity: item.quantity,
-                        price: item.price.toString(),
-                        seatNumber: item.seatNumber,
-                    })),
+                    create: sanitizedItems,
                 },
                 splitPayments: data.splitPayments ? {
                     create: data.splitPayments.map((sp: z.infer<typeof splitPaymentSchema>) => ({
@@ -169,14 +207,16 @@ export async function createOrder(data: CreateOrderInput) {
     }
 
     // ── 3. Handle Credit Sales ────────────────────────────────────────────────
-    if (data.paymentMethod === 'CREDIT' && data.customerId) {
+    if (data.paymentMethod === 'CREDIT' && finalCustomerId) {
         await prisma.creditSale.create({
             data: {
                 orderId: order.id,
-                customerId: data.customerId,
+                customerId: finalCustomerId,
                 dueDate: data.dueDate ? new Date(data.dueDate) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
                 balance: data.totalAmount.toString(),
             }
+        }).catch(err => {
+            console.error('[Credit Sale Creation] Failed to record credit ledger:', err)
         })
     }
 
@@ -218,6 +258,8 @@ export async function createOrder(data: CreateOrderInput) {
                 data: {
                     stock: { decrement: item.quantity }
                 }
+            }).catch(err => {
+                console.error('[Stock Deduction] Failed to update variant stock:', err?.message || err)
             })
         } else {
             // Decrement standard product stock
@@ -226,6 +268,8 @@ export async function createOrder(data: CreateOrderInput) {
                 data: {
                     stock: { decrement: item.quantity }
                 }
+            }).catch(err => {
+                console.error('[Stock Deduction] Failed to update product stock:', err?.message || err)
             })
         }
     }

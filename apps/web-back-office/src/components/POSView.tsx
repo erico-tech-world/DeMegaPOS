@@ -84,8 +84,8 @@ export const POSView = ({
 
     const { user } = useAuth();
 
-    // Helper: create pending order in DB
-    const createPendingOrder = async () => {
+    // Unified helper: build sanitized order payload across all checkout types
+    const buildSanitizedOrderPayload = (status = 'SUCCESS') => {
         const splitPayments = [];
         if (paymentMethod === 'SPLIT') {
             const splitTotal = amountCash + amountCard + amountTransfer;
@@ -109,26 +109,45 @@ export const POSView = ({
             return null;
         }
 
-        const orderData = {
-            draftId: activeDraftId || undefined,
+        const rawBranchId = localStorage.getItem('selectedBranchId');
+        const effectiveBranchId = (rawBranchId && rawBranchId !== 'ALL' && rawBranchId !== 'all' && rawBranchId.trim() !== '')
+            ? rawBranchId.trim()
+            : ((user as any)?.branchId || undefined);
+
+        const cleanCustomerId = (selectedCustomer?.id && selectedCustomer.id !== 'null' && selectedCustomer.id !== 'undefined' && String(selectedCustomer.id).trim() !== '')
+            ? String(selectedCustomer.id).trim()
+            : undefined;
+
+        const cleanDraftId = (activeDraftId && activeDraftId !== 'null' && activeDraftId !== 'undefined' && String(activeDraftId).trim() !== '')
+            ? String(activeDraftId).trim()
+            : undefined;
+
+        return {
+            draftId: cleanDraftId,
             items: cart.map(item => ({
                 productId: item.id,
-                quantity: item.quantity,
-                price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price),
-                seatNumber: item.seatNumber || undefined
+                variantId: item.variantId || undefined,
+                quantity: Number(item.quantity) || 1,
+                price: Number(selectedCustomer ? (item.vipPrice || item.price) : item.price),
+                seatNumber: (item.seatNumber && String(item.seatNumber).trim() !== '') ? String(item.seatNumber).trim() : undefined
             })),
-            totalAmount: total,
+            totalAmount: Number(total),
             paymentMethod,
-            paymentStatus: 'PENDING',
-            customerId: selectedCustomer?.id,
-            cashierId: user?.id,
+            paymentStatus: status,
+            customerId: cleanCustomerId,
+            cashierId: user?.id || undefined,
             amountCash: paymentMethod === 'CASH' ? total : (paymentMethod === 'SPLIT' ? amountCash : 0),
             amountTransfer: paymentMethod === 'TRANSFER' ? total : (paymentMethod === 'SPLIT' ? amountTransfer : 0),
             amountCard: paymentMethod === 'CARD' ? total : (paymentMethod === 'SPLIT' ? amountCard : 0),
             splitPayments: splitPayments.length > 0 ? splitPayments : undefined,
-            storeId: localStorage.getItem('selectedBranchId') || (user as any)?.branchId || undefined
+            storeId: effectiveBranchId
         };
+    };
 
+    // Helper: create pending order in DB
+    const createPendingOrder = async () => {
+        const orderData = buildSanitizedOrderPayload('PENDING');
+        if (!orderData) return null;
         const res = await onSubmitOrder(orderData);
         return res;
     };
@@ -548,48 +567,8 @@ export const POSView = ({
         setIsCheckoutLoading(true);
 
         const proceedCheckout = async (initialPaymentStatus = 'SUCCESS') => {
-            const splitPayments = [];
-            if (paymentMethod === 'SPLIT') {
-                const splitTotal = amountCash + amountCard + amountTransfer;
-                if (splitTotal !== total) {
-                    setCustomAlert({
-                        title: "Split Balance Mismatch",
-                        message: `Split payment sum (₦${splitTotal.toLocaleString()}) must match the grand total (₦${total.toLocaleString()}).`
-                    });
-                    return;
-                }
-                if (amountCash > 0) splitPayments.push({ method: 'CASH', amount: amountCash });
-                if (amountCard > 0) splitPayments.push({ method: 'CARD', amount: amountCard });
-                if (amountTransfer > 0) splitPayments.push({ method: 'TRANSFER', amount: amountTransfer });
-            }
-
-            if (paymentMethod === 'CREDIT' && !selectedCustomer) {
-                setCustomAlert({
-                    title: "Missing Customer",
-                    message: "A customer must be assigned for Credit sales."
-                });
-                return;
-            }
-
-            const orderData = {
-                draftId: activeDraftId || undefined,
-                items: cart.map(item => ({
-                    productId: item.id,
-                    quantity: item.quantity,
-                    price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price),
-                    seatNumber: item.seatNumber || undefined
-                })),
-                totalAmount: total,
-                paymentMethod,
-                paymentStatus: initialPaymentStatus,
-                customerId: selectedCustomer?.id,
-                cashierId: user?.id,
-                amountCash: paymentMethod === 'CASH' ? total : (paymentMethod === 'SPLIT' ? amountCash : 0),
-                amountTransfer: paymentMethod === 'TRANSFER' ? total : (paymentMethod === 'SPLIT' ? amountTransfer : 0),
-                amountCard: paymentMethod === 'CARD' ? total : (paymentMethod === 'SPLIT' ? amountCard : 0),
-                splitPayments: splitPayments.length > 0 ? splitPayments : undefined,
-                storeId: localStorage.getItem('selectedBranchId') || (user as any)?.branchId || undefined
-            };
+            const orderData = buildSanitizedOrderPayload(initialPaymentStatus);
+            if (!orderData) return;
 
             try {
                 const res = await onSubmitOrder(orderData);
@@ -663,19 +642,29 @@ export const POSView = ({
         isSavingDraftRef.current = true;
         setIsSavingDraft(true);
         try {
+            const rawBranchId = localStorage.getItem('selectedBranchId');
+            const effectiveBranchId = (rawBranchId && rawBranchId !== 'ALL' && rawBranchId !== 'all' && rawBranchId.trim() !== '')
+                ? rawBranchId.trim()
+                : ((user as any)?.branchId || undefined);
+
+            const cleanCustomerId = (selectedCustomer?.id && selectedCustomer.id !== 'null' && selectedCustomer.id !== 'undefined' && String(selectedCustomer.id).trim() !== '')
+                ? String(selectedCustomer.id).trim()
+                : undefined;
+
             const orderData = {
                 items: cart.map(item => ({
                     productId: item.id,
-                    quantity: item.quantity,
-                    price: selectedCustomer ? (Number(item.vipPrice) || Number(item.price)) : Number(item.price),
-                    seatNumber: item.seatNumber || undefined
+                    variantId: item.variantId || undefined,
+                    quantity: Number(item.quantity) || 1,
+                    price: Number(selectedCustomer ? (item.vipPrice || item.price) : item.price),
+                    seatNumber: (item.seatNumber && String(item.seatNumber).trim() !== '') ? String(item.seatNumber).trim() : undefined
                 })),
-                totalAmount: total,
+                totalAmount: Number(total),
                 paymentMethod,
                 paymentStatus: 'DRAFT',
-                customerId: selectedCustomer?.id,
-                cashierId: user?.id,
-                storeId: localStorage.getItem('selectedBranchId') || (user as any)?.branchId || undefined
+                customerId: cleanCustomerId,
+                cashierId: user?.id || undefined,
+                storeId: effectiveBranchId
             };
 
             // Atomic upsert: update existing draft in-place if activeDraftId is set;

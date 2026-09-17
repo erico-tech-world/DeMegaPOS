@@ -55,13 +55,22 @@ export default async function orderRoutes(app: FastifyInstance) {
         },
         async (request, reply) => {
             const body = request.body as any
-            const { role, branchId: userBranchId } = request.user as any
+            const { role, branchId: userBranchId, id: requestUserId } = (request.user as any) || {}
             const isElevated = ['SUPER_ADMIN', 'OWNER', 'REGIONAL_MANAGER'].includes(role) || Boolean((request.user as any)?.hasMultiBranchAccess)
+            
+            // Normalize storeId if 'ALL', 'all', or empty
+            if (body.storeId === 'ALL' || body.storeId === 'all' || (typeof body.storeId === 'string' && body.storeId.trim() === '')) {
+                body.storeId = undefined
+            }
+
             if (!isElevated && userBranchId && body.storeId && body.storeId !== userBranchId) {
                 return reply.code(403).send({ message: 'Forbidden: Cannot create orders for another branch.' })
             }
             if (!isElevated && userBranchId && !body.storeId) {
                 body.storeId = userBranchId
+            }
+            if (!body.cashierId && requestUserId) {
+                body.cashierId = requestUserId
             }
             const order = await createOrder(body)
             // Broadcast the new order event

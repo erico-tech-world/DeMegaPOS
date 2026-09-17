@@ -252,6 +252,16 @@ async function main() {
             })
         }
 
+        // Prisma schema or column mismatch (P2021, P2022)
+        if (errorCode === 'P2021' || errorCode === 'P2022') {
+            console.error('[Prisma Schema/Column Mismatch]:', error)
+            return reply.status(500).send({
+                statusCode: 500,
+                error: 'DatabaseSchemaMismatch',
+                message: 'Unable to complete order due to schema synchronization. Please try again.'
+            })
+        }
+
         // Fastify validation errors
         if ((error as any).validation) {
             return reply.status(400).send({
@@ -262,8 +272,11 @@ async function main() {
         }
 
         const statusCode = error.statusCode || 500
+        if (statusCode >= 500) {
+            console.error('[Backend 500 Exception]:', error)
+        }
         const message = statusCode >= 500
-            ? 'An internal error occurred while processing your request. Please try again.'
+            ? 'Unable to complete order. Please verify item stock and try again.'
             : (error.message || 'Operation failed.')
 
         return reply.status(statusCode).send({

@@ -99,9 +99,19 @@ function sanitizeMessage(msg: string, fallback: string, targetHint = ''): string
         return 'Database service is temporarily reconnecting. Please wait a moment and click Refresh.';
     }
 
+    // ─── Checkout & Order Processing Errors ────────────────────────────────────
+    if (
+        lower.includes('checkout') ||
+        lower.includes('order creation') ||
+        lower.includes('unable to complete order') ||
+        lower.includes('databaseschemamismatch')
+    ) {
+        return 'Unable to complete order. Please verify item stock and try again.';
+    }
+
     // ─── Raw Prisma Client or SQL Stacks ──────────────────────────────────────
     if (lower.includes('prismaclient') || lower.includes('invocation') || lower.includes('syntax error') || lower.includes('database error')) {
-        return 'A database constraint prevented this operation. Please verify your entries and try again.';
+        return 'Unable to complete order. Please verify item stock and try again.';
     }
 
     // ─── Authentication & Authorization Errors ────────────────────────────────
