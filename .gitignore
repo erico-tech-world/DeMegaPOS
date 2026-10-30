@@ -1,0 +1,85 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Environment files and secrets
+.env
+.env.*
+.env*.local
+!.env.example
+!.env.sample
+# Only public Vite frontend bundle configurations allowed (e.g. VITE_API_URL) - NO SECRETS
+!.env.production
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.local
+*.secret
+*.token
+*.bak
+*.tmp
+
+# Build outputs and caches
+dist/
+build/
+coverage/
+.next/
+.nuxt/
+.out/
+.cache/
+.parcel-cache/
+.turbo/
+.vercel/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+turbo.log*
+
+# Local databases and generated artifacts
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+seed_output.txt
+
+# OS/editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Agent, Skill, Task & Implementation Planning Artifacts
+[Tt][Aa][Ss][Kk]*.md
+*[Tt][Aa][Ss][Kk]*.md
+[Ii][Mm][Pp][Ll][Ee][Mm][Ee][Nn][Tt][Aa][Tt][Ii][Oo][Nn]*.md
+*[Ii][Mm][Pp][Ll][Ee][Mm][Ee][Nn][Tt][Aa][Tt][Ii][Oo][Nn]*.md
+[Ss][Kk][Ii][Ll][Ll]*.md
+*[Ss][Kk][Ii][Ll][Ll]*.md
+TASK.md
+TASKS.md
+task.md
+tasks.md
+SKILL.md
+SKILLS.md
+skill.md
+skills.md
+IMPLEMENTATION.md
+IMPLEMENTATION_PLAN.md
+implementation.md
+implementation_plan.md
+
+# Antigravity Skills directory and all its contents
+antigravity-skills/
+antigravity-skills/**
+**/antigravity-skills/**
+.agents/
+.agents/**

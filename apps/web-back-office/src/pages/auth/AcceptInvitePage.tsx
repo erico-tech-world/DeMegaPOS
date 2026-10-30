@@ -1,0 +1,341 @@
+import { useState, useEffect, type FormEvent } from 'react';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import axios from 'axios';
+import { useAuth } from '../../context/AuthContext';
+import { User, Lock, Loader2, AlertCircle, Eye, EyeOff, ShieldCheck, Hash } from 'lucide-react';
+import { API_URL } from '../../lib/apiConfig';
+
+
+const AcceptInvitePage = () => {
+    const [searchParams] = useSearchParams();
+    const token = searchParams.get('token') || '';
+    const navigate = useNavigate();
+    const { login, logout, isAuthenticated, user } = useAuth();
+
+    // Session conflict modal state
+    const [showConflictModal, setShowConflictModal] = useState(false);
+
+    const [inviteDetails, setInviteDetails] = useState<{
+        valid: boolean;
+        email: string | null;
+        phone: string | null;
+        role: string;
+        businessName: string;
+    } | null>(null);
+
+    const [name, setName] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [pin, setPin] = useState('');
+    const [confirmPin, setConfirmPin] = useState('');
+    const [showPin, setShowPin] = useState(false);
+    
+    const [isValidating, setIsValidating] = useState(true);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [validationError, setValidationError] = useState<string | null>(null);
+
+    // Detect active session on mount — show conflict modal instead of blocking
+    useEffect(() => {
+        if (isAuthenticated && user) {
+            setShowConflictModal(true);
+        }
+    }, [isAuthenticated, user]);
+
+    // Validate the token on mount
+    useEffect(() => {
+        if (!token) {
+            setValidationError('Invitation token is missing. Please check your invitation link.');
+            setIsValidating(false);
+            return;
+        }
+
+        const validateToken = async () => {
+            try {
+                const res = await axios.get(`${API_URL}/auth/accept-invite`, {
+                    params: { token }
+                });
+                setInviteDetails(res.data);
+            } catch (err: any) {
+                setValidationError(
+                    err.response?.data?.message || 
+                    'This invitation link is invalid or has expired. Please ask your administrator to send a new invite.'
+                );
+            } finally {
+                setIsValidating(false);
+            }
+        };
+
+        validateToken();
+    }, [token]);
+
+    const handleSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        setError(null);
+
+        if (password.length < 8) {
+            setError('Password must be at least 8 characters long.');
+            return;
+        }
+        if (password !== confirmPassword) {
+            setError('Passwords do not match.');
+            return;
+        }
+        if (pin && (pin.length < 4 || pin.length > 6)) {
+            setError('Terminal PIN must be 4–6 digits.');
+            return;
+        }
+        if (pin && pin !== confirmPin) {
+            setError('Terminal PINs do not match.');
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        try {
+            const res = await axios.post(`${API_URL}/auth/accept-invite`, {
+                token,
+                name,
+                password,
+                ...(pin ? { pin } : {}),
+            });
+
+            // Ensure any prior session is fully cleared before issuing the new one
+            logout();
+
+            // Log in the newly onboarded user
+            login(res.data.user, res.data.accessToken);
+
+            // Redirect based on role
+            const role = res.data.user.role;
+            if (role === 'CASHIER' || role === 'BRANCH_MANAGER') {
+                navigate('/pos');
+            } else {
+                navigate('/dashboard');
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.message || 'Failed to complete onboarding. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // --- Session Conflict Modal ---
+    if (showConflictModal) {
+        return (
+            <div className="space-y-6">
+                <div className="text-center space-y-2">
+                    <div className="mx-auto w-16 h-16 bg-amber-50 rounded-3xl flex items-center justify-center text-amber-500 border border-amber-100 shadow-xl shadow-amber-500/10 mb-4">
+                        <AlertCircle size={28} />
+                    </div>
+                    <h1 className="text-2xl font-black text-gray-900 tracking-tight">Active Session Detected</h1>
+                    <p className="text-gray-500 text-sm font-medium leading-relaxed px-2">
+                        You are currently signed in as
+                    </p>
+                    <div className="inline-flex items-center gap-2 bg-gray-100 text-gray-700 px-4 py-2 rounded-full border border-gray-200 text-sm font-black">
+                        <User size={14} />
+                        {user?.email || user?.name || 'an existing account'}
+                    </div>
+                </div>
+
+                <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 text-sm text-amber-700 font-bold leading-relaxed">
+                    To onboard a new staff account with this invitation, you must sign out of the current session first.
+                </div>
+
+                <div className="space-y-3">
+                    <button
+                        onClick={() => {
+                            logout();
+                            setShowConflictModal(false);
+                        }}
+                        className="w-full bg-[#1A1A1A] text-white py-4 rounded-2xl font-black text-sm hover:bg-[#2D7A3E] hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-gray-900/10 flex items-center justify-center space-x-2 cursor-pointer"
+                    >
+                        <ShieldCheck size={18} />
+                        <span>Sign Out &amp; Continue Onboarding</span>
+                    </button>
+
+                    <button
+                        onClick={() => navigate('/dashboard')}
+                        className="w-full bg-gray-100 text-gray-600 py-4 rounded-2xl font-black text-sm hover:bg-gray-200 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
+                    >
+                        Go to My Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // --- Loading State ---
+    if (isValidating) {
+        return (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                <Loader2 className="animate-spin text-[#2D7A3E]" size={40} />
+                <p className="text-gray-500 text-sm font-black uppercase tracking-widest">Verifying invitation credentials...</p>
+            </div>
+        );
+    }
+
+    // --- Validation Error State ---
+    if (validationError) {
+        return (
+            <div className="space-y-6 text-center">
+                <div className="mx-auto w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center text-red-500 border border-red-100 shadow-xl shadow-red-500/5 animate-bounce">
+                    <AlertCircle size={28} />
+                </div>
+                <div className="space-y-2">
+                    <h1 className="text-2xl font-black text-gray-900 leading-tight">Invitation Expired</h1>
+                    <p className="text-gray-500 text-sm font-bold px-4 leading-relaxed">{validationError}</p>
+                </div>
+                <div className="pt-4">
+                    <Link
+                        to="/auth/login"
+                        className="inline-block bg-[#1A1A1A] text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-[#2D7A3E] active:scale-95 transition-all shadow-xl shadow-gray-900/10"
+                    >
+                        Back to Login
+                    </Link>
+                </div>
+            </div>
+        );
+    }
+
+    // --- Activation Form ---
+    const roleName = inviteDetails?.role.replace(/_/g, ' ') || '';
+
+    return (
+        <div className="space-y-6">
+            <div className="text-center">
+                <div className="mx-auto w-16 h-16 bg-green-50 rounded-3xl flex items-center justify-center text-[#2D7A3E] border border-green-100 shadow-xl shadow-green-900/5 mb-4">
+                    <ShieldCheck size={28} />
+                </div>
+                <h1 className="text-2xl font-black text-gray-900 tracking-tight mb-2">Join {inviteDetails?.businessName}</h1>
+                <p className="text-gray-500 text-sm font-medium">Activate your staff account and set your credentials</p>
+                <div className="mt-3 inline-flex items-center gap-1.5 bg-green-50 text-green-700 px-3.5 py-1.5 rounded-full border border-green-100 text-xs font-black uppercase tracking-wider">
+                    Role: {roleName}
+                </div>
+            </div>
+
+            {error && (
+                <div className="bg-red-50 border border-red-100 text-red-600 px-4 py-3 rounded-xl text-sm font-bold flex items-center space-x-2 animate-in slide-in-from-top-2">
+                    <AlertCircle size={18} />
+                    <span>{error}</span>
+                </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="space-y-2">
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest px-1">Your Full Name</label>
+                    <div className="relative group">
+                        <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#2D7A3E] transition-colors" size={20} />
+                        <input
+                            type="text"
+                            required
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 pl-12 pr-4 text-sm font-bold focus:bg-white focus:border-[#2D7A3E] focus:ring-4 focus:ring-green-900/5 outline-none transition-all"
+                            placeholder="e.g. Henry Erico"
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest px-1">Invited Via</label>
+                    <input
+                        type="text"
+                        disabled
+                        value={inviteDetails?.email || inviteDetails?.phone || ''}
+                        className="w-full bg-gray-100 border border-gray-100 text-gray-400 rounded-2xl py-4 px-6 text-sm font-bold cursor-not-allowed outline-none"
+                    />
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest px-1">Set Password</label>
+                    <div className="relative group">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#2D7A3E] transition-colors" size={20} />
+                        <input
+                            type={showPassword ? "text" : "password"}
+                            required
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 pl-12 pr-12 text-sm font-bold focus:bg-white focus:border-[#2D7A3E] focus:ring-4 focus:ring-green-900/5 outline-none transition-all"
+                            placeholder="••••••••"
+                        />
+                        <button
+                            type="button"
+                            tabIndex={-1}
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors focus:outline-none"
+                        >
+                            {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-xs font-black text-gray-400 uppercase tracking-widest px-1">Confirm Password</label>
+                    <div className="relative group">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#2D7A3E] transition-colors" size={20} />
+                        <input
+                            type={showPassword ? "text" : "password"}
+                            required
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-100 rounded-2xl py-4 pl-12 pr-12 text-sm font-bold focus:bg-white focus:border-[#2D7A3E] focus:ring-4 focus:ring-green-900/5 outline-none transition-all"
+                            placeholder="••••••••"
+                        />
+                    </div>
+                </div>
+
+                {/* POS Terminal PIN Section */}
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                        <Hash size={16} className="text-blue-600" />
+                        <span className="text-xs font-black text-blue-700 uppercase tracking-widest">POS Terminal PIN (Optional)</span>
+                    </div>
+                    <p className="text-[11px] text-blue-600 font-bold leading-relaxed">
+                        Set a 4–6 digit PIN to sign in directly to the POS Terminal. Required if you'll be operating as a cashier.
+                    </p>
+                    <div className="space-y-3">
+                        <div className="relative group">
+                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:text-blue-600 transition-colors" size={18} />
+                            <input
+                                type={showPin ? "text" : "password"}
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={pin}
+                                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                className="w-full bg-white border border-blue-200 rounded-2xl py-3.5 pl-11 pr-11 text-sm font-black font-mono tracking-[0.4em] focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all"
+                                placeholder="● ● ● ●"
+                            />
+                            <button type="button" tabIndex={-1} onClick={() => setShowPin(!showPin)}
+                                className="absolute right-4 top-1/2 -translate-y-1/2 text-blue-400 hover:text-blue-600 transition-colors focus:outline-none">
+                                {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
+                        </div>
+                        {pin && (
+                            <input
+                                type={showPin ? "text" : "password"}
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={confirmPin}
+                                onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                className="w-full bg-white border border-blue-200 rounded-2xl py-3.5 px-5 text-sm font-black font-mono tracking-[0.4em] focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 outline-none transition-all"
+                                placeholder="Confirm PIN"
+                            />
+                        )}
+                    </div>
+                </div>
+
+                <button
+                    disabled={isSubmitting}
+                    type="submit"
+                    className="w-full bg-[#1A1A1A] text-white py-4 rounded-2xl font-black text-sm hover:bg-[#2D7A3E] hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-gray-900/10 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:hover:scale-100 cursor-pointer"
+                >
+                    {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <span>Activate Account</span>}
+                </button>
+            </form>
+        </div>
+    );
+};
+
+export default AcceptInvitePage;

@@ -1,0 +1,42 @@
+{
+  "name": "demegapos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise-grade Open-Source POS, Inventory, and Business Platform",
+  "license": "AGPL-3.0",
+  "scripts": {
+    "postinstall": "pnpm --filter @demegapos/db build",
+    "build": "pnpm --filter @demegapos/db build && turbo run build",
+    "dev": "pnpm --filter @demegapos/db build && turbo run dev",
+    "dev:admin": "pnpm --filter @demegapos/db build && turbo run dev --filter demegapos-backend --filter web-back-office",
+    "dev:pos": "pnpm --filter @demegapos/db build && turbo run dev --filter demegapos-backend --filter web-pos",
+    "dev:kitchen": "pnpm --filter @demegapos/db build && turbo run dev --filter demegapos-backend --filter web-kitchen",
+    "dev:customer": "pnpm --filter @demegapos/db build && turbo run dev --filter demegapos-backend --filter web-customer",
+    "dev:mobile": "pnpm --filter @demegapos/db build && turbo run dev --filter demegapos-backend --filter mobile-pos",
+    "studio": "pnpm --filter @demegapos/db studio",
+    "db:generate": "pnpm --filter @demegapos/db db:generate",
+    "db:push": "pnpm --filter @demegapos/db db:push --skip-generate",
+    "db:seed": "pnpm --filter @demegapos/db db:seed",
+    "build:admin": "pnpm --filter web-back-office build",
+    "deploy:netlify": "pnpm --filter web-back-office build && npx netlify-cli deploy --prod --dir=apps/web-back-office/dist",
+    "deploy:vercel": "pnpm --filter web-back-office build && npx vercel --prod"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^25.2.1",
+    "prettier": "latest",
+    "prisma": "^6.2.1",
+    "turbo": "^2.10.1",
+    "typescript": "^5.7.3"
+  },
+  "packageManager": "pnpm@10.18.3",
+  "dependencies": {
+    "@prisma/client": "^6.2.1",
+    "@upstash/context7-mcp": "^4.0.2"
+  },
+  "allowScripts": {
+    "prisma@6.19.3": true,
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true
+  }
+}

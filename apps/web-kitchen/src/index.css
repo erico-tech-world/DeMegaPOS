@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* DeMega Brand Colors */
+:root {
+  --color-primary: #2D7A3E;
+  --color-accent: #8B1538;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+a {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+
+body {
+  margin: 0;
+  background-color: #0f172a;
+  color: #f8fafc;
+  font-family: 'Inter', sans-serif;
+}

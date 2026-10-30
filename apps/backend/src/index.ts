@@ -1,0 +1,431 @@
+import dns from 'dns'
+try {
+    dns.setDefaultResultOrder('ipv4first')
+} catch (_) {}
+
+import Fastify from 'fastify'
+import cors from '@fastify/cors'
+import jwt from '@fastify/jwt'
+import swagger from '@fastify/swagger'
+import swaggerUi from '@fastify/swagger-ui'
+import websocket from '@fastify/websocket'
+import { serializerCompiler, validatorCompiler } from 'fastify-type-provider-zod'
+import * as dotenv from 'dotenv'
+
+dotenv.config()
+
+declare module 'fastify' {
+    interface FastifyInstance {
+        broadcast(event: string, payload: any): void
+    }
+}
+
+const server = Fastify({
+    logger: true,
+})
+
+server.setValidatorCompiler(validatorCompiler);
+server.setSerializerCompiler(serializerCompiler);
+
+async function main() {
+    // ─── Dynamic CORS Allowlist ────────────────────────────────────────────────
+    // Reads from environment variables so no code change is needed when adding
+    // a custom domain.  Set FRONTEND_URL and/or ALLOWED_ORIGINS (comma-separated)
+    // on your host (Render, Railway, etc.).
+    const buildAllowedOrigins = (): string[] => {
+        const origins = new Set<string>([
+            // Local development
+            'http://localhost:5173',
+            'http://localhost:5174',
+            'http://localhost:4173',
+            'http://localhost:3000',
+            // Vercel & Netlify production deployments
+            'https://demegapos.vercel.app',
+            'https://demegapos.netlify.app',
+        ]);
+
+        // FRONTEND_URL env variable (single URL configured on the host)
+        if (process.env.FRONTEND_URL) {
+            process.env.FRONTEND_URL.split(',').map(u => u.trim()).filter(Boolean).forEach(u => origins.add(u));
+        }
+
+        // ALLOWED_ORIGINS env variable (comma-separated list for multiple domains)
+        if (process.env.ALLOWED_ORIGINS) {
+            process.env.ALLOWED_ORIGINS.split(',').map(u => u.trim()).filter(Boolean).forEach(u => origins.add(u));
+        }
+
+        return Array.from(origins);
+    };
+
+    const allowedOrigins = buildAllowedOrigins();
+    console.log('[CORS] Allowed origins:', allowedOrigins);
+
+    await server.register(cors, {
+        origin: (requestOrigin, cb) => {
+            // Allow requests with no Origin (server-to-server, Postman, mobile apps)
+            if (!requestOrigin) return cb(null, true);
+            if (allowedOrigins.includes(requestOrigin)) return cb(null, true);
+            // Allow any *.vercel.app or *.netlify.app preview deploy URLs (branch deploys)
+            if (requestOrigin.endsWith('.vercel.app') || requestOrigin.endsWith('.netlify.app')) return cb(null, true);
+            // Allow any localhost port for development
+            if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(requestOrigin)) return cb(null, true);
+            console.warn(`[CORS] Blocked origin: ${requestOrigin}`);
+            cb(null, false);
+        },
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
+        credentials: true,
+        preflight: true,
+        strictPreflight: false,
+    })
+
+    await server.register(jwt, {
+        secret: process.env.JWT_SECRET || 'supersecret',
+    })
+
+    await server.register(swagger, {
+        openapi: {
+            info: {
+                title: 'DeMegaPOS API',
+                description: 'Enterprise POS Platform API',
+                version: '1.0.0',
+            },
+        },
+    })
+
+    await server.register(swaggerUi, {
+        routePrefix: '/docs',
+    })
+
+    await server.register(websocket)
+
+    server.get('/ws', { websocket: true }, (connection, req) => {
+        console.log('New WS Client connected')
+        ;(connection.socket as any).storeId = null
+        connection.socket.on('message', (message: Buffer) => {
+            try {
+                const data = JSON.parse(message.toString())
+                if (data.type === 'SUBSCRIBE' && data.storeId) {
+                    ;(connection.socket as any).storeId = data.storeId
+                    console.log(`[WS] Client subscribed to storeId: ${data.storeId}`)
+                }
+            } catch (_) {}
+        })
+    })
+
+    // Auth, Tenant, Inventory, Orders, Webhook & Payment Routes
+    const authRoutes = await import('./modules/auth/routes.js')
+    const tenantRoutes = await import('./modules/tenants/routes.js')
+    const inventoryRoutes = await import('./modules/inventory/routes.js')
+    const orderRoutes = await import('./modules/orders/routes.js')
+    const staffRoutes = await import('./modules/staff/routes.js') // Added staffRoutes import
+    const webhookRoutes = await import('./modules/webhooks/routes.js')
+    const paymentRoutes = await import('./modules/payments/routes.js')
+
+    const syncRoutes = await import('./modules/sync/routes.js')
+    const customerRoutes = await import('./modules/customers/routes.js')
+    const integrationRoutes = await import('./modules/integrations/routes.js')
+    const platformRoutes = await import('./modules/platform/routes.js')
+
+    server.register(authRoutes.default, { prefix: '/auth' })
+    server.register(authRoutes.default, { prefix: '/api/auth' })
+    server.register(authRoutes.default, { prefix: '/api/v1/auth' })
+    server.register(tenantRoutes.default, { prefix: '/tenants' })
+    server.register(tenantRoutes.default, { prefix: '/api/tenants' })
+    server.register(tenantRoutes.default, { prefix: '/api/v1/tenants' })
+    server.register(inventoryRoutes.default, { prefix: '/inventory' })
+    server.register(inventoryRoutes.default, { prefix: '/api/inventory' })
+    server.register(inventoryRoutes.default, { prefix: '/api/v1/inventory' })
+    server.register(orderRoutes.default, { prefix: '/orders' })
+    server.register(orderRoutes.default, { prefix: '/api/orders' })
+    server.register(orderRoutes.default, { prefix: '/api/v1/orders' })
+    server.register(staffRoutes.default, { prefix: '/staff' })
+    server.register(staffRoutes.default, { prefix: '/api/staff' })
+    server.register(staffRoutes.default, { prefix: '/api/v1/staff' })
+    server.register(webhookRoutes.default, { prefix: '/webhooks' })
+    server.register(paymentRoutes.default, { prefix: '/payments' })
+    server.register(paymentRoutes.default, { prefix: '/api/payments' })
+    server.register(paymentRoutes.default, { prefix: '/api/v1/payments' })
+    server.register(syncRoutes.default, { prefix: '/sync' })
+    server.register(syncRoutes.default, { prefix: '/api/sync' })
+    server.register(syncRoutes.default, { prefix: '/api/v1/sync' })
+    server.register(customerRoutes.default, { prefix: '/customers' })
+    server.register(customerRoutes.default, { prefix: '/api/customers' })
+    server.register(customerRoutes.default, { prefix: '/api/v1/customers' })
+    server.register(integrationRoutes.default, { prefix: '/integrations' })
+    server.register(integrationRoutes.default, { prefix: '/api/integrations' })
+    server.register(integrationRoutes.default, { prefix: '/api/v1/integrations' })
+    server.register(platformRoutes.default, { prefix: '/platform' })
+    server.register(platformRoutes.default, { prefix: '/api/platform' })
+    server.register(platformRoutes.default, { prefix: '/api/v1/platform' })
+
+    // Helper for broadcasting WebSocket events safely (optionally scoped by storeId)
+    server.decorate('broadcast', (event: string, payload: any, targetStoreId?: string) => {
+        if (!server.websocketServer) return
+        for (const client of server.websocketServer.clients) {
+            if (client.readyState === 1) { // 1 === WebSocket.OPEN
+                const clientStoreId = (client as any).storeId
+                if (targetStoreId && clientStoreId && clientStoreId !== targetStoreId) {
+                    continue
+                }
+                try {
+                    client.send(JSON.stringify({ event, payload }))
+                } catch (err) {
+                    console.error('Error broadcasting to WS client:', err)
+                }
+            }
+        }
+    })
+
+    // JWT guard — verifies token for all non-auth routes
+    server.addHook('onRequest', async (request, reply) => {
+        if (request.method === 'OPTIONS') {
+            return
+        }
+        if (
+            request.url.startsWith('/auth') ||
+            request.url.startsWith('/api/auth') ||
+            request.url.startsWith('/api/v1/auth') ||
+            request.url.startsWith('/platform') ||
+            request.url.startsWith('/api/platform') ||
+            request.url.startsWith('/api/v1/platform') ||
+            request.url.startsWith('/docs') ||
+            request.url.startsWith('/health') ||
+            request.url.startsWith('/api/health') ||
+            request.url.startsWith('/api/v1/health') ||
+            request.url.startsWith('/ws')
+        ) {
+            return
+        }
+        try {
+            await request.jwtVerify()
+        } catch (err) {
+            reply.send(err)
+        }
+    })
+
+    // Global Error Handler — Maps Prisma & runtime errors to human-friendly HTTP responses
+    server.setErrorHandler((error: any, request, reply) => {
+        server.log.error(error)
+
+        // Prisma connection and pooler errors (P1000, P1001, P1002, P1008, P1017, PrismaClientInitializationError)
+        const errorCode = (error as any)?.code || '';
+        const errorName = (error as any)?.name || '';
+        const isConnError = 
+            ['P1000', 'P1001', 'P1002', 'P1008', 'P1017'].includes(errorCode) ||
+            errorName === 'PrismaClientInitializationError' ||
+            errorName === 'PrismaClientRustPanicError';
+
+        if (isConnError) {
+            return reply.status(503).send({
+                statusCode: 503,
+                error: 'DatabaseUnavailable',
+                message: 'Database service is temporarily reconnecting. Please retry in a few moments.',
+                code: errorCode || 'DB_UNAVAILABLE'
+            })
+        }
+
+        // Prisma unique constraint violation (P2002)
+        if ((error as any).code === 'P2002') {
+            const target = ((error as any).meta?.target as string[]) || []
+            const targetStr = Array.isArray(target) ? target.join(', ') : String(target || '')
+            let message = 'A record with this identifier already exists.'
+            if (targetStr.includes('sku')) {
+                message = 'A product with this SKU already exists. Please verify the SKU ID.'
+            } else if (targetStr.includes('email')) {
+                message = 'A record with this email already exists.'
+            } else if (targetStr.includes('phone')) {
+                message = 'A record with this phone number already exists.'
+            }
+            return reply.status(409).send({
+                statusCode: 409,
+                error: 'Conflict',
+                message,
+                target: targetStr
+            })
+        }
+
+        // Prisma foreign key constraint violation (P2003)
+        if ((error as any).code === 'P2003') {
+            return reply.status(400).send({
+                statusCode: 400,
+                error: 'Bad Request',
+                message: 'Referenced record could not be found or is currently in use.'
+            })
+        }
+
+        // Prisma record not found (P2025)
+        if ((error as any).code === 'P2025') {
+            return reply.status(404).send({
+                statusCode: 404,
+                error: 'Not Found',
+                message: 'The requested record was not found.'
+            })
+        }
+
+        // Prisma schema or column mismatch (P2021, P2022)
+        if (errorCode === 'P2021' || errorCode === 'P2022') {
+            console.error('[Prisma Schema/Column Mismatch]:', error)
+            return reply.status(500).send({
+                statusCode: 500,
+                error: 'DatabaseSchemaMismatch',
+                message: 'Unable to complete order due to schema synchronization. Please try again.'
+            })
+        }
+
+        // Fastify validation errors
+        if ((error as any).validation) {
+            return reply.status(400).send({
+                statusCode: 400,
+                error: 'Bad Request',
+                message: error.message || 'Validation failed. Please verify required fields.'
+            })
+        }
+
+        const statusCode = error.statusCode || 500
+        if (statusCode >= 500) {
+            console.error('[Backend 500 Exception]:', error)
+        }
+        const message = statusCode >= 500
+            ? 'Unable to complete order. Please verify item stock and try again.'
+            : (error.message || 'Operation failed.')
+
+        return reply.status(statusCode).send({
+            statusCode,
+            error: error.name || 'Error',
+            message
+        })
+    })
+
+    // ── Direct /drafts & /api/drafts Alias Router ──────────────────────────────
+    const draftAliasHandler = async (subServer: any) => {
+        const { getDraftOrders, updateDraftOrder, cancelDraftOrder, createOrder } = await import('./modules/orders/service.js')
+
+        subServer.get('/', async (req: any) => {
+            const query = req.query as any
+            return getDraftOrders(query.storeId || query.branchId, query.cashierId, query)
+        })
+
+        subServer.post('/', async (req: any, reply: any) => {
+            const body = req.body as any
+            const created = await createOrder({ ...body, paymentStatus: 'DRAFT' })
+            server.broadcast('ORDER_UPDATED', created)
+            return reply.status(201).send(created)
+        })
+
+        subServer.put('/:id', async (req: any, reply: any) => {
+            const { id } = req.params as { id: string }
+            const body = req.body as any
+            const updated = await updateDraftOrder(id, body)
+            server.broadcast('ORDER_UPDATED', updated)
+            return reply.send(updated)
+        })
+
+        subServer.patch('/:id', async (req: any, reply: any) => {
+            const { id } = req.params as { id: string }
+            const body = req.body as any
+            const updated = await updateDraftOrder(id, body)
+            server.broadcast('ORDER_UPDATED', updated)
+            return reply.send(updated)
+        })
+
+        subServer.delete('/:id', async (req: any, reply: any) => {
+            const { id } = req.params as { id: string }
+            await cancelDraftOrder(id)
+            server.broadcast('ORDER_UPDATED', { id, deleted: true })
+            return reply.send({ success: true })
+        })
+    }
+
+    server.register(draftAliasHandler, { prefix: '/drafts' })
+    server.register(draftAliasHandler, { prefix: '/api/drafts' })
+    server.register(draftAliasHandler, { prefix: '/api/v1/drafts' })
+
+    // ── Ultra-lightweight keep-alive health check endpoints (0ms response, zero database queries) ──
+    server.get('/health', async () => ({ status: 'ok', timestamp: Date.now() }))
+    server.get('/api/health', async () => ({ status: 'ok', timestamp: Date.now() }))
+    server.get('/api/v1/health', async () => ({ status: 'ok', timestamp: Date.now() }))
+
+    // ── Diagnostic Health check endpoint (for manual inspection of system config) ──
+    server.get('/health/diagnostic', async () => {
+        const resendKey = (process.env.RESEND_API_KEY || process.env.SMTP_PASS || '').trim()
+        const brevoKey = (process.env.BREVO_API_KEY || '').trim()
+        const gmailUser = (process.env.FALLBACK_SMTP_USER || process.env.GMAIL_USER || '').trim()
+        const gmailPass = (process.env.FALLBACK_SMTP_PASS || process.env.GMAIL_APP_PASSWORD || '').trim()
+
+        return {
+            status: 'OK',
+            timestamp: Date.now(),
+            mail: {
+                preferredProvider: (process.env.MAIL_PROVIDER || 'GMAIL').toUpperCase(),
+                resend: {
+                    configured: resendKey.startsWith('re_'),
+                    from: 'DeMegaPOS <onboarding@resend.dev>',
+                },
+                brevo: {
+                    configured: Boolean(brevoKey),
+                },
+                gmail: {
+                    configured: Boolean(gmailUser && gmailPass),
+                    user: gmailUser ? `${gmailUser.split('@')[0]}@...` : '(not configured)',
+                },
+                appBaseUrl: process.env.APP_BASE_URL || process.env.FRONTEND_URL || '(not set)',
+            },
+            version: '2.3.0-multi-rest-active',
+        }
+    })
+
+    // Mail diagnostic endpoint — tests full dispatch pipeline (Resend -> Gmail fallback)
+    // Query param ?to=email@domain.com allows testing any recipient
+    server.get('/health/mail', async (request: any, reply) => {
+        const { sendMail } = await import('./modules/../lib/mail.js')
+        const targetEmail = (request.query?.to as string) || 'delivered@resend.dev'
+        try {
+            const result = await sendMail({
+                to: targetEmail,
+                subject: '[DeMegaPOS] Mail Diagnostic Test',
+                html: '<p>DeMegaPOS mail delivery is operational via the Hybrid Mailer (Resend / Gmail SMTP fallback).</p>',
+            })
+            return reply.send({
+                success: true,
+                recipient: targetEmail,
+                providerUsed: result.provider,
+                messageId: result.messageId,
+                message: `Mail dispatched successfully to ${targetEmail} via ${result.provider}.`
+            })
+        } catch (err: any) {
+            return reply.status(500).send({
+                success: false,
+                recipient: targetEmail,
+                error: err.message || String(err)
+            })
+        }
+    })
+
+    try {
+        // Preflight database connection with exponential retry
+        try {
+            const { verifyDatabaseConnection, prisma } = await import('./lib/prisma.js');
+            await verifyDatabaseConnection(prisma, 5, 2000);
+        } catch (dbErr: any) {
+            server.log.error({ err: dbErr }, '[DB:FATAL] Database connection failed during startup.');
+        }
+
+        const port = process.env.PORT ? parseInt(process.env.PORT) : 3000
+        await server.listen({ port, host: '0.0.0.0' })
+        console.log(`Server listening at http://localhost:${port}`)
+
+        // Initialize Automated Reporting Cron Engine (Weekly, Monthly, Yearly)
+        try {
+            const { initScheduler } = await import('./lib/scheduler.js')
+            initScheduler()
+        } catch (schedErr: any) {
+            console.error('[SCHEDULER] Failed to start reporting scheduler:', schedErr.message)
+        }
+    } catch (err) {
+        server.log.error(err)
+        process.exit(1)
+    }
+}
+
+main()

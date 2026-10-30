@@ -1,0 +1,65 @@
+name: DeMegaPOS CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── pnpm ─────────────────────────────────────────────────────────────────
+      # pnpm/action-setup@v4 reads the "packageManager" field from package.json
+      # automatically (pnpm@10.18.3). Do NOT also specify "version:" here —
+      # that causes ERR_PNPM_BAD_PM_VERSION / "Multiple versions specified".
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      # ── Node.js ───────────────────────────────────────────────────────────────
+      # Node 20 is deprecated on GitHub-hosted runners (default is now Node 24).
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      # ── DB: Prisma Client generation ─────────────────────────────────────────
+      # prisma generate only needs the schema file — no DATABASE_URL required.
+      - name: Build Database Package (Prisma Generate)
+        run: pnpm --filter @demegapos/db build
+
+      # ── Backend: TypeScript compile ──────────────────────────────────────────
+      - name: Build Backend Application
+        run: pnpm --filter demegapos-backend build
+
+      # ── Web frontends ────────────────────────────────────────────────────────
+      - name: Build Web Back-Office
+        run: pnpm --filter web-back-office build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'http://localhost:3000' }}
+
+      - name: Build Web Kitchen Display
+        run: pnpm --filter web-kitchen build
+
+      - name: Build Web Customer Portal
+        run: pnpm --filter web-customer build
+
+      # ── Docker Images ─────────────────────────────────────────────────────────
+      - name: Docker Build (Backend)
+        run: docker build -t demegapos-backend -f apps/backend/Dockerfile .
+
+      - name: Docker Build (Web Back-Office)
+        run: docker build -t demegapos-back-office -f apps/web-back-office/Dockerfile .
+
+      - name: Docker Build (Web Kitchen)
+        run: docker build -t demegapos-kitchen -f apps/web-kitchen/Dockerfile .
+
+      - name: Docker Build (Web Customer)
+        run: docker build -t demegapos-customer -f apps/web-customer/Dockerfile .
